@@ -1,0 +1,43 @@
+{
+  "_instructions": {
+    "_comment": "Memory MCP Server - Remote Configuration",
+    "_installation": [
+      "1. Copy this file to your remote machine",
+      "2. Remove the '_instructions' section from the JSON",
+      "3. Place the cleaned JSON file as .mcp.json in your project directory",
+      "4. OR merge the mcpServers section into your existing .mcp.json",
+      "5. Ensure you have @modelcontextprotocol/server-http installed:",
+      "   npm install -g @modelcontextprotocol/server-http",
+      "6. Test connection: curl http://lance-dev:8899/api/status"
+    ],
+    "_endpoints": {
+      "status": "GET http://lance-dev:8899/api/status",
+      "manual_sync": "POST http://lance-dev:8899/api/trigger-sync",
+      "websocket": "ws://lance-dev:8899/ws/{machine_id}"
+    },
+    "_memory_tools": [
+      "store_memory - Store memories with categories (project, conversation, agent, global)",
+      "search_memories - Semantic search across all memories",
+      "retrieve_memory - Get specific memory by ID", 
+      "get_recent_memories - Get recent memories by time window",
+      "get_memory_stats - View memory collection statistics"
+    ],
+    "_network_options": {
+      "tailscale_hostname": "http://lance-dev:8899",
+      "external_ip": "http://34.72.136.20:8899",
+      "local_network": "http://10.128.0.3:8899"
+    }
+  },
+  "mcpServers": {
+    "remote-memory": {
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-http",
+        "http://lance-dev:8899"
+      ],
+      "env": {
+        "HTTP_TIMEOUT": "30000"
+      }
+    }
+  }
+}

@@ -1,0 +1,16 @@
+include README.md
+include LICENSE
+include requirements.txt
+include pyproject.toml
+include .mcp.json
+recursive-include config *.json
+recursive-include services *.sh
+recursive-include INSTALL *.sh
+recursive-include docs *
+exclude .git*
+exclude *.pyc
+exclude __pycache__
+exclude .pytest_cache
+exclude data/
+exclude venv/
+exclude .venv/

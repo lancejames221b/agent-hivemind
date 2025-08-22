@@ -1,0 +1,26 @@
+[Unit]
+Description=Memory MCP Server - Distributed memory storage for Claude
+After=network.target redis.service
+Wants=redis.service
+
+[Service]
+Type=simple
+User=lj
+Group=lj
+WorkingDirectory=/home/lj/memory-mcp
+Environment=PYTHONPATH=/home/lj/memory-mcp/src
+ExecStart=/usr/bin/python3 /home/lj/memory-mcp/src/memory_server.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Security settings
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=false
+ReadWritePaths=/home/lj/memory-mcp/data
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

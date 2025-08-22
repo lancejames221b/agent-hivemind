@@ -1,0 +1,110 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "claudeops-haivemind"
+version = "1.0.0"
+authors = [
+    {name = "Lance James", email = "lancejames@unit221b.com"},
+]
+description = "Distributed AI agent coordination with persistent collective memory across infrastructure networks"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.8"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Topic :: System :: Systems Administration",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+    "Framework :: AsyncIO",
+    "Topic :: Communications",
+    "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+keywords = [
+    "mcp",
+    "model-context-protocol", 
+    "ai",
+    "claude",
+    "devops",
+    "automation",
+    "distributed-systems",
+    "memory",
+    "coordination",
+    "infrastructure",
+    "agents",
+    "collective-intelligence",
+]
+
+dependencies = [
+    "mcp",
+    "fastmcp>=2.11.0",
+    "chromadb>=0.4.0",
+    "redis>=5.0.0",
+    "requests>=2.31.0",
+    "aiohttp>=3.9.0",
+    "fastapi>=0.104.0",
+    "uvicorn>=0.24.0",
+    "websockets>=12.0",
+    "pydantic>=2.5.0",
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=1.7.4",
+    "python-multipart>=0.0.6",
+    "starlette>=0.27.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+]
+docs = [
+    "sphinx>=5.0.0",
+    "sphinx-rtd-theme>=1.0.0",
+    "myst-parser>=1.0.0",
+]
+
+[project.scripts]
+haivemind-server = "memory_server:main"
+haivemind-remote = "remote_mcp_server:main"
+haivemind-sync = "sync_service:main"
+
+[project.urls]
+Homepage = "https://github.com/lancejames/claudeops-haivemind"
+Documentation = "https://github.com/lancejames/claudeops-haivemind#readme"
+Repository = "https://github.com/lancejames/claudeops-haivemind"
+"Bug Tracker" = "https://github.com/lancejames/claudeops-haivemind/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"*" = ["config/*.json", "services/*.sh", "INSTALL/*.sh"]
+
+[tool.black]
+line-length = 100
+target-version = ['py38']
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]

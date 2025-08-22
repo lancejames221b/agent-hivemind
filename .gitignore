@@ -1,0 +1,84 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Data directories
+data/
+logs/
+*.log
+
+# Credentials and secrets
+*.key
+*.pem
+credentials/
+.env
+.env.local
+.env.*.local
+
+# Redis dumps
+dump.rdb
+
+# ChromaDB data
+chroma.sqlite3
+chroma.sqlite3-journal
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/
+.temp/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Documentation builds
+docs/_build/
+docs/site/
+
+# Local configuration overrides
+config/local_config.json
+.mcp.local.json

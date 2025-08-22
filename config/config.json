@@ -1,0 +1,125 @@
+{
+  "server": {
+    "name": "memory-server",
+    "version": "1.0.0",
+    "host": "0.0.0.0",
+    "port": 8899,
+    "debug": false
+  },
+  "storage": {
+    "chromadb": {
+      "path": "/home/lj/memory-mcp/data/chroma",
+      "embedding_model": "all-MiniLM-L6-v2",
+      "anonymized_telemetry": false
+    },
+    "redis": {
+      "host": "localhost",
+      "port": 6379,
+      "db": 0,
+      "password": null,
+      "enable_cache": true
+    }
+  },
+  "sync": {
+    "enable_remote_sync": true,
+    "sync_interval": 30,
+    "conflict_resolution": "timestamp",
+    "discovery": {
+      "tailscale_enabled": true,
+      "machines": ["lance-dev", "ljs-macbook-pro", "m2", "max"]
+    }
+  },
+  "memory": {
+    "categories": ["project", "conversation", "agent", "global", "infrastructure", "incidents", "deployments", "monitoring", "runbooks", "security"],
+    "max_age_days": 365,
+    "auto_consolidate": true,
+    "consolidate_interval": 86400,
+    "project_tracking": {
+      "enabled": true,
+      "auto_detect": true,
+      "scope_default": "auto"
+    },
+    "machine_groups": {
+      "orchestrators": ["lance-dev"],
+      "elasticsearch": ["elastic1", "elastic2", "elastic3", "elastic4", "elastic5"],
+      "databases": ["mysql", "mongodb", "kafka"],
+      "scrapers": ["telegram-scraper", "discord-scraper", "proxy0", "proxy1", "proxy2", "proxy3", "proxy4", "proxy5", "proxy6", "proxy7", "proxy8", "proxy9"],
+      "dev_environments": ["tony-dev", "mike-dev", "oleg-dev", "chris-dev"],
+      "monitoring": ["grafana", "auth-server"],
+      "edge": ["frontend"],
+      "personal": ["ljs-macbook-pro", "m2", "max"]
+    },
+    "sharing_rules": {
+      "default_scope": "project-shared",
+      "sync_with_groups": ["personal"],
+      "exclude_machines": [],
+      "private_categories": ["agent"],
+      "encryption_required": ["production", "infrastructure"],
+      "audit_categories": ["global", "conversation"]
+    }
+  },
+  "remote_server": {
+    "enabled": true,
+    "host": "0.0.0.0",
+    "port": 8900,
+    "cors_enabled": true,
+    "allowed_origins": ["*"],
+    "mount_paths": {
+      "sse": "/sse",
+      "streamable_http": "/mcp"
+    },
+    "health_endpoint": "/health"
+  },
+  "claudeops": {
+    "agent_registry": {
+      "enabled": true,
+      "heartbeat_interval": 300,
+      "agent_ttl": 3600,
+      "cleanup_interval": 600
+    },
+    "task_coordination": {
+      "enabled": true,
+      "task_timeout": 1800,
+      "max_retries": 3,
+      "coordination_channel": "claudeops:coordination"
+    },
+    "collaboration": {
+      "broadcast_channel": "claudeops:broadcast",
+      "expertise_routing": true,
+      "consensus_threshold": 0.6,
+      "auto_handoff": true
+    },
+    "devops_features": {
+      "infrastructure_tracking": true,
+      "incident_management": true,
+      "deployment_tracking": true,
+      "runbook_generation": true,
+      "monitoring_integration": true
+    }
+  },
+  "connectors": {
+    "confluence": {
+      "url": "https://unit221b.atlassian.net",
+      "credentials": {
+        "username": "lancejames@unit221b.com",
+        "token": "${CONFLUENCE_API_TOKEN}"
+      },
+      "spaces": ["INFRA", "DEVOPS", "DOCS", "EWITNESS"],
+      "enabled": false
+    },
+    "jira": {
+      "url": "https://unit221b.atlassian.net",
+      "credentials": {
+        "username": "lancejames@unit221b.com", 
+        "token": "${JIRA_API_TOKEN}"
+      },
+      "projects": ["INFRA", "DEVOPS", "SUPPORT", "EWITNESS"],
+      "enabled": false
+    }
+  },
+  "security": {
+    "enable_auth": true,
+    "jwt_secret": "your-jwt-secret-here",
+    "api_key_file": "/home/lj/Credentials/keys.txt.enc"
+  }
+}
