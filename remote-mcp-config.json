@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "remote-memory": {
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-http",
+        "http://lance-dev:8899"
+      ],
+      "env": {
+        "HTTP_TIMEOUT": "30000"
+      }
+    }
+  }
+}

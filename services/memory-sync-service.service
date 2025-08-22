@@ -1,0 +1,26 @@
+[Unit]
+Description=Memory Sync Service - REST API for remote memory synchronization
+After=network.target redis.service
+Wants=redis.service
+
+[Service]
+Type=simple
+User=lj
+Group=lj
+WorkingDirectory=/home/lj/memory-mcp
+Environment=PYTHONPATH=/home/lj/memory-mcp/src
+ExecStart=/home/lj/memory-mcp/venv/bin/python /home/lj/memory-mcp/src/sync_service.py --host 0.0.0.0 --port 8899
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Security settings
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=false
+ReadWritePaths=/home/lj/memory-mcp/data
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

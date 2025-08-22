@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__memory-server__store_memory",
+      "WebSearch",
+      "WebFetch(domain:docs.anthropic.com)",
+      "WebFetch(domain:modelcontextprotocol.io)",
+      "WebFetch(domain:github.com)",
+      "Bash(/home/lj/memory-mcp/venv/bin/python -c \"from mcp.server import Server; from mcp.server.stdio import stdio_server; print(''MCP imports working'')\")",
+      "Bash(journalctl:*)",
+      "Bash(lsof:*)",
+      "Bash(curl:*)",
+      "Bash(npm info:*)",
+      "Bash(npx @modelcontextprotocol/server-http:*)",
+      "Bash(npm search:*)",
+      "WebFetch(domain:medium.com)",
+      "Bash(source:*)",
+      "Bash(pip show:*)",
+      "WebFetch(domain:gofastmcp.com)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
