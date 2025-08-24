@@ -4,6 +4,7 @@ Enhanced Dashboard Server for hAIveMind Control System
 Extends the remote MCP server with comprehensive management capabilities
 """
 import os
+import asyncio
 import json
 import jwt
 import secrets
@@ -19,6 +20,9 @@ from pydantic import BaseModel
 import jinja2
 
 from database import ControlDatabase, UserRole, DeviceStatus, KeyStatus
+from playbook_engine import PlaybookEngine, load_playbook_content, PlaybookValidationError
+from pathlib import Path
+import uuid
 
 # Request/Response Models
 class LoginRequest(BaseModel):
@@ -65,6 +69,29 @@ class DashboardServer:
         
         self.setup_routes()
         self.mount_static_files()
+        # Lazy-init playbook engine (shell disabled by default)
+        self.playbook_engine = PlaybookEngine(allow_unsafe_shell=False)
+        # Memory storage for hAIveMind awareness (initialized lazily when needed)
+        self._memory_storage = None
+
+    def _get_config(self) -> dict:
+        try:
+            cfg_path = Path(__file__).parent.parent / "config" / "config.json"
+            with open(cfg_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+
+    def _get_memory_storage(self):
+        if self._memory_storage is not None:
+            return self._memory_storage
+        try:
+            from memory_server import MemoryStorage
+            cfg = self._get_config()
+            self._memory_storage = MemoryStorage(cfg)
+            return self._memory_storage
+        except Exception:
+            return None
     
     def setup_routes(self):
         """Setup all dashboard routes"""
@@ -495,6 +522,234 @@ class DashboardServer:
                     raise HTTPException(status_code=500, detail="Failed to toggle MCP server")
             except HTTPException:
                 raise
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+
+        # ================= Playbook Management =================
+
+        class PlaybookCreate(BaseModel):
+            name: str
+            category: str
+            tags: Optional[List[str]] = None
+
+        class PlaybookVersionCreate(BaseModel):
+            content: str
+            format: str = "yaml"  # yaml|json
+            metadata: Optional[Dict[str, Any]] = None
+            changelog: Optional[str] = None
+
+        class PlaybookExecuteRequest(BaseModel):
+            version_id: Optional[int] = None  # default: latest
+            parameters: Optional[Dict[str, Any]] = None
+            dry_run: bool = False
+            allow_unsafe_shell: bool = False
+
+        class PlaybookImportRequest(BaseModel):
+            name: str
+            category: str
+            content: str
+            format: str = "yaml"
+            tags: Optional[List[str]] = None
+            changelog: Optional[str] = None
+
+        @self.app.post("/api/v1/playbooks")
+        async def create_playbook_endpoint(req: PlaybookCreate, current_user: dict = Depends(self.get_current_user)):
+            try:
+                pb_id = self.db.create_playbook(req.name, req.category, current_user['user_id'], req.tags or [])
+                return {"playbook_id": pb_id}
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+
+        @self.app.get("/api/v1/playbooks")
+        async def list_playbooks_endpoint(category: Optional[str] = None, q: Optional[str] = None, current_user: dict = Depends(self.get_current_user)):
+            try:
+                return self.db.list_playbooks(category, q)
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+
+        @self.app.get("/api/v1/playbooks/{playbook_id}")
+        async def get_playbook_endpoint(playbook_id: int, current_user: dict = Depends(self.get_current_user)):
+            pb = self.db.get_playbook(playbook_id)
+            if not pb:
+                raise HTTPException(status_code=404, detail="Playbook not found")
+            return pb
+
+        @self.app.delete("/api/v1/playbooks/{playbook_id}")
+        async def delete_playbook_endpoint(playbook_id: int, current_user: dict = Depends(self.get_current_user)):
+            if current_user['role'] != 'admin':
+                raise HTTPException(status_code=403, detail="Admin access required")
+            try:
+                ok = self.db.delete_playbook(playbook_id)
+                if not ok:
+                    raise HTTPException(status_code=404, detail="Playbook not found")
+                return {"success": True}
+            except HTTPException:
+                raise
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+
+        @self.app.post("/api/v1/playbooks/{playbook_id}/versions")
+        async def add_playbook_version_endpoint(playbook_id: int, req: PlaybookVersionCreate, current_user: dict = Depends(self.get_current_user)):
+            try:
+                # Validate content early
+                try:
+                    load_playbook_content(req.content)
+                except PlaybookValidationError as ve:
+                    raise HTTPException(status_code=400, detail=str(ve))
+                version_id = self.db.add_playbook_version(
+                    playbook_id=playbook_id,
+                    content=req.content,
+                    format=req.format,
+                    metadata=req.metadata or {},
+                    changelog=req.changelog,
+                    created_by=current_user['user_id']
+                )
+                return {"version_id": version_id}
+            except HTTPException:
+                raise
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+
+        @self.app.post("/api/v1/playbooks/{playbook_id}/execute")
+        async def execute_playbook_endpoint(playbook_id: int, req: PlaybookExecuteRequest, current_user: dict = Depends(self.get_current_user)):
+            pb = self.db.get_playbook(playbook_id)
+            if not pb:
+                raise HTTPException(status_code=404, detail="Playbook not found")
+            version_id = req.version_id or pb.get('latest_version_id')
+            if not version_id:
+                raise HTTPException(status_code=400, detail="No versions available for this playbook")
+            version = self.db.get_playbook_version(version_id)
+            if not version:
+                raise HTTPException(status_code=404, detail="Playbook version not found")
+
+            # Parse content
+            try:
+                spec = load_playbook_content(version['content'])
+            except PlaybookValidationError as ve:
+                raise HTTPException(status_code=400, detail=str(ve))
+
+            # Start execution record
+            run_id = str(uuid.uuid4())
+            self.db.start_playbook_execution(
+                playbook_id=playbook_id,
+                version_id=version_id,
+                run_id=run_id,
+                parameters=req.parameters or {},
+                context={"triggered_by_username": current_user['username']},
+                triggered_by=current_user['user_id']
+            )
+
+            async def _runner():
+                engine = PlaybookEngine(allow_unsafe_shell=bool(req.allow_unsafe_shell))
+                if req.dry_run:
+                    # Validate only
+                    try:
+                        engine.validate(spec)
+                        self.db.complete_playbook_execution(run_id, status="success", success=True, step_results=[], log_text="Dry-run validation passed")
+                    except Exception as e:
+                        self.db.complete_playbook_execution(run_id, status="failed", success=False, step_results=[], log_text=f"Dry-run validation failed: {e}")
+                    return
+                try:
+                    ok, step_results, out_vars = await engine.execute(spec, req.parameters or {})
+                    # Serialize results
+                    sr = [r.__dict__ for r in step_results]
+                    self.db.complete_playbook_execution(run_id, status=("success" if ok else "failed"), success=ok, step_results=sr, log_text="")
+                    # hAIveMind memory recording
+                    storage = self._get_memory_storage()
+                    if storage is not None:
+                        summary = f"Playbook '{pb['name']}' v{version['version']} {'succeeded' if ok else 'failed'} in {len(step_results)} step(s)."
+                        metadata = {
+                            'playbook_id': playbook_id,
+                            'version_id': version_id,
+                            'run_id': run_id,
+                            'category': pb['category'],
+                            'success': ok,
+                            'steps': [
+                                {
+                                    'id': r.step_id,
+                                    'name': r.name,
+                                    'status': r.status,
+                                    'duration_ms': int((r.finished_at - r.started_at) * 1000),
+                                    'error': r.error,
+                                }
+                                for r in step_results
+                            ],
+                            'parameters': req.parameters or {},
+                        }
+                        try:
+                            await storage.store_memory(
+                                content=summary,
+                                category="runbooks",
+                                context=f"Playbook execution: {pb['name']} (run {run_id})",
+                                metadata=metadata,
+                                tags=["playbook", pb['category'], "success" if ok else "failure"],
+                                user_id=str(current_user['user_id'])
+                            )
+                        except Exception:
+                            pass
+                except Exception as e:
+                    self.db.complete_playbook_execution(run_id, status="failed", success=False, step_results=[], log_text=str(e))
+
+            # Fire and forget execution (non-blocking)
+            asyncio.create_task(_runner())
+            return {"run_id": run_id, "status": "started"}
+
+        @self.app.get("/api/v1/playbooks/{playbook_id}/executions")
+        async def list_executions_endpoint(playbook_id: int, current_user: dict = Depends(self.get_current_user)):
+            return self.db.list_executions(playbook_id)
+
+        @self.app.get("/api/v1/playbook-executions/{run_id}")
+        async def get_execution_endpoint(run_id: str, current_user: dict = Depends(self.get_current_user)):
+            ex = self.db.get_execution(run_id)
+            if not ex:
+                raise HTTPException(status_code=404, detail="Execution not found")
+            return ex
+
+        @self.app.post("/api/v1/playbooks/import")
+        async def import_playbook_endpoint(req: PlaybookImportRequest, current_user: dict = Depends(self.get_current_user)):
+            try:
+                # Validate content parses
+                load_playbook_content(req.content)
+                pb_id = self.db.create_playbook(req.name, req.category, current_user['user_id'], req.tags or [])
+                version_id = self.db.add_playbook_version(pb_id, req.content, req.format, {}, req.changelog, current_user['user_id'])
+                return {"playbook_id": pb_id, "version_id": version_id}
+            except PlaybookValidationError as ve:
+                raise HTTPException(status_code=400, detail=str(ve))
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+
+        @self.app.get("/api/v1/playbooks/{playbook_id}/export")
+        async def export_playbook_endpoint(playbook_id: int, current_user: dict = Depends(self.get_current_user)):
+            pb = self.db.get_playbook(playbook_id)
+            if not pb:
+                raise HTTPException(status_code=404, detail="Playbook not found")
+            vid = pb.get('latest_version_id')
+            if not vid:
+                raise HTTPException(status_code=400, detail="No versions available")
+            v = self.db.get_playbook_version(vid)
+            return {"name": pb['name'], "category": pb['category'], "format": v['format'], "content": v['content']}
+
+        @self.app.get("/api/v1/playbook-templates")
+        async def list_playbook_templates(category: Optional[str] = None, current_user: dict = Depends(self.get_current_user)):
+            return self.db.list_templates(category)
+
+        class TemplateCreate(BaseModel):
+            name: str
+            category: str
+            description: Optional[str] = None
+            format: str = "yaml"
+            content: str
+            tags: Optional[List[str]] = None
+
+        @self.app.post("/api/v1/playbook-templates")
+        async def create_playbook_template(req: TemplateCreate, current_user: dict = Depends(self.get_current_user)):
+            try:
+                # just basic parse check
+                load_playbook_content(req.content)
+                tid = self.db.add_template(req.name, req.category, req.format, req.content, req.description, req.tags or [], current_user['user_id'])
+                return {"template_id": tid}
+            except PlaybookValidationError as ve:
+                raise HTTPException(status_code=400, detail=str(ve))
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
     

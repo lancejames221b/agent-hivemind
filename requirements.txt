@@ -6,6 +6,7 @@ chromadb>=0.4.22
 python-jose>=3.3.0
 python-multipart>=0.0.6
 pydantic>=2.5.0
+PyYAML>=6.0.1
 asyncio-mqtt>=0.16.1
 httpx>=0.25.2
 aiohttp>=3.9.1
