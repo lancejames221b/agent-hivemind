@@ -305,6 +305,198 @@ class DashboardServer:
             """Get dashboard statistics (legacy route)"""
             stats = self.db.get_dashboard_stats()
             return stats
+        
+        # MCP Server Management Endpoints
+        @self.app.get("/api/v1/mcp/servers")
+        async def get_mcp_servers(current_user: dict = Depends(self.get_current_user)):
+            """Get all MCP servers with health status"""
+            try:
+                servers = self.db.get_mcp_servers()
+                health_records = {h.server_id: h for h in self.db.get_all_server_health()}
+                
+                server_list = []
+                for server in servers:
+                    health = health_records.get(server.id)
+                    server_data = {
+                        "id": server.id,
+                        "name": server.name,
+                        "server_type": server.server_type.value,
+                        "endpoint": server.endpoint,
+                        "description": server.description,
+                        "enabled": server.enabled,
+                        "priority": server.priority,
+                        "tags": server.tags,
+                        "created_at": server.created_at.isoformat(),
+                        "health": {
+                            "status": health.status.value if health else "unknown",
+                            "response_time_ms": health.response_time_ms if health else None,
+                            "error_message": health.error_message if health else None,
+                            "tools_available": health.tools_available if health else [],
+                            "last_check": health.last_check.isoformat() if health else None,
+                            "consecutive_failures": health.consecutive_failures if health else 0
+                        }
+                    }
+                    server_list.append(server_data)
+                
+                return {"servers": server_list}
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+        
+        @self.app.post("/api/v1/mcp/servers")
+        async def create_mcp_server(request: dict, current_user: dict = Depends(self.get_current_user)):
+            """Create a new MCP server"""
+            try:
+                from database import MCPServerType
+                
+                # Validate required fields
+                required_fields = ['name', 'server_type', 'endpoint']
+                for field in required_fields:
+                    if field not in request:
+                        raise HTTPException(status_code=400, detail=f"Missing required field: {field}")
+                
+                # Validate server_type
+                try:
+                    server_type = MCPServerType(request['server_type'])
+                except ValueError:
+                    raise HTTPException(status_code=400, detail="Invalid server_type")
+                
+                server_id = self.db.add_mcp_server(
+                    name=request['name'],
+                    server_type=server_type,
+                    endpoint=request['endpoint'],
+                    description=request.get('description'),
+                    config=request.get('config', {}),
+                    auth_config=request.get('auth_config'),
+                    created_by=current_user['user_id'],
+                    priority=request.get('priority', 100),
+                    tags=request.get('tags', [])
+                )
+                
+                return {"server_id": server_id, "message": "MCP server created successfully"}
+            except HTTPException:
+                raise
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+        
+        @self.app.get("/api/v1/mcp/servers/{server_id}")
+        async def get_mcp_server(server_id: int, current_user: dict = Depends(self.get_current_user)):
+            """Get specific MCP server details"""
+            try:
+                server = self.db.get_mcp_server(server_id)
+                if not server:
+                    raise HTTPException(status_code=404, detail="MCP server not found")
+                
+                health = self.db.get_server_health(server_id)
+                
+                server_data = {
+                    "id": server.id,
+                    "name": server.name,
+                    "server_type": server.server_type.value,
+                    "endpoint": server.endpoint,
+                    "description": server.description,
+                    "config": server.config,
+                    "auth_config": server.auth_config,
+                    "enabled": server.enabled,
+                    "priority": server.priority,
+                    "tags": server.tags,
+                    "created_at": server.created_at.isoformat(),
+                    "created_by": server.created_by,
+                    "health": {
+                        "status": health.status.value if health else "unknown",
+                        "response_time_ms": health.response_time_ms if health else None,
+                        "error_message": health.error_message if health else None,
+                        "tools_available": health.tools_available if health else [],
+                        "last_check": health.last_check.isoformat() if health else None,
+                        "consecutive_failures": health.consecutive_failures if health else 0
+                    }
+                }
+                
+                return server_data
+            except HTTPException:
+                raise
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+        
+        @self.app.put("/api/v1/mcp/servers/{server_id}")
+        async def update_mcp_server(server_id: int, request: dict, current_user: dict = Depends(self.get_current_user)):
+            """Update MCP server configuration"""
+            try:
+                from database import MCPServerType
+                
+                server = self.db.get_mcp_server(server_id)
+                if not server:
+                    raise HTTPException(status_code=404, detail="MCP server not found")
+                
+                # Validate server_type if provided
+                server_type = None
+                if 'server_type' in request:
+                    try:
+                        server_type = MCPServerType(request['server_type'])
+                    except ValueError:
+                        raise HTTPException(status_code=400, detail="Invalid server_type")
+                
+                success = self.db.update_mcp_server(
+                    server_id=server_id,
+                    name=request.get('name'),
+                    server_type=server_type,
+                    endpoint=request.get('endpoint'),
+                    description=request.get('description'),
+                    config=request.get('config'),
+                    auth_config=request.get('auth_config'),
+                    enabled=request.get('enabled'),
+                    priority=request.get('priority'),
+                    tags=request.get('tags')
+                )
+                
+                if success:
+                    return {"message": "MCP server updated successfully"}
+                else:
+                    raise HTTPException(status_code=400, detail="No fields to update")
+            except HTTPException:
+                raise
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+        
+        @self.app.delete("/api/v1/mcp/servers/{server_id}")
+        async def delete_mcp_server(server_id: int, current_user: dict = Depends(self.get_current_user)):
+            """Delete MCP server"""
+            try:
+                server = self.db.get_mcp_server(server_id)
+                if not server:
+                    raise HTTPException(status_code=404, detail="MCP server not found")
+                
+                success = self.db.delete_mcp_server(server_id)
+                if success:
+                    return {"message": "MCP server deleted successfully"}
+                else:
+                    raise HTTPException(status_code=500, detail="Failed to delete MCP server")
+            except HTTPException:
+                raise
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+        
+        @self.app.post("/api/v1/mcp/servers/{server_id}/toggle")
+        async def toggle_mcp_server(server_id: int, current_user: dict = Depends(self.get_current_user)):
+            """Toggle MCP server enabled/disabled state"""
+            try:
+                server = self.db.get_mcp_server(server_id)
+                if not server:
+                    raise HTTPException(status_code=404, detail="MCP server not found")
+                
+                new_state = not server.enabled
+                success = self.db.update_mcp_server(server_id, enabled=new_state)
+                
+                if success:
+                    return {
+                        "message": f"MCP server {'enabled' if new_state else 'disabled'} successfully",
+                        "enabled": new_state
+                    }
+                else:
+                    raise HTTPException(status_code=500, detail="Failed to toggle MCP server")
+            except HTTPException:
+                raise
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
     
     def mount_static_files(self):
         """Mount static file directories"""

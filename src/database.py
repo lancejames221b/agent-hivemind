@@ -32,6 +32,19 @@ class KeyStatus(Enum):
     EXPIRED = "expired"
     REVOKED = "revoked"
 
+class MCPServerType(Enum):
+    STDIO = "stdio"
+    HTTP = "http"
+    SSE = "sse"
+    WEBSOCKET = "websocket"
+
+class MCPServerStatus(Enum):
+    UNKNOWN = "unknown"
+    ONLINE = "online"
+    OFFLINE = "offline"
+    ERROR = "error"
+    DISABLED = "disabled"
+
 @dataclass
 class User:
     id: Optional[int]
@@ -73,6 +86,32 @@ class APIKey:
     expires_at: Optional[datetime] = None
     last_used: Optional[datetime] = None
     usage_count: int = 0
+
+@dataclass
+class MCPServer:
+    id: Optional[int]
+    name: str
+    server_type: MCPServerType
+    endpoint: str
+    description: Optional[str]
+    config: Dict[str, Any]  # JSON config for server-specific settings
+    auth_config: Optional[Dict[str, Any]]  # Authentication configuration
+    enabled: bool
+    created_at: datetime
+    created_by: int  # user_id
+    priority: int = 100  # Lower number = higher priority
+    tags: List[str] = None
+
+@dataclass
+class MCPServerHealth:
+    id: Optional[int]
+    server_id: int
+    status: MCPServerStatus
+    response_time_ms: Optional[float]
+    error_message: Optional[str]
+    tools_available: List[str]  # JSON array of tool names
+    last_check: datetime
+    consecutive_failures: int = 0
 
 class ControlDatabase:
     def __init__(self, db_path: str = "database/haivemind.db"):
@@ -183,6 +222,40 @@ class ControlDatabase:
                     description TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (device_id) REFERENCES devices (id)
+                )
+            """)
+            
+            # MCP servers table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS mcp_servers (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT UNIQUE NOT NULL,
+                    server_type TEXT NOT NULL,
+                    endpoint TEXT NOT NULL,
+                    description TEXT,
+                    config TEXT NOT NULL DEFAULT '{}',
+                    auth_config TEXT,
+                    enabled BOOLEAN DEFAULT 1,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    created_by INTEGER NOT NULL,
+                    priority INTEGER DEFAULT 100,
+                    tags TEXT DEFAULT '[]',
+                    FOREIGN KEY (created_by) REFERENCES users (id)
+                )
+            """)
+            
+            # MCP server health table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS mcp_server_health (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    server_id INTEGER NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'unknown',
+                    response_time_ms REAL,
+                    error_message TEXT,
+                    tools_available TEXT DEFAULT '[]',
+                    last_check TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    consecutive_failures INTEGER DEFAULT 0,
+                    FOREIGN KEY (server_id) REFERENCES mcp_servers (id)
                 )
             """)
             
@@ -444,3 +517,211 @@ class ControlDatabase:
             stats['recent_activity'] = cursor.fetchone()[0]
             
             return stats
+    
+    # MCP Server Management Methods
+    
+    def add_mcp_server(self, name: str, server_type: MCPServerType, endpoint: str,
+                       description: Optional[str], config: Dict[str, Any],
+                       auth_config: Optional[Dict[str, Any]], created_by: int,
+                       priority: int = 100, tags: List[str] = None) -> int:
+        """Add a new MCP server"""
+        if tags is None:
+            tags = []
+            
+        with self.get_connection() as conn:
+            cursor = conn.execute("""
+                INSERT INTO mcp_servers (name, server_type, endpoint, description, config, 
+                                       auth_config, created_by, priority, tags)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (name, server_type.value, endpoint, description, json.dumps(config),
+                  json.dumps(auth_config) if auth_config else None, created_by, priority, json.dumps(tags)))
+            return cursor.lastrowid
+    
+    def get_mcp_servers(self, enabled_only: bool = False) -> List[MCPServer]:
+        """Get all MCP servers"""
+        query = "SELECT * FROM mcp_servers"
+        params = ()
+        
+        if enabled_only:
+            query += " WHERE enabled = 1"
+        
+        query += " ORDER BY priority ASC, name ASC"
+        
+        servers = []
+        with self.get_connection() as conn:
+            cursor = conn.execute(query, params)
+            for row in cursor.fetchall():
+                servers.append(MCPServer(
+                    id=row['id'],
+                    name=row['name'],
+                    server_type=MCPServerType(row['server_type']),
+                    endpoint=row['endpoint'],
+                    description=row['description'],
+                    config=json.loads(row['config']),
+                    auth_config=json.loads(row['auth_config']) if row['auth_config'] else None,
+                    enabled=bool(row['enabled']),
+                    created_at=datetime.fromisoformat(row['created_at']),
+                    created_by=row['created_by'],
+                    priority=row['priority'],
+                    tags=json.loads(row['tags'])
+                ))
+        return servers
+    
+    def get_mcp_server(self, server_id: int) -> Optional[MCPServer]:
+        """Get specific MCP server by ID"""
+        with self.get_connection() as conn:
+            cursor = conn.execute("SELECT * FROM mcp_servers WHERE id = ?", (server_id,))
+            row = cursor.fetchone()
+            if row:
+                return MCPServer(
+                    id=row['id'],
+                    name=row['name'],
+                    server_type=MCPServerType(row['server_type']),
+                    endpoint=row['endpoint'],
+                    description=row['description'],
+                    config=json.loads(row['config']),
+                    auth_config=json.loads(row['auth_config']) if row['auth_config'] else None,
+                    enabled=bool(row['enabled']),
+                    created_at=datetime.fromisoformat(row['created_at']),
+                    created_by=row['created_by'],
+                    priority=row['priority'],
+                    tags=json.loads(row['tags'])
+                )
+        return None
+    
+    def update_mcp_server(self, server_id: int, name: Optional[str] = None,
+                          server_type: Optional[MCPServerType] = None,
+                          endpoint: Optional[str] = None,
+                          description: Optional[str] = None,
+                          config: Optional[Dict[str, Any]] = None,
+                          auth_config: Optional[Dict[str, Any]] = None,
+                          enabled: Optional[bool] = None,
+                          priority: Optional[int] = None,
+                          tags: Optional[List[str]] = None) -> bool:
+        """Update MCP server configuration"""
+        updates = []
+        params = []
+        
+        if name is not None:
+            updates.append("name = ?")
+            params.append(name)
+        if server_type is not None:
+            updates.append("server_type = ?")
+            params.append(server_type.value)
+        if endpoint is not None:
+            updates.append("endpoint = ?")
+            params.append(endpoint)
+        if description is not None:
+            updates.append("description = ?")
+            params.append(description)
+        if config is not None:
+            updates.append("config = ?")
+            params.append(json.dumps(config))
+        if auth_config is not None:
+            updates.append("auth_config = ?")
+            params.append(json.dumps(auth_config))
+        if enabled is not None:
+            updates.append("enabled = ?")
+            params.append(enabled)
+        if priority is not None:
+            updates.append("priority = ?")
+            params.append(priority)
+        if tags is not None:
+            updates.append("tags = ?")
+            params.append(json.dumps(tags))
+        
+        if not updates:
+            return False
+        
+        params.append(server_id)
+        
+        with self.get_connection() as conn:
+            cursor = conn.execute(f"""
+                UPDATE mcp_servers SET {', '.join(updates)} WHERE id = ?
+            """, params)
+            return cursor.rowcount > 0
+    
+    def delete_mcp_server(self, server_id: int) -> bool:
+        """Delete MCP server and related health records"""
+        with self.get_connection() as conn:
+            # Delete health records first (foreign key constraint)
+            conn.execute("DELETE FROM mcp_server_health WHERE server_id = ?", (server_id,))
+            # Delete server
+            cursor = conn.execute("DELETE FROM mcp_servers WHERE id = ?", (server_id,))
+            return cursor.rowcount > 0
+    
+    def update_server_health(self, server_id: int, status: MCPServerStatus,
+                           response_time_ms: Optional[float] = None,
+                           error_message: Optional[str] = None,
+                           tools_available: List[str] = None,
+                           consecutive_failures: int = 0) -> None:
+        """Update or insert server health record"""
+        if tools_available is None:
+            tools_available = []
+            
+        with self.get_connection() as conn:
+            # Try to update existing health record
+            cursor = conn.execute("""
+                UPDATE mcp_server_health 
+                SET status = ?, response_time_ms = ?, error_message = ?, 
+                    tools_available = ?, last_check = CURRENT_TIMESTAMP,
+                    consecutive_failures = ?
+                WHERE server_id = ?
+            """, (status.value, response_time_ms, error_message, 
+                  json.dumps(tools_available), consecutive_failures, server_id))
+            
+            # If no existing record, insert new one
+            if cursor.rowcount == 0:
+                conn.execute("""
+                    INSERT INTO mcp_server_health (server_id, status, response_time_ms, 
+                                                 error_message, tools_available, consecutive_failures)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (server_id, status.value, response_time_ms, error_message,
+                      json.dumps(tools_available), consecutive_failures))
+    
+    def get_server_health(self, server_id: int) -> Optional[MCPServerHealth]:
+        """Get current health status for a server"""
+        with self.get_connection() as conn:
+            cursor = conn.execute("""
+                SELECT * FROM mcp_server_health WHERE server_id = ?
+                ORDER BY last_check DESC LIMIT 1
+            """, (server_id,))
+            row = cursor.fetchone()
+            if row:
+                return MCPServerHealth(
+                    id=row['id'],
+                    server_id=row['server_id'],
+                    status=MCPServerStatus(row['status']),
+                    response_time_ms=row['response_time_ms'],
+                    error_message=row['error_message'],
+                    tools_available=json.loads(row['tools_available']),
+                    last_check=datetime.fromisoformat(row['last_check']),
+                    consecutive_failures=row['consecutive_failures']
+                )
+        return None
+    
+    def get_all_server_health(self) -> List[MCPServerHealth]:
+        """Get health status for all servers"""
+        health_records = []
+        with self.get_connection() as conn:
+            cursor = conn.execute("""
+                SELECT h.* FROM mcp_server_health h
+                INNER JOIN (
+                    SELECT server_id, MAX(last_check) as max_check
+                    FROM mcp_server_health
+                    GROUP BY server_id
+                ) latest ON h.server_id = latest.server_id AND h.last_check = latest.max_check
+                ORDER BY h.server_id
+            """)
+            for row in cursor.fetchall():
+                health_records.append(MCPServerHealth(
+                    id=row['id'],
+                    server_id=row['server_id'],
+                    status=MCPServerStatus(row['status']),
+                    response_time_ms=row['response_time_ms'],
+                    error_message=row['error_message'],
+                    tools_available=json.loads(row['tools_available']),
+                    last_check=datetime.fromisoformat(row['last_check']),
+                    consecutive_failures=row['consecutive_failures']
+                ))
+        return health_records
