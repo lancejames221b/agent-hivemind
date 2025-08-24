@@ -79,4 +79,4 @@ cursor-agent → MCP Client → hAIveMind Remote Server → Memory Storage
 **Result:** hAIveMind MCP client is now working perfectly with cursor-agent! 🎉
 
 ---
-*Generated on lance-dev as part of the ClaudeOps hAIveMind collective intelligence network*
+*Generated on lance-dev as part of the hAIveMind collective intelligence network*
