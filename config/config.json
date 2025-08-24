@@ -18,7 +18,8 @@
       "db": 0,
       "password": null,
       "enable_cache": true
-    }
+    },
+    "registry_db": "data/registry.db"
   },
   "sync": {
     "enable_remote_sync": true,
@@ -115,6 +116,64 @@
       },
       "projects": ["INFRA", "DEVOPS", "SUPPORT", "EWITNESS"],
       "enabled": false
+    }
+  },
+  "aggregator": {
+    "enabled": true,
+    "name": "MCP SSE Aggregator",
+    "host": "0.0.0.0",
+    "port": 8950,
+    "namespace": {
+      "auto_prefix": true,
+      "conflict_resolution": "priority",
+      "allow_unprefixed": ["high_priority_tools"],
+      "reserved_prefixes": ["mcp__", "registry__", "system__", "aggregator__"]
+    },
+    "static_servers": [
+      {
+        "id": "memory-server",
+        "name": "hAIveMind Memory",
+        "endpoint": "http://localhost:8900/sse",
+        "transport": "sse",
+        "priority": 10,
+        "auto_start": true,
+        "health_check": "http://localhost:8900/health"
+      }
+    ],
+    "discovery": {
+      "methods": ["static", "network", "api"],
+      "network_discovery": {
+        "enabled": true,
+        "scan_ranges": ["10.0.0.0/8", "192.168.0.0/16"],
+        "ports": [8900, 8901, 8902, 8903, 8904],
+        "interval": 60
+      }
+    },
+    "health": {
+      "check_interval": 30,
+      "timeout": 10,
+      "failure_threshold": 3,
+      "recovery_threshold": 2,
+      "actions": {
+        "degraded": {
+          "reduce_traffic": 50,
+          "log_warning": true
+        },
+        "unhealthy": {
+          "stop_routing": true,
+          "notify_admin": true,
+          "attempt_restart": true
+        },
+        "unreachable": {
+          "remove_from_pool": true,
+          "alert_critical": true
+        }
+      }
+    },
+    "auth": {
+      "enabled": true,
+      "methods": ["jwt", "api_key"],
+      "propagate_user_context": true
     }
   },
   "authorship": {

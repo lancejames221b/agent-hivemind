@@ -8,6 +8,7 @@ python-multipart>=0.0.6
 pydantic>=2.5.0
 asyncio-mqtt>=0.16.1
 httpx>=0.25.2
+aiohttp>=3.9.1
 mcp>=1.13.0
 PyJWT>=2.8.0
 bcrypt>=4.1.2
