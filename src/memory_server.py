@@ -3105,6 +3105,102 @@ class MemoryMCPServer:
                         "required": ["playbook_name", "playbook_content"]
                     }
                 ),
+                # Advanced Playbook Execution Tools
+                Tool(
+                    name="execute_playbook_advanced",
+                    description="Execute a playbook with advanced features (pause/resume, rollback, parallel execution, approval gates)",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "playbook_id": {"type": "integer", "description": "Playbook ID to execute"},
+                            "parameters": {"type": "object", "description": "Execution parameters"},
+                            "version_id": {"type": "integer", "description": "Specific version ID (optional, uses latest)"},
+                            "dry_run": {"type": "boolean", "description": "Perform dry run validation only", "default": False},
+                            "allow_unsafe_shell": {"type": "boolean", "description": "Allow shell command execution", "default": False},
+                            "continue_on_failure": {"type": "boolean", "description": "Continue execution on step failure", "default": False},
+                            "approval_required": {"type": "boolean", "description": "Require approval for critical steps", "default": False},
+                            "environment": {"type": "string", "description": "Execution environment", "default": "default"}
+                        },
+                        "required": ["playbook_id"]
+                    }
+                ),
+                Tool(
+                    name="control_execution",
+                    description="Control a running playbook execution (pause, resume, cancel, rollback)",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "run_id": {"type": "string", "description": "Execution run ID"},
+                            "action": {"type": "string", "description": "Control action", "enum": ["pause", "resume", "cancel", "rollback"]}
+                        },
+                        "required": ["run_id", "action"]
+                    }
+                ),
+                Tool(
+                    name="get_execution_status",
+                    description="Get detailed status of a playbook execution",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "run_id": {"type": "string", "description": "Execution run ID"}
+                        },
+                        "required": ["run_id"]
+                    }
+                ),
+                Tool(
+                    name="list_active_executions",
+                    description="List all active playbook executions",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {}
+                    }
+                ),
+                Tool(
+                    name="approve_execution_step",
+                    description="Approve a step waiting for approval in a playbook execution",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "run_id": {"type": "string", "description": "Execution run ID"},
+                            "step_id": {"type": "string", "description": "Step ID to approve"},
+                            "approver": {"type": "string", "description": "Approver identifier"}
+                        },
+                        "required": ["run_id", "step_id", "approver"]
+                    }
+                ),
+                Tool(
+                    name="get_execution_logs",
+                    description="Get execution logs for a playbook run",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "run_id": {"type": "string", "description": "Execution run ID"},
+                            "level": {"type": "string", "description": "Log level filter", "enum": ["all", "error", "info"], "default": "all"}
+                        },
+                        "required": ["run_id"]
+                    }
+                ),
+                Tool(
+                    name="get_execution_metrics",
+                    description="Get execution metrics and statistics",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "run_id": {"type": "string", "description": "Specific execution run ID (optional, gets overall metrics if not provided)"}
+                        }
+                    }
+                ),
+                Tool(
+                    name="validate_playbook_advanced",
+                    description="Validate playbook with advanced security and performance checks",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "playbook_content": {"type": "string", "description": "Playbook content to validate"}
+                        },
+                        "required": ["playbook_content"]
+                    }
+                ),
                 Tool(
                     name="fetch_from_confluence",
                     description="Fetch documentation from Confluence and store as ClaudeOps knowledge",
@@ -3361,6 +3457,87 @@ class MemoryMCPServer:
                 # ============ ClaudeOps Playbook & Connector Tools ============
                 elif name == "upload_playbook":
                     result = await self.storage.upload_playbook(**arguments)
+                    return [TextContent(type="text", text=json.dumps(result, indent=2))]
+                
+                # Advanced Playbook Execution Tools
+                elif name == "execute_playbook_advanced":
+                    if not hasattr(self, 'advanced_execution_tools'):
+                        from advanced_execution_mcp_tools import AdvancedExecutionMCPTools
+                        self.advanced_execution_tools = AdvancedExecutionMCPTools(
+                            database=self.storage.db if hasattr(self.storage, 'db') else None,
+                            haivemind_client=self.storage
+                        )
+                    result = await self.advanced_execution_tools.execute_playbook_advanced(**arguments)
+                    return [TextContent(type="text", text=json.dumps(result, indent=2))]
+                
+                elif name == "control_execution":
+                    if not hasattr(self, 'advanced_execution_tools'):
+                        from advanced_execution_mcp_tools import AdvancedExecutionMCPTools
+                        self.advanced_execution_tools = AdvancedExecutionMCPTools(
+                            database=self.storage.db if hasattr(self.storage, 'db') else None,
+                            haivemind_client=self.storage
+                        )
+                    result = await self.advanced_execution_tools.control_execution(**arguments)
+                    return [TextContent(type="text", text=json.dumps(result, indent=2))]
+                
+                elif name == "get_execution_status":
+                    if not hasattr(self, 'advanced_execution_tools'):
+                        from advanced_execution_mcp_tools import AdvancedExecutionMCPTools
+                        self.advanced_execution_tools = AdvancedExecutionMCPTools(
+                            database=self.storage.db if hasattr(self.storage, 'db') else None,
+                            haivemind_client=self.storage
+                        )
+                    result = await self.advanced_execution_tools.get_execution_status(**arguments)
+                    return [TextContent(type="text", text=json.dumps(result, indent=2))]
+                
+                elif name == "list_active_executions":
+                    if not hasattr(self, 'advanced_execution_tools'):
+                        from advanced_execution_mcp_tools import AdvancedExecutionMCPTools
+                        self.advanced_execution_tools = AdvancedExecutionMCPTools(
+                            database=self.storage.db if hasattr(self.storage, 'db') else None,
+                            haivemind_client=self.storage
+                        )
+                    result = await self.advanced_execution_tools.list_active_executions(**arguments)
+                    return [TextContent(type="text", text=json.dumps(result, indent=2))]
+                
+                elif name == "approve_execution_step":
+                    if not hasattr(self, 'advanced_execution_tools'):
+                        from advanced_execution_mcp_tools import AdvancedExecutionMCPTools
+                        self.advanced_execution_tools = AdvancedExecutionMCPTools(
+                            database=self.storage.db if hasattr(self.storage, 'db') else None,
+                            haivemind_client=self.storage
+                        )
+                    result = await self.advanced_execution_tools.approve_execution_step(**arguments)
+                    return [TextContent(type="text", text=json.dumps(result, indent=2))]
+                
+                elif name == "get_execution_logs":
+                    if not hasattr(self, 'advanced_execution_tools'):
+                        from advanced_execution_mcp_tools import AdvancedExecutionMCPTools
+                        self.advanced_execution_tools = AdvancedExecutionMCPTools(
+                            database=self.storage.db if hasattr(self.storage, 'db') else None,
+                            haivemind_client=self.storage
+                        )
+                    result = await self.advanced_execution_tools.get_execution_logs(**arguments)
+                    return [TextContent(type="text", text=json.dumps(result, indent=2))]
+                
+                elif name == "get_execution_metrics":
+                    if not hasattr(self, 'advanced_execution_tools'):
+                        from advanced_execution_mcp_tools import AdvancedExecutionMCPTools
+                        self.advanced_execution_tools = AdvancedExecutionMCPTools(
+                            database=self.storage.db if hasattr(self.storage, 'db') else None,
+                            haivemind_client=self.storage
+                        )
+                    result = await self.advanced_execution_tools.get_execution_metrics(**arguments)
+                    return [TextContent(type="text", text=json.dumps(result, indent=2))]
+                
+                elif name == "validate_playbook_advanced":
+                    if not hasattr(self, 'advanced_execution_tools'):
+                        from advanced_execution_mcp_tools import AdvancedExecutionMCPTools
+                        self.advanced_execution_tools = AdvancedExecutionMCPTools(
+                            database=self.storage.db if hasattr(self.storage, 'db') else None,
+                            haivemind_client=self.storage
+                        )
+                    result = await self.advanced_execution_tools.validate_playbook_advanced(**arguments)
                     return [TextContent(type="text", text=json.dumps(result, indent=2))]
                 
                 elif name == "fetch_from_confluence":

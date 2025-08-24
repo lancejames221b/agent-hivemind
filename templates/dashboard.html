@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2rem;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        
+        .stat-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        
+        .stat-card h3 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+            color: #667eea;
+        }
+        
+        .stat-card p {
+            color: #666;
+            font-weight: 500;
+        }
+        
+        .executions-section {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .section-header {
+            background: #f8f9fa;
+            padding: 1.5rem;
+            border-bottom: 1px solid #e9ecef;
+        }
+        
+        .section-header h2 {
+            font-size: 1.5rem;
+            color: #333;
+        }
+        
+        .executions-list {
+            padding: 1rem;
+        }
+        
+        .execution-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            transition: all 0.2s ease;
+        }
+        
+        .execution-item:hover {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transform: translateY(-1px);
+        }
+        
+        .execution-info h4 {
+            margin-bottom: 0.5rem;
+            color: #333;
+        }
+        
+        .execution-info p {
+            color: #666;
+            font-size: 0.9rem;
+        }
+        
+        .execution-status {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .status-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .status-running { background: #d4edda; color: #155724; }
+        .status-paused { background: #fff3cd; color: #856404; }
+        .status-completed { background: #d1ecf1; color: #0c5460; }
+        .status-failed { background: #f8d7da; color: #721c24; }
+        .status-waiting_approval { background: #e2e3e5; color: #383d41; }
+        
+        .control-buttons {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+        
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        
+        .btn-primary { background: #007bff; color: white; }
+        .btn-warning { background: #ffc107; color: #212529; }
+        .btn-danger { background: #dc3545; color: white; }
+        .btn-secondary { background: #6c757d; color: white; }
+        
+        .connection-status {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            padding: 0.5rem 1rem;
+            border-radius: 5px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+        
+        .connected { background: #d4edda; color: #155724; }
+        .disconnected { background: #f8d7da; color: #721c24; }
+        
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #666;
+        }
+        
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(102, 126, 234, 0.3);
+            border-radius: 50%;
+            border-top-color: #667eea;
+            animation: spin 1s ease-in-out infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: #666;
+        }
+        
+        .empty-state h3 {
+            margin-bottom: 1rem;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="connection-status" id="connectionStatus">
+        <span class="spinner"></span> Connecting...
+    </div>
+    
+    <div class="header">
+        <h1>{{ title }}</h1>
+        <p>Real-time monitoring and control of playbook executions</p>
+    </div>
+    
+    <div class="container">
+        <div class="stats-grid" id="statsGrid">
+            <!-- Stats will be populated by JavaScript -->
+        </div>
+        
+        <div class="executions-section">
+            <div class="section-header">
+                <h2>Active Executions</h2>
+            </div>
+            <div class="executions-list" id="executionsList">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading executions...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class ExecutionDashboard {
+            constructor() {
+                this.ws = null;
+                this.executions = new Map();
+                this.stats = {};
+                this.init();
+            }
+            
+            init() {
+                this.connectWebSocket();
+                this.loadInitialData();
+                
+                // Refresh data every 30 seconds as fallback
+                setInterval(() => this.loadInitialData(), 30000);
+            }
+            
+            connectWebSocket() {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${protocol}//${window.location.host}/ws`;
+                
+                this.ws = new WebSocket(wsUrl);
+                
+                this.ws.onopen = () => {
+                    console.log('WebSocket connected');
+                    this.updateConnectionStatus(true);
+                };
+                
+                this.ws.onclose = () => {
+                    console.log('WebSocket disconnected');
+                    this.updateConnectionStatus(false);
+                    
+                    // Reconnect after 5 seconds
+                    setTimeout(() => this.connectWebSocket(), 5000);
+                };
+                
+                this.ws.onmessage = (event) => {
+                    const message = JSON.parse(event.data);
+                    this.handleWebSocketMessage(message);
+                };
+                
+                this.ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    this.updateConnectionStatus(false);
+                };
+            }
+            
+            handleWebSocketMessage(message) {
+                if (message.type === 'execution_update') {
+                    this.executions.set(message.run_id, message.data);
+                    this.renderExecutions();
+                    this.updateStats();
+                } else if (message.type === 'step_update') {
+                    const execution = this.executions.get(message.run_id);
+                    if (execution && execution.step_results) {
+                        execution.step_results[message.step_id] = message.data;
+                        this.renderExecutions();
+                    }
+                }
+            }
+            
+            async loadInitialData() {
+                try {
+                    const [executionsResponse, statsResponse] = await Promise.all([
+                        fetch('/api/executions'),
+                        fetch('/api/stats')
+                    ]);
+                    
+                    const executionsData = await executionsResponse.json();
+                    const statsData = await statsResponse.json();
+                    
+                    // Load detailed data for each execution
+                    for (const execution of executionsData.executions) {
+                        const detailResponse = await fetch(`/api/executions/${execution.run_id}`);
+                        const detailData = await detailResponse.json();
+                        this.executions.set(execution.run_id, detailData);
+                    }
+                    
+                    this.stats = statsData;
+                    this.renderStats();
+                    this.renderExecutions();
+                    
+                } catch (error) {
+                    console.error('Error loading data:', error);
+                }
+            }
+            
+            renderStats() {
+                const statsGrid = document.getElementById('statsGrid');
+                statsGrid.innerHTML = `
+                    <div class="stat-card">
+                        <h3>${this.stats.total_executions || 0}</h3>
+                        <p>Total Executions</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>${this.stats.running_executions || 0}</h3>
+                        <p>Running</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>${this.stats.paused_executions || 0}</h3>
+                        <p>Paused</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>${this.stats.completed_executions || 0}</h3>
+                        <p>Completed</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>${this.stats.failed_executions || 0}</h3>
+                        <p>Failed</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>${this.stats.waiting_approval || 0}</h3>
+                        <p>Waiting Approval</p>
+                    </div>
+                `;
+            }
+            
+            renderExecutions() {
+                const executionsList = document.getElementById('executionsList');
+                
+                if (this.executions.size === 0) {
+                    executionsList.innerHTML = `
+                        <div class="empty-state">
+                            <h3>No Active Executions</h3>
+                            <p>Start a playbook execution to see it here.</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                const executionsArray = Array.from(this.executions.values());
+                executionsArray.sort((a, b) => b.started_at - a.started_at);
+                
+                executionsList.innerHTML = executionsArray.map(execution => {
+                    const duration = execution.duration ? 
+                        `${execution.duration.toFixed(1)}s` : 
+                        `${((Date.now() / 1000) - execution.started_at).toFixed(1)}s`;
+                    
+                    const progress = execution.total_steps > 0 ? 
+                        Math.round((execution.completed_steps / execution.total_steps) * 100) : 0;
+                    
+                    return `
+                        <div class="execution-item">
+                            <div class="execution-info">
+                                <h4>Execution ${execution.run_id.substring(0, 8)}</h4>
+                                <p>Duration: ${duration} | Progress: ${progress}% (${execution.completed_steps}/${execution.total_steps})</p>
+                                <p>Started: ${new Date(execution.started_at * 1000).toLocaleString()}</p>
+                            </div>
+                            <div class="execution-status">
+                                <span class="status-badge status-${execution.state}">${execution.state.replace('_', ' ')}</span>
+                                <div class="control-buttons">
+                                    ${this.getControlButtons(execution)}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+            
+            getControlButtons(execution) {
+                const buttons = [];
+                
+                if (execution.state === 'running') {
+                    buttons.push(`<button class="btn btn-warning" onclick="dashboard.controlExecution('${execution.run_id}', 'pause')">Pause</button>`);
+                    buttons.push(`<button class="btn btn-danger" onclick="dashboard.controlExecution('${execution.run_id}', 'cancel')">Cancel</button>`);
+                } else if (execution.state === 'paused') {
+                    buttons.push(`<button class="btn btn-primary" onclick="dashboard.controlExecution('${execution.run_id}', 'resume')">Resume</button>`);
+                    buttons.push(`<button class="btn btn-danger" onclick="dashboard.controlExecution('${execution.run_id}', 'cancel')">Cancel</button>`);
+                } else if (execution.state === 'failed' || execution.state === 'completed') {
+                    buttons.push(`<button class="btn btn-secondary" onclick="dashboard.controlExecution('${execution.run_id}', 'rollback')">Rollback</button>`);
+                }
+                
+                buttons.push(`<button class="btn btn-primary" onclick="dashboard.viewDetails('${execution.run_id}')">Details</button>`);
+                
+                return buttons.join('');
+            }
+            
+            async controlExecution(runId, action) {
+                try {
+                    const response = await fetch('/api/executions/control', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            run_id: runId,
+                            action: action
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        console.log(`${action} successful for execution ${runId}`);
+                    } else {
+                        alert(`Failed to ${action} execution: ${result.message}`);
+                    }
+                    
+                } catch (error) {
+                    console.error(`Error ${action} execution:`, error);
+                    alert(`Error ${action} execution: ${error.message}`);
+                }
+            }
+            
+            viewDetails(runId) {
+                // Open details in new window/tab
+                window.open(`/execution/${runId}`, '_blank');
+            }
+            
+            updateConnectionStatus(connected) {
+                const status = document.getElementById('connectionStatus');
+                if (connected) {
+                    status.innerHTML = '🟢 Connected';
+                    status.className = 'connection-status connected';
+                } else {
+                    status.innerHTML = '🔴 Disconnected';
+                    status.className = 'connection-status disconnected';
+                }
+            }
+            
+            updateStats() {
+                const executions = Array.from(this.executions.values());
+                this.stats = {
+                    total_executions: executions.length,
+                    running_executions: executions.filter(e => e.state === 'running').length,
+                    paused_executions: executions.filter(e => e.state === 'paused').length,
+                    completed_executions: executions.filter(e => e.state === 'completed').length,
+                    failed_executions: executions.filter(e => e.state === 'failed').length,
+                    waiting_approval: executions.filter(e => e.state === 'waiting_approval').length,
+                };
+                this.renderStats();
+            }
+        }
+        
+        // Initialize dashboard
+        const dashboard = new ExecutionDashboard();
+    </script>
+</body>
+</html>

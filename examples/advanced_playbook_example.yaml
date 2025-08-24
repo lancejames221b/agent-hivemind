@@ -1,0 +1,285 @@
+version: 1
+name: "Advanced Infrastructure Deployment"
+category: "infrastructure"
+description: "Demonstrates advanced playbook features including parallel execution, approval gates, rollback, and validation"
+
+parameters:
+  - name: environment
+    required: true
+    description: "Target environment (dev, staging, prod)"
+  - name: service_name
+    required: true
+    description: "Service name to deploy"
+  - name: image_tag
+    required: true
+    description: "Docker image tag to deploy"
+  - name: replicas
+    required: false
+    default: 3
+    description: "Number of replicas to deploy"
+
+prerequisites:
+  - type: "non_empty"
+    param: "environment"
+  - type: "non_empty"
+    param: "service_name"
+  - type: "non_empty"
+    param: "image_tag"
+
+steps:
+  # Initial validation steps (parallel)
+  - id: validate_environment
+    name: "Validate target environment"
+    action: "http_request"
+    parallel_group: "validation"
+    args:
+      method: "GET"
+      url: "https://api.${environment}.example.com/health"
+      timeout: 10
+    validations:
+      - type: "http_status"
+        left: "${status_code}"
+        right: 200
+    retry:
+      max_attempts: 3
+      base_delay: 2.0
+      exponential_backoff: true
+    rollback:
+      - action: "http_request"
+        args:
+          method: "POST"
+          url: "https://api.${environment}.example.com/rollback"
+        description: "Notify environment of rollback"
+
+  - id: validate_image
+    name: "Validate Docker image exists"
+    action: "http_request"
+    parallel_group: "validation"
+    args:
+      method: "HEAD"
+      url: "https://registry.example.com/v2/${service_name}/manifests/${image_tag}"
+      timeout: 15
+    validations:
+      - type: "http_status"
+        left: "${status_code}"
+        right: 200
+    retry:
+      max_attempts: 2
+      base_delay: 5.0
+
+  - id: check_resources
+    name: "Check cluster resources"
+    action: "shell"
+    parallel_group: "validation"
+    args:
+      command: "kubectl top nodes --no-headers | awk '{sum+=$3} END {print sum}'"
+    outputs:
+      - name: cpu_usage
+        from: stdout
+    validations:
+      - type: "less_than"
+        left: "${cpu_usage}"
+        right: "80"
+    validators:
+      - type: "disk_space"
+        path: "/var/lib/docker"
+        min_free_gb: 10
+      - type: "memory_usage"
+        max_usage_percent: 85
+
+  # Pre-deployment approval gate (production only)
+  - id: production_approval
+    name: "Production deployment approval"
+    action: "noop"
+    when:
+      - type: "equals"
+        left: "${environment}"
+        right: "prod"
+    approval_gate:
+      message: "Approve production deployment of ${service_name}:${image_tag}?"
+      required_approvers: ["ops-team", "tech-lead"]
+      timeout_seconds: 3600
+      auto_approve_after_timeout: false
+
+  # Backup current deployment
+  - id: backup_deployment
+    name: "Backup current deployment"
+    action: "shell"
+    depends_on: ["validate_environment", "validate_image", "check_resources"]
+    args:
+      command: "kubectl get deployment ${service_name} -o yaml > /tmp/${service_name}-backup-$(date +%s).yaml"
+    outputs:
+      - name: backup_file
+        from: stdout
+    rollback:
+      - action: "shell"
+        args:
+          rollback_command: "kubectl apply -f ${backup_file}"
+        description: "Restore from backup"
+
+  # Database migration (if needed)
+  - id: run_migrations
+    name: "Run database migrations"
+    action: "shell"
+    depends_on: ["backup_deployment"]
+    when:
+      - type: "contains"
+        left: "${image_tag}"
+        right: "migration"
+    args:
+      command: "kubectl run migration-${image_tag} --image=${service_name}:${image_tag} --command -- /app/migrate.sh"
+    validations:
+      - type: "equals"
+        left: "${returncode}"
+        right: "0"
+    retry:
+      max_attempts: 2
+      base_delay: 30.0
+    rollback:
+      - action: "shell"
+        args:
+          rollback_command: "kubectl run rollback-migration-${image_tag} --image=${service_name}:${image_tag} --command -- /app/rollback.sh"
+        description: "Rollback database migration"
+
+  # Deploy to staging slots (parallel)
+  - id: deploy_slot_1
+    name: "Deploy to slot 1"
+    action: "shell"
+    parallel_group: "deployment"
+    depends_on: ["backup_deployment"]
+    args:
+      command: "kubectl set image deployment/${service_name}-slot1 app=${service_name}:${image_tag}"
+    validations:
+      - type: "equals"
+        left: "${returncode}"
+        right: "0"
+    retry:
+      max_attempts: 3
+      base_delay: 10.0
+
+  - id: deploy_slot_2
+    name: "Deploy to slot 2"
+    action: "shell"
+    parallel_group: "deployment"
+    depends_on: ["backup_deployment"]
+    args:
+      command: "kubectl set image deployment/${service_name}-slot2 app=${service_name}:${image_tag}"
+    validations:
+      - type: "equals"
+        left: "${returncode}"
+        right: "0"
+    retry:
+      max_attempts: 3
+      base_delay: 10.0
+
+  # Health check after deployment
+  - id: health_check_slot_1
+    name: "Health check slot 1"
+    action: "http_request"
+    depends_on: ["deploy_slot_1"]
+    args:
+      method: "GET"
+      url: "https://${service_name}-slot1.${environment}.example.com/health"
+      timeout: 30
+    validations:
+      - type: "http_status"
+        left: "${status_code}"
+        right: 200
+      - type: "contains"
+        left: "${body}"
+        right: "healthy"
+    retry:
+      max_attempts: 5
+      base_delay: 10.0
+      exponential_backoff: true
+
+  - id: health_check_slot_2
+    name: "Health check slot 2"
+    action: "http_request"
+    depends_on: ["deploy_slot_2"]
+    args:
+      method: "GET"
+      url: "https://${service_name}-slot2.${environment}.example.com/health"
+      timeout: 30
+    validations:
+      - type: "http_status"
+        left: "${status_code}"
+        right: 200
+      - type: "contains"
+        left: "${body}"
+        right: "healthy"
+    retry:
+      max_attempts: 5
+      base_delay: 10.0
+      exponential_backoff: true
+
+  # Load balancer update
+  - id: update_load_balancer
+    name: "Update load balancer"
+    action: "http_request"
+    depends_on: ["health_check_slot_1", "health_check_slot_2"]
+    args:
+      method: "POST"
+      url: "https://lb.${environment}.example.com/api/update"
+      json:
+        service: "${service_name}"
+        slots: ["slot1", "slot2"]
+        weight: 50
+    validations:
+      - type: "http_status"
+        left: "${status_code}"
+        right: 200
+    retry:
+      max_attempts: 3
+      base_delay: 5.0
+    rollback:
+      - action: "http_request"
+        args:
+          method: "POST"
+          url: "https://lb.${environment}.example.com/api/rollback"
+          json:
+            service: "${service_name}"
+        description: "Rollback load balancer configuration"
+
+  # Final validation
+  - id: smoke_test
+    name: "Run smoke tests"
+    action: "shell"
+    depends_on: ["update_load_balancer"]
+    args:
+      command: "curl -f https://${service_name}.${environment}.example.com/api/smoke-test"
+    validations:
+      - type: "equals"
+        left: "${returncode}"
+        right: "0"
+    retry:
+      max_attempts: 3
+      base_delay: 15.0
+
+  # Cleanup old deployments
+  - id: cleanup_old_deployments
+    name: "Cleanup old deployments"
+    action: "shell"
+    depends_on: ["smoke_test"]
+    args:
+      command: "kubectl delete deployment ${service_name}-old --ignore-not-found=true"
+    # This step can fail without affecting overall success
+    when:
+      - type: "truthy"
+        value: true
+
+  # Notification
+  - id: notify_success
+    name: "Send success notification"
+    action: "http_request"
+    depends_on: ["smoke_test"]
+    args:
+      method: "POST"
+      url: "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
+      json:
+        text: "✅ Successfully deployed ${service_name}:${image_tag} to ${environment}"
+        channel: "#deployments"
+    # Don't fail the deployment if notification fails
+    when:
+      - type: "truthy"
+        value: true
