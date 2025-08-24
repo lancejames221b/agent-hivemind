@@ -1,0 +1,68 @@
+# Project-Specific Rule Example
+# Demonstrates scope-based rule application
+
+name: "hAIveMind Project Logging Policy"
+description: "Enhanced logging requirements for hAIveMind project development"
+rule_type: "operational"
+scope: "project"
+priority: 600
+status: "active"
+
+conditions:
+  - field: "project_id"
+    operator: "eq"
+    value: "haivemind"
+    case_sensitive: false
+    
+  - field: "file_type"
+    operator: "in" 
+    value: ["py", "js", "ts"]
+    case_sensitive: false
+
+actions:
+  - action_type: "set"
+    target: "logging_level" 
+    value: "debug"
+    parameters: {}
+    
+  - action_type: "set"
+    target: "include_performance_metrics"
+    value: true
+    parameters:
+      track_execution_time: true
+      track_memory_usage: true
+      
+  - action_type: "validate"
+    target: "error_handling"
+    value: "comprehensive"
+    parameters:
+      require_try_catch: true
+      log_all_exceptions: true
+      include_stack_traces: true
+
+tags:
+  - "operational"
+  - "logging"
+  - "monitoring"
+  - "haivemind"
+  - "project_specific"
+
+# Rule assignments - can be assigned to specific scopes
+# This will be handled via rule_assignments table
+
+metadata:
+  project: "hAIveMind Rules Engine"
+  team: "Unit 221B Engineering"
+  monitoring_tools: ["structured_logging", "performance_metrics"]
+  alert_thresholds:
+    error_rate: 0.01
+    response_time: 5000
+
+# Dependency on global logging rule
+dependencies:
+  - rule_id: "global-logging-001"
+    dependency_type: "enhances"
+    
+# Effective scheduling
+effective_from: "2025-08-24T00:00:00Z"
+# effective_until: "2025-12-31T23:59:59Z"  # Optional expiration

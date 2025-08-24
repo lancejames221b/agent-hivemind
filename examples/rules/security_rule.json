@@ -1,0 +1,69 @@
+{
+  "name": "API Key Protection Rule",
+  "description": "Prevent exposure of API keys, tokens, and secrets in code and commits",
+  "rule_type": "security",
+  "scope": "global",
+  "priority": 1000,
+  "status": "active",
+  
+  "conditions": [
+    {
+      "field": "task_type",
+      "operator": "in",
+      "value": ["code_generation", "code_review", "commit_creation"],
+      "case_sensitive": false
+    }
+  ],
+  
+  "actions": [
+    {
+      "action_type": "validate",
+      "target": "code_content",
+      "value": "no_secrets",
+      "parameters": {
+        "patterns": [
+          ".*api[_-]?key.*=.*",
+          ".*secret.*=.*",
+          ".*token.*=.*",
+          ".*password.*=.*"
+        ],
+        "case_sensitive": false
+      }
+    },
+    {
+      "action_type": "validate", 
+      "target": "commit_content",
+      "value": "no_secrets",
+      "parameters": {
+        "scan_diff": true,
+        "scan_messages": true
+      }
+    },
+    {
+      "action_type": "block",
+      "target": "secret_exposure", 
+      "value": true,
+      "parameters": {
+        "message": "Potential secret detected - please review and remove",
+        "severity": "critical"
+      }
+    }
+  ],
+  
+  "tags": [
+    "security",
+    "secrets", 
+    "privacy",
+    "api_keys",
+    "compliance"
+  ],
+  
+  "metadata": {
+    "security_policy": "Zero Secrets Exposure",
+    "compliance_frameworks": ["SOC2", "ISO27001"],
+    "threat_category": "data_leakage",
+    "impact_level": "high"
+  },
+  
+  "conflict_resolution": "highest_priority"
+}

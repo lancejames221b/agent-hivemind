@@ -30,8 +30,25 @@
       "machines": ["lance-dev", "ljs-macbook-pro", "m2", "max"]
     }
   },
+  "rules": {
+    "database_path": "data/rules.db",
+    "enable_versioning": true,
+    "enable_dependencies": true,
+    "enable_scheduling": true,
+    "enable_haivemind_integration": true,
+    "backup_interval": 86400,
+    "backup_path": "data/backups/rules",
+    "export_formats": ["yaml", "json"],
+    "import_validation": "strict",
+    "performance": {
+      "cache_size": 1000,
+      "cache_ttl": 300,
+      "enable_indexing": true,
+      "enable_optimization": true
+    }
+  },
   "memory": {
-    "categories": ["project", "conversation", "agent", "global", "infrastructure", "incidents", "deployments", "monitoring", "runbooks", "security"],
+    "categories": ["project", "conversation", "agent", "global", "infrastructure", "incidents", "deployments", "monitoring", "runbooks", "security", "rules"],
     "max_age_days": 365,
     "auto_consolidate": true,
     "consolidate_interval": 86400,
