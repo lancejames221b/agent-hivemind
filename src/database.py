@@ -258,6 +258,78 @@ class ControlDatabase:
                     FOREIGN KEY (server_id) REFERENCES mcp_servers (id)
                 )
             """)
+
+            # Playbooks table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS playbooks (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    slug TEXT UNIQUE NOT NULL,
+                    category TEXT NOT NULL,
+                    latest_version_id INTEGER,
+                    tags TEXT NOT NULL DEFAULT '[]',
+                    created_by INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP,
+                    FOREIGN KEY (created_by) REFERENCES users (id)
+                )
+            """)
+
+            # Playbook versions
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS playbook_versions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    playbook_id INTEGER NOT NULL,
+                    version INTEGER NOT NULL,
+                    format TEXT NOT NULL, -- yaml|json
+                    content TEXT NOT NULL,
+                    metadata TEXT NOT NULL DEFAULT '{}',
+                    changelog TEXT,
+                    created_by INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (playbook_id) REFERENCES playbooks (id) ON DELETE CASCADE,
+                    FOREIGN KEY (created_by) REFERENCES users (id),
+                    UNIQUE (playbook_id, version)
+                )
+            """)
+
+            # Playbook execution history
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS playbook_executions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    run_id TEXT UNIQUE NOT NULL,
+                    playbook_id INTEGER NOT NULL,
+                    version_id INTEGER NOT NULL,
+                    parameters TEXT NOT NULL DEFAULT '{}',
+                    context TEXT NOT NULL DEFAULT '{}',
+                    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    finished_at TIMESTAMP,
+                    status TEXT NOT NULL DEFAULT 'running', -- running|success|failed
+                    success BOOLEAN,
+                    step_results TEXT, -- JSON array
+                    log TEXT,
+                    triggered_by INTEGER,
+                    FOREIGN KEY (playbook_id) REFERENCES playbooks (id),
+                    FOREIGN KEY (version_id) REFERENCES playbook_versions (id),
+                    FOREIGN KEY (triggered_by) REFERENCES users (id)
+                )
+            """)
+
+            # Playbook templates library
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS playbook_templates (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    category TEXT NOT NULL,
+                    description TEXT,
+                    format TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    tags TEXT NOT NULL DEFAULT '[]',
+                    created_by INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (created_by) REFERENCES users (id)
+                )
+            """)
             
             # Create default admin user if none exists
             self._create_default_admin()
@@ -725,3 +797,267 @@ class ControlDatabase:
                     consecutive_failures=row['consecutive_failures']
                 ))
         return health_records
+
+    # ============ Playbook Management Methods ============
+
+    def _slugify(self, name: str) -> str:
+        import re
+        slug = name.lower().strip()
+        slug = re.sub(r"[^a-z0-9]+", "-", slug).strip("-")
+        return slug or f"playbook-{int(time.time())}"
+
+    def create_playbook(self, name: str, category: str, created_by: Optional[int] = None, tags: Optional[List[str]] = None) -> int:
+        slug = self._slugify(name)
+        if tags is None:
+            tags = []
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO playbooks (name, slug, category, tags, created_by)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (name, slug, category, json.dumps(tags), created_by),
+            )
+            return cursor.lastrowid
+
+    def add_playbook_version(
+        self,
+        playbook_id: int,
+        content: str,
+        format: str = "yaml",
+        metadata: Optional[Dict[str, Any]] = None,
+        changelog: Optional[str] = None,
+        created_by: Optional[int] = None,
+    ) -> int:
+        if metadata is None:
+            metadata = {}
+        with self.get_connection() as conn:
+            # Determine next version
+            cur = conn.execute("SELECT COALESCE(MAX(version), 0) + 1 FROM playbook_versions WHERE playbook_id = ?", (playbook_id,))
+            next_version = int(cur.fetchone()[0])
+            cur = conn.execute(
+                """
+                INSERT INTO playbook_versions (playbook_id, version, format, content, metadata, changelog, created_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (playbook_id, next_version, format, content, json.dumps(metadata), changelog, created_by),
+            )
+            version_id = cur.lastrowid
+            # Update latest version pointer
+            conn.execute("UPDATE playbooks SET latest_version_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (version_id, playbook_id))
+            return version_id
+
+    def list_playbooks(self, category: Optional[str] = None, q: Optional[str] = None) -> List[Dict[str, Any]]:
+        query = "SELECT id, name, slug, category, latest_version_id, tags, created_at, updated_at FROM playbooks WHERE 1=1"
+        params: List[Any] = []
+        if category:
+            query += " AND category = ?"
+            params.append(category)
+        if q:
+            query += " AND (name LIKE ? OR slug LIKE ?)"
+            params.extend([f"%{q}%", f"%{q}%"])
+        query += " ORDER BY updated_at DESC NULLS LAST, created_at DESC"
+        with self.get_connection() as conn:
+            rows = conn.execute(query, params).fetchall()
+            return [
+                {
+                    "id": r[0],
+                    "name": r[1],
+                    "slug": r[2],
+                    "category": r[3],
+                    "latest_version_id": r[4],
+                    "tags": json.loads(r[5] or "[]"),
+                    "created_at": r[6],
+                    "updated_at": r[7],
+                }
+                for r in rows
+            ]
+
+    def get_playbook(self, playbook_id: int) -> Optional[Dict[str, Any]]:
+        with self.get_connection() as conn:
+            pb = conn.execute(
+                "SELECT id, name, slug, category, latest_version_id, tags, created_by, created_at, updated_at FROM playbooks WHERE id = ?",
+                (playbook_id,),
+            ).fetchone()
+            if not pb:
+                return None
+            versions = conn.execute(
+                "SELECT id, version, format, created_at, created_by, changelog FROM playbook_versions WHERE playbook_id = ? ORDER BY version DESC",
+                (playbook_id,),
+            ).fetchall()
+            return {
+                "id": pb[0],
+                "name": pb[1],
+                "slug": pb[2],
+                "category": pb[3],
+                "latest_version_id": pb[4],
+                "tags": json.loads(pb[5] or "[]"),
+                "created_by": pb[6],
+                "created_at": pb[7],
+                "updated_at": pb[8],
+                "versions": [
+                    {
+                        "id": v[0],
+                        "version": v[1],
+                        "format": v[2],
+                        "created_at": v[3],
+                        "created_by": v[4],
+                        "changelog": v[5],
+                    }
+                    for v in versions
+                ],
+            }
+
+    def get_playbook_version(self, version_id: int) -> Optional[Dict[str, Any]]:
+        with self.get_connection() as conn:
+            v = conn.execute(
+                "SELECT id, playbook_id, version, format, content, metadata, changelog, created_by, created_at FROM playbook_versions WHERE id = ?",
+                (version_id,),
+            ).fetchone()
+            if not v:
+                return None
+            return {
+                "id": v[0],
+                "playbook_id": v[1],
+                "version": v[2],
+                "format": v[3],
+                "content": v[4],
+                "metadata": json.loads(v[5] or "{}"),
+                "changelog": v[6],
+                "created_by": v[7],
+                "created_at": v[8],
+            }
+
+    def delete_playbook(self, playbook_id: int) -> bool:
+        with self.get_connection() as conn:
+            cur = conn.execute("DELETE FROM playbooks WHERE id = ?", (playbook_id,))
+            return cur.rowcount > 0
+
+    # Execution history
+    def start_playbook_execution(
+        self,
+        playbook_id: int,
+        version_id: int,
+        run_id: str,
+        parameters: Dict[str, Any],
+        context: Optional[Dict[str, Any]] = None,
+        triggered_by: Optional[int] = None,
+    ) -> int:
+        if context is None:
+            context = {}
+        with self.get_connection() as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO playbook_executions (run_id, playbook_id, version_id, parameters, context, status, success, step_results, log, triggered_by)
+                VALUES (?, ?, ?, ?, ?, 'running', NULL, '[]', '', ?)
+                """,
+                (run_id, playbook_id, version_id, json.dumps(parameters), json.dumps(context), triggered_by),
+            )
+            return cur.lastrowid
+
+    def complete_playbook_execution(
+        self,
+        run_id: str,
+        status: str,
+        success: bool,
+        step_results: List[Dict[str, Any]],
+        log_text: Optional[str] = None,
+    ) -> bool:
+        with self.get_connection() as conn:
+            cur = conn.execute(
+                """
+                UPDATE playbook_executions
+                SET finished_at = CURRENT_TIMESTAMP,
+                    status = ?,
+                    success = ?,
+                    step_results = ?,
+                    log = COALESCE(log, '') || ?
+                WHERE run_id = ?
+                """,
+                (status, 1 if success else 0, json.dumps(step_results), ("\n" + (log_text or "")), run_id),
+            )
+            return cur.rowcount > 0
+
+    def get_execution(self, run_id: str) -> Optional[Dict[str, Any]]:
+        with self.get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM playbook_executions WHERE run_id = ?",
+                (run_id,),
+            ).fetchone()
+            if not row:
+                return None
+            return {
+                "id": row[0],
+                "run_id": row[1],
+                "playbook_id": row[2],
+                "version_id": row[3],
+                "parameters": json.loads(row[4] or "{}"),
+                "context": json.loads(row[5] or "{}"),
+                "started_at": row[6],
+                "finished_at": row[7],
+                "status": row[8],
+                "success": bool(row[9]) if row[9] is not None else None,
+                "step_results": json.loads(row[10] or "[]"),
+                "log": row[11],
+                "triggered_by": row[12],
+            }
+
+    def list_executions(self, playbook_id: int, limit: int = 50) -> List[Dict[str, Any]]:
+        with self.get_connection() as conn:
+            rows = conn.execute(
+                "SELECT run_id, started_at, finished_at, status, success FROM playbook_executions WHERE playbook_id = ? ORDER BY started_at DESC LIMIT ?",
+                (playbook_id, limit),
+            ).fetchall()
+            return [
+                {
+                    "run_id": r[0],
+                    "started_at": r[1],
+                    "finished_at": r[2],
+                    "status": r[3],
+                    "success": bool(r[4]) if r[4] is not None else None,
+                }
+                for r in rows
+            ]
+
+    # Templates
+    def add_template(
+        self,
+        name: str,
+        category: str,
+        fmt: str,
+        content: str,
+        description: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        created_by: Optional[int] = None,
+    ) -> int:
+        with self.get_connection() as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO playbook_templates (name, category, description, format, content, tags, created_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (name, category, description, fmt, content, json.dumps(tags or []), created_by),
+            )
+            return cur.lastrowid
+
+    def list_templates(self, category: Optional[str] = None) -> List[Dict[str, Any]]:
+        query = "SELECT id, name, category, description, format, tags, created_at FROM playbook_templates"
+        params: List[Any] = []
+        if category:
+            query += " WHERE category = ?"
+            params.append(category)
+        query += " ORDER BY created_at DESC"
+        with self.get_connection() as conn:
+            rows = conn.execute(query, params).fetchall()
+            return [
+                {
+                    "id": r[0],
+                    "name": r[1],
+                    "category": r[2],
+                    "description": r[3],
+                    "format": r[4],
+                    "tags": json.loads(r[5] or "[]"),
+                    "created_at": r[6],
+                }
+                for r in rows
+            ]
