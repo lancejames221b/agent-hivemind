@@ -45,7 +45,7 @@
 ```
         🧠 Distributed AI Collective Memory Network 🧠
                                                                                 
-   ┌─[lance-dev]──────────┐  ┌─[m2]────────────────┐  ┌─[max]───────────────┐ 
+   ┌─[node-alpha]─────────┐  ┌─[node-beta]─────────┐  ┌─[node-gamma]────────┐ 
    │  🤖 Claude Agent     │  │  🤖 Claude Agent    │  │  🤖 Claude Agent    │ 
    │  Role: Hive Mind     │  │  Role: Worker Drone │  │  Role: Worker Drone │ 
    │                      │  │                     │  │                     │ 
@@ -67,11 +67,11 @@
                                          ║                                      
               ┌──────────DevOps Infrastructure Fleet──────────┐                
               │                                               │                
-    ┌─[elastic1-5]─┐ ┌─[auth-server]─┐ ┌─[proxy0-9]─┐ ┌─[monitoring]─┐      
-    │ 🔍 Data Hub  │ │ 🔐 Auth Hub   │ │ 🕷️ Scrapers │ │ 📊 Insights  │      
-    │ Capability:  │ │ Capability:   │ │ Capability: │ │ Capability:  │      
-    │ Data Storage │ │ Security      │ │ Collection  │ │ Monitoring   │      
-    └──────────────┘ └───────────────┘ └─────────────┘ └──────────────┘      
+    ┌─[db-cluster-01]─┐ ┌─[auth-gateway]─┐ ┌─[scraper-farm]─┐ ┌─[monitor-hub]─┐      
+    │ 🔍 Data Hub     │ │ 🔐 Auth Hub    │ │ 🕷️ Scrapers    │ │ 📊 Insights   │      
+    │ Capability:     │ │ Capability:    │ │ Capability:    │ │ Capability:   │      
+    │ Data Storage    │ │ Security       │ │ Collection     │ │ Monitoring    │      
+    └─────────────────┘ └────────────────┘ └────────────────┘ └───────────────┘      
                                          ║                                      
                           ⚡ Real-time Agent Collaboration ⚡                   
                                                                                
@@ -82,7 +82,7 @@
 
 1. Install dependencies:
 ```bash
-cd /home/lj/memory-mcp
+cd /path/to/agent-hivemind
 pip install -r requirements.txt
 ```
 
@@ -110,7 +110,7 @@ Edit `config/config.json`:
   },
   "sync": {
     "discovery": {
-      "machines": ["lance-dev", "ljs-macbook-pro", "m2", "max"]
+      "machines": ["node-alpha", "node-beta", "node-gamma", "node-delta"]
     }
   }
 }
@@ -122,7 +122,7 @@ Edit `config/config.json`:
 
 ```bash
 # Start the MCP server (for Claude Code integration)
-cd /home/lj/memory-mcp
+cd /path/to/agent-hivemind
 python src/memory_server.py
 ```
 
@@ -130,7 +130,7 @@ python src/memory_server.py
 
 ```bash
 # Start the sync service (for remote machine communication)
-cd /home/lj/memory-mcp
+cd /path/to/agent-hivemind
 python src/sync_service.py
 ```
 
@@ -182,9 +182,9 @@ Ensure machines can communicate via Tailscale:
 tailscale status
 
 # Test connectivity to other machines
-ping ljs-macbook-pro
-ping m2
-ping max
+ping node-beta
+ping node-gamma
+ping node-delta
 ```
 
 ## Monitoring
@@ -229,7 +229,7 @@ python src/sync_service.py
 
 Project structure:
 ```
-memory-mcp/
+agent-hivemind/
 ├── src/
 │   ├── memory_server.py    # Main MCP server
 │   └── sync_service.py     # Remote sync service
