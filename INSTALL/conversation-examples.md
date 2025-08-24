@@ -8,7 +8,7 @@ The memory MCP server can import full conversations and automatically parse them
 
 ### 1. Import from Clipboard
 
-**You:** Import this conversation I had with Claude:
+**You:** Import this conversation I had with an AI assistant:
 
 Human: How do I set up a Python virtual environment?
 Assistant: You can set up a Python virtual environment using venv. Here's how:
@@ -37,7 +37,7 @@ Assistant: Conda is another great option! Here's how to use conda:
 
 Conda manages both Python versions and packages, making it easier for data science workflows.
 
-**Claude:** *Uses import_conversation tool*
+**AI Assistant:** *Uses import_conversation tool*
 
 ✅ **Result:** Imported conversation "How do I set up a Python..." with 4 messages
 - **Conversation ID:** abc123-def456
@@ -47,12 +47,12 @@ Conda manages both Python versions and packages, making it easier for data scien
 
 ### 2. Import from File
 
-**You:** Import the conversation from ~/Downloads/claude-chat-export.txt
+**You:** Import the conversation from ~/Downloads/ai-chat-export.txt
 
-**Claude:** *Uses import_conversation_file tool*
+**AI Assistant:** *Uses import_conversation_file tool*
 
-✅ **Result:** Imported conversation "claude-chat-export" with 12 messages
-- **File:** /home/user/Downloads/claude-chat-export.txt
+✅ **Result:** Imported conversation "ai-chat-export" with 12 messages
+- **File:** /home/user/Downloads/ai-chat-export.txt
 - **Messages:** 12 (6 user, 6 assistant)
 - **Tags:** imported, file_import, conversation
 
@@ -60,7 +60,7 @@ Conda manages both Python versions and packages, making it easier for data scien
 
 The parser automatically detects:
 
-### Claude Export Format
+### AI Assistant Export Format
 ```
 Human: Your question here
 Assistant: My response here
@@ -111,19 +111,19 @@ When you import a conversation, the system creates:
 ### Search by Content
 ```
 You: "What did I ask about Python environments?"
-Claude: *Searches and finds your original question*
+AI Assistant: *Searches and finds your original question*
 ```
 
 ### Search by Assistant Responses
 ```
-You: "How did Claude explain conda?"
-Claude: *Finds the assistant's conda explanation*
+You: "How did the AI explain conda?"
+AI Assistant: *Finds the assistant's conda explanation*
 ```
 
 ### Find Full Conversations
 ```
 You: "Show me recent imported conversations"
-Claude: *Lists conversations with summaries*
+AI Assistant: *Lists conversations with summaries*
 ```
 
 ## Advanced Usage
@@ -131,17 +131,17 @@ Claude: *Lists conversations with summaries*
 ### With Custom Tags
 **You:** Import this conversation and tag it with "python", "setup", "tutorial"
 
-**Claude:** *Imports with custom tags for better organization*
+**AI Assistant:** *Imports with custom tags for better organization*
 
 ### With Custom Title
 **You:** Import this conversation with the title "Python Environment Setup Guide"
 
-**Claude:** *Uses your custom title instead of auto-generated one*
+**AI Assistant:** *Uses your custom title instead of auto-generated one*
 
 ### File Import with Path Expansion
 **You:** Import conversation from ~/Documents/important-chat.txt
 
-**Claude:** *Handles path expansion and imports the file*
+**AI Assistant:** *Handles path expansion and imports the file*
 
 ## Benefits
 
@@ -154,7 +154,7 @@ Claude: *Lists conversations with summaries*
 ## Tips
 
 - **Large Conversations**: No size limit - import entire long discussions
-- **Multiple Formats**: Works with exports from Claude, ChatGPT, and other AI systems
+- **Multiple Formats**: Works with exports from various AI systems
 - **Batch Import**: Import multiple conversation files by running the command multiple times
 - **Organization**: Use tags and custom titles for better organization
 - **Integration**: Imported conversations integrate seamlessly with other memory tools
