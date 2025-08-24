@@ -1,0 +1,21 @@
+{
+  "name": "Simple Python MCP Server",
+  "description": "A basic example Python MCP server for demonstration",
+  "command": ["python", "simple_python_server.py"],
+  "environment": {
+    "PYTHONPATH": ".",
+    "MCP_SERVER_NAME": "simple-example"
+  },
+  "auto_restart": true,
+  "max_restarts": 5,
+  "restart_delay": 5,
+  "resource_limits": {
+    "memory_mb": 256,
+    "cpu_percent": 30,
+    "max_processes": 5
+  },
+  "sandboxed": true,
+  "allowed_network": true,
+  "allowed_filesystem": ["read"],
+  "user": "nobody"
+}

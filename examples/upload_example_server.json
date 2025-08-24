@@ -1,0 +1,22 @@
+{
+  "tool": "upload_mcp_server",
+  "parameters": {
+    "name": "Simple Python MCP Server",
+    "description": "A basic example Python MCP server for demonstration purposes",
+    "archive_base64": "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",
+    "command": [
+      "python",
+      "simple_python_server.py"
+    ],
+    "environment": {
+      "PYTHONPATH": ".",
+      "MCP_SERVER_NAME": "simple-example"
+    },
+    "auto_restart": true,
+    "resource_limits": {
+      "memory_mb": 256,
+      "cpu_percent": 30
+    },
+    "user_id": "example_creator"
+  }
+}

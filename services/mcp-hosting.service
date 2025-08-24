@@ -1,0 +1,30 @@
+[Unit]
+Description=hAIveMind MCP Server Hosting Service
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=lj
+Group=lj
+WorkingDirectory=/home/lj/memory-mcp
+Environment=PYTHONPATH=/home/lj/memory-mcp/src
+ExecStart=/usr/bin/python3 /home/lj/memory-mcp/src/mcp_hosting_server.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mcp-hosting
+
+# Security settings
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/home/lj/memory-mcp/data
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target

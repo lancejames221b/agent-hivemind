@@ -67,6 +67,13 @@ class RemoteMemoryMCPServer:
         # Register all tools
         self._register_tools()
         
+        # Initialize MCP hosting if enabled
+        self.hosting_tools = None
+        if self.config.get('mcp_hosting', {}).get('enabled', False):
+            from mcp_hosting_tools import MCPHostingTools
+            self.hosting_tools = MCPHostingTools(self.config, self.storage)
+            self._register_hosting_tools()
+        
         # Add admin interface routes
         self._add_admin_routes()
         
@@ -888,6 +895,81 @@ The agent is now synchronized with the hAIveMind collective. All commands and co
                 return f"❌ Auto-sync error: {str(e)}"
         
         logger.info("🤝 All hive mind tools synchronized with network portal - collective intelligence ready")
+    
+    def _register_hosting_tools(self):
+        """Register MCP server hosting tools"""
+        
+        @self.mcp.tool()
+        async def upload_mcp_server(
+            name: str,
+            archive_base64: str,
+            command: List[str],
+            description: str = "",
+            environment: Optional[Dict[str, str]] = None,
+            auto_restart: bool = True,
+            resource_limits: Optional[Dict[str, Any]] = None,
+            health_check_url: Optional[str] = None,
+            user_id: str = "default"
+        ) -> str:
+            """Upload and deploy a new MCP server from base64-encoded archive"""
+            return await self.hosting_tools.upload_mcp_server(
+                name=name,
+                archive_base64=archive_base64,
+                command=command,
+                description=description,
+                environment=environment,
+                auto_restart=auto_restart,
+                resource_limits=resource_limits,
+                health_check_url=health_check_url,
+                user_id=user_id
+            )
+        
+        @self.mcp.tool()
+        async def start_mcp_server(server_id: str) -> str:
+            """Start a hosted MCP server"""
+            return await self.hosting_tools.start_mcp_server(server_id)
+        
+        @self.mcp.tool()
+        async def stop_mcp_server(server_id: str) -> str:
+            """Stop a hosted MCP server"""
+            return await self.hosting_tools.stop_mcp_server(server_id)
+        
+        @self.mcp.tool()
+        async def restart_mcp_server(server_id: str) -> str:
+            """Restart a hosted MCP server"""
+            return await self.hosting_tools.restart_mcp_server(server_id)
+        
+        @self.mcp.tool()
+        async def delete_mcp_server(server_id: str, force: bool = False) -> str:
+            """Delete a hosted MCP server"""
+            return await self.hosting_tools.delete_mcp_server(server_id, force)
+        
+        @self.mcp.tool()
+        async def get_mcp_server_status(server_id: str) -> str:
+            """Get detailed status of a hosted MCP server"""
+            return await self.hosting_tools.get_mcp_server_status(server_id)
+        
+        @self.mcp.tool()
+        async def list_mcp_servers() -> str:
+            """List all hosted MCP servers"""
+            return await self.hosting_tools.list_mcp_servers()
+        
+        @self.mcp.tool()
+        async def get_mcp_server_logs(server_id: str, lines: int = 50) -> str:
+            """Get logs for a hosted MCP server"""
+            return await self.hosting_tools.get_mcp_server_logs(server_id, lines)
+        
+        @self.mcp.tool()
+        async def get_hosting_stats() -> str:
+            """Get overall hosting statistics and performance insights"""
+            return await self.hosting_tools.get_hosting_stats()
+        
+        @self.mcp.tool()
+        async def optimize_server_resources() -> str:
+            """Analyze and provide optimization recommendations for hosted servers"""
+            return await self.hosting_tools.optimize_server_resources()
+        
+        logger.info("🏭 MCP server hosting tools registered - custom server deployment enabled")
     
     def _add_admin_routes(self):
         """Add admin web interface routes"""
