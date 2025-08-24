@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "haivemind-prod": {
+      "command": "python3",
+      "args": ["/opt/haivemind/mcp-client/src/haivemind-mcp-standalone.py", "--haivemind-url", "http://lance-dev:8900"],
+      "env": {
+        "HAIVEMIND_URL": "http://lance-dev:8900",
+        "HAIVEMIND_TIMEOUT": "60",
+        "HAIVEMIND_RETRIES": "5",
+        "HAIVEMIND_AGENT_ROLE": "production_operator"
+      }
+    }
+  }
+}

@@ -1,0 +1,9 @@
+# hAIveMind MCP Client Dependencies
+mcp>=1.0.0
+requests>=2.31.0
+aiohttp>=3.8.0
+asyncio-mqtt>=0.11.0
+
+# Optional dependencies for enhanced functionality
+chromadb>=0.4.0
+redis>=4.5.0

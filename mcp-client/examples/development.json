@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "haivemind-dev": {
+      "command": "python3",
+      "args": ["./mcp-client/src/haivemind-mcp-standalone.py", "--haivemind-url", "http://localhost:8900"],
+      "env": {
+        "HAIVEMIND_URL": "http://localhost:8900",
+        "HAIVEMIND_TIMEOUT": "30",
+        "HAIVEMIND_RETRIES": "3",
+        "HAIVEMIND_AGENT_ROLE": "development_assistant"
+      }
+    }
+  }
+}
