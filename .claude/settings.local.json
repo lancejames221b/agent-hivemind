@@ -16,7 +16,11 @@
       "WebFetch(domain:medium.com)",
       "Bash(source:*)",
       "Bash(pip show:*)",
-      "WebFetch(domain:gofastmcp.com)"
+      "WebFetch(domain:gofastmcp.com)",
+      "Bash(systemctl:*)",
+      "mcp__vibe_kanban__list_projects",
+      "mcp__vibe_kanban__create_task",
+      "mcp__vibe_kanban__list_tasks"
     ],
     "deny": [],
     "ask": [],

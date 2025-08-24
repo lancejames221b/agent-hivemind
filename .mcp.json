@@ -1,14 +1,11 @@
 {
   "mcpServers": {
-    "haivemind-local": {
-      "command": "python",
+    "haivemind": {
+      "command": "/home/lj/memory-mcp/venv/bin/python",
       "args": ["/home/lj/memory-mcp/src/memory_server.py"],
-      "env": {}
-    },
-    "haivemind-remote": {
-      "command": "npx",
-      "args": ["-y", "mcp-proxy", "--target", "http://lance-dev:8900/sse"],
-      "env": {}
+      "env": {
+        "PYTHONPATH": "/home/lj/memory-mcp/src"
+      }
     }
   }
 }

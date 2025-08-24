@@ -9,7 +9,7 @@ User=lj
 Group=lj
 WorkingDirectory=/home/lj/memory-mcp
 Environment=PYTHONPATH=/home/lj/memory-mcp/src
-ExecStart=/usr/bin/python3 /home/lj/memory-mcp/src/memory_server.py
+ExecStart=/home/lj/memory-mcp/venv/bin/python /home/lj/memory-mcp/src/memory_server.py
 Restart=always
 RestartSec=10
 StandardOutput=journal
@@ -19,7 +19,7 @@ StandardError=journal
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=false
-ReadWritePaths=/home/lj/memory-mcp/data
+ReadWritePaths=/home/lj/memory-mcp
 PrivateTmp=true
 
 [Install]

@@ -1,11 +1,15 @@
 /**
- * hAIveMind Admin Panel - Common JavaScript Functions
+ * hAIveMind Control Dashboard - Enhanced JavaScript Functions
  * Lance James, Unit 221B Inc.
  */
+
+// Global state
+let currentUserData = null;
 
 // Check authentication on page load
 document.addEventListener('DOMContentLoaded', function() {
     checkAuth();
+    loadCurrentUser();
 });
 
 function checkAuth() {
@@ -20,27 +24,48 @@ function checkAuth() {
     
     // If we have a token and not on login page, verify it's still valid
     if (token && !currentPage.includes('login.html')) {
-        fetch('/admin/api/verify', {
+        fetch('/api/v1/auth/verify', {
             headers: { 'Authorization': `Bearer ${token}` }
         }).then(response => {
             if (!response.ok) {
                 localStorage.removeItem('haivemind_token');
+                localStorage.removeItem('haivemind_user');
                 window.location.href = '/admin/login.html';
+            } else {
+                return response.json();
+            }
+        }).then(userData => {
+            if (userData) {
+                localStorage.setItem('haivemind_user', JSON.stringify(userData.user));
+                currentUserData = userData.user;
             }
         }).catch(() => {
             // If verification fails, redirect to login
             localStorage.removeItem('haivemind_token');
+            localStorage.removeItem('haivemind_user');
             window.location.href = '/admin/login.html';
         });
     }
 }
 
+function loadCurrentUser() {
+    const userStr = localStorage.getItem('haivemind_user');
+    if (userStr) {
+        currentUserData = JSON.parse(userStr);
+        const userElement = document.getElementById('current-user');
+        if (userElement) {
+            userElement.textContent = `${currentUserData.username} (${currentUserData.role})`;
+        }
+    }
+}
+
 function logout() {
     localStorage.removeItem('haivemind_token');
+    localStorage.removeItem('haivemind_user');
     window.location.href = '/admin/login.html';
 }
 
-async function authenticatedFetch(url, options = {}) {
+async function fetchWithAuth(url, options = {}) {
     const token = localStorage.getItem('haivemind_token');
     
     if (!token) {
@@ -51,55 +76,152 @@ async function authenticatedFetch(url, options = {}) {
         'Authorization': `Bearer ${token}`,
         ...options.headers
     };
-    
-    const response = await fetch(url, {
+
+    return fetch(url, {
         ...options,
         headers
     });
-    
-    // If unauthorized, redirect to login
-    if (response.status === 401) {
-        localStorage.removeItem('haivemind_token');
-        window.location.href = '/admin/login.html';
-        throw new Error('Authentication failed');
-    }
-    
-    return response;
 }
 
-// Utility functions
-function formatBytes(bytes) {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-}
-
-function formatTime(timestamp) {
-    if (!timestamp) return 'Unknown';
-    const date = new Date(timestamp);
+// Utility Functions
+function formatDateTime(isoString) {
+    if (!isoString) return 'Never';
+    const date = new Date(isoString);
     return date.toLocaleString();
 }
 
-function formatDuration(seconds) {
-    const days = Math.floor(seconds / 86400);
-    const hours = Math.floor((seconds % 86400) / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    
-    if (days > 0) return `${days}d ${hours}h ${minutes}m`;
-    if (hours > 0) return `${hours}h ${minutes}m`;
-    return `${minutes}m`;
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
-// Common API error handler
-function handleApiError(error, fallbackMessage = 'An error occurred') {
-    console.error('API Error:', error);
-    if (error.message && error.message !== 'Authentication failed') {
-        return error.message;
-    }
-    return fallbackMessage;
+function showSuccess(message) {
+    showNotification(message, 'success');
 }
+
+function showError(message) {
+    showNotification(message, 'error');
+}
+
+function showInfo(message) {
+    showNotification(message, 'info');
+}
+
+function showNotification(message, type = 'info') {
+    // Remove existing notifications
+    const existing = document.querySelectorAll('.notification');
+    existing.forEach(n => n.remove());
+    
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    notification.innerHTML = `
+        <span>${message}</span>
+        <button class="notification-close" onclick="this.parentElement.remove()">&times;</button>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        if (notification.parentElement) {
+            notification.remove();
+        }
+    }, 5000);
+}
+
+function copyToClipboard(elementId) {
+    const element = document.getElementById(elementId);
+    if (!element) return false;
+    
+    const text = element.textContent || element.value;
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(text).then(() => {
+            showSuccess('Copied to clipboard!');
+        }).catch(() => {
+            fallbackCopyToClipboard(text);
+        });
+    } else {
+        fallbackCopyToClipboard(text);
+    }
+}
+
+function fallbackCopyToClipboard(text) {
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-999999px';
+    textArea.style.top = '-999999px';
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    
+    try {
+        document.execCommand('copy');
+        showSuccess('Copied to clipboard!');
+    } catch (err) {
+        showError('Failed to copy to clipboard');
+    }
+    
+    document.body.removeChild(textArea);
+}
+
+// Modal handling
+function closeModal() {
+    const modals = document.querySelectorAll('.modal');
+    modals.forEach(modal => {
+        modal.style.display = 'none';
+    });
+}
+
+// Close modals when clicking outside
+window.addEventListener('click', function(event) {
+    if (event.target.classList.contains('modal')) {
+        event.target.style.display = 'none';
+    }
+});
+
+// Login form handler (for login.html)
+async function handleLogin(event) {
+    event.preventDefault();
+    
+    const formData = new FormData(event.target);
+    const credentials = {
+        username: formData.get('username'),
+        password: formData.get('password')
+    };
+
+    try {
+        const response = await fetch('/api/v1/auth/login', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(credentials),
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            
+            // Store token and user data
+            localStorage.setItem('haivemind_token', result.token);
+            localStorage.setItem('haivemind_user', JSON.stringify(result.user));
+            
+            // Redirect to dashboard
+            window.location.href = '/admin/dashboard.html';
+        } else {
+            const error = await response.json();
+            showError(error.detail || 'Login failed');
+        }
+    } catch (error) {
+        console.error('Login error:', error);
+        showError('Network error during login');
+    }
+}
+
+// Legacy function names for backward compatibility
+const authenticatedFetch = fetchWithAuth;
 
 // Show toast notifications
 function showToast(message, type = 'info') {

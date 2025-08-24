@@ -1,0 +1,432 @@
+#!/usr/bin/env python3
+"""
+Enhanced Dashboard Server for hAIveMind Control System
+Extends the remote MCP server with comprehensive management capabilities
+"""
+import os
+import json
+import jwt
+import secrets
+from pathlib import Path
+from typing import Dict, List, Optional, Any
+from datetime import datetime, timedelta
+
+from fastapi import FastAPI, HTTPException, Depends, Request, Form, UploadFile, File
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import JSONResponse, HTMLResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+import jinja2
+
+from database import ControlDatabase, UserRole, DeviceStatus, KeyStatus
+
+# Request/Response Models
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+class RegisterDeviceRequest(BaseModel):
+    device_id: str
+    machine_id: str
+    hostname: str
+    metadata: Dict[str, Any] = {}
+
+class CreateUserRequest(BaseModel):
+    username: str
+    email: str
+    password: str
+    role: str = "viewer"
+
+class GenerateKeyRequest(BaseModel):
+    device_id: str
+    name: str
+    scopes: List[str] = ["mcp:read", "mcp:write"]
+    expires_hours: Optional[int] = None
+
+class MCPConfigRequest(BaseModel):
+    device_id: str
+    format: str = "claude_desktop"  # or "claude_code", "custom"
+    include_auth: bool = True
+
+class DashboardServer:
+    def __init__(self, db_path: str = "database/haivemind.db"):
+        self.db = ControlDatabase(db_path)
+        self.app = FastAPI(title="hAIveMind Control Dashboard", version="2.0.0")
+        self.security = HTTPBearer(auto_error=False)
+        
+        # JWT configuration
+        self.jwt_secret = os.environ.get('HAIVEMIND_JWT_SECRET', 'change-this-secret-key')
+        
+        # Setup Jinja2 templates
+        self.templates = jinja2.Environment(
+            loader=jinja2.FileSystemLoader("admin/templates") if Path("admin/templates").exists() 
+            else jinja2.DictLoader(self._get_default_templates())
+        )
+        
+        self.setup_routes()
+        self.mount_static_files()
+    
+    def setup_routes(self):
+        """Setup all dashboard routes"""
+        
+        # Static file serving
+        @self.app.get("/", response_class=HTMLResponse)
+        async def root():
+            return FileResponse("admin/login.html")
+        
+        @self.app.get("/admin/{file_path:path}")
+        async def serve_admin_files(file_path: str):
+            file_full_path = Path(f"admin/{file_path}")
+            if file_full_path.exists() and file_full_path.is_file():
+                return FileResponse(file_full_path)
+            raise HTTPException(status_code=404, detail="File not found")
+        
+        # Authentication Routes
+        @self.app.post("/api/v1/auth/login")
+        async def login(request: LoginRequest, req: Request):
+            """User login endpoint"""
+            try:
+                if not self.db.verify_password(request.username, request.password):
+                    self.db.log_access(
+                        None, None, None, "login", None,
+                        req.client.host, req.headers.get("user-agent", ""),
+                        False, "Invalid credentials"
+                    )
+                    raise HTTPException(status_code=401, detail="Invalid credentials")
+                
+                user = self.db.get_user_by_username(request.username)
+                if not user:
+                    raise HTTPException(status_code=401, detail="User not found")
+                
+                # Generate JWT token
+                token_payload = {
+                    'user_id': user.id,
+                    'username': user.username,
+                    'role': user.role.value,
+                    'exp': datetime.utcnow() + timedelta(hours=24),
+                    'iat': datetime.utcnow(),
+                    'iss': 'haivemind-dashboard'
+                }
+                
+                token = jwt.encode(token_payload, self.jwt_secret, algorithm='HS256')
+                
+                # Update last login
+                self.db.update_last_login(user.id)
+                
+                # Log successful login
+                self.db.log_access(
+                    user.id, None, None, "login", None,
+                    req.client.host, req.headers.get("user-agent", ""),
+                    True
+                )
+                
+                return {
+                    "token": token,
+                    "user": {
+                        "id": user.id,
+                        "username": user.username,
+                        "email": user.email,
+                        "role": user.role.value
+                    }
+                }
+                
+            except HTTPException:
+                raise
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+        
+        @self.app.get("/api/v1/auth/verify")
+        async def verify_token(current_user: dict = Depends(self.get_current_user)):
+            """Verify JWT token and return user info"""
+            return {
+                "user": {
+                    "id": current_user['user_id'],
+                    "username": current_user['username'],
+                    "role": current_user['role']
+                }
+            }
+        
+        @self.app.post("/api/v1/auth/register")
+        async def register_user(request: CreateUserRequest, current_user: dict = Depends(self.get_current_user)):
+            """Register new user (admin only)"""
+            if current_user['role'] != 'admin':
+                raise HTTPException(status_code=403, detail="Admin access required")
+            
+            try:
+                role = UserRole(request.role)
+                user_id = self.db.create_user(request.username, request.email, request.password, role)
+                return {"success": True, "user_id": user_id}
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e))
+        
+        # Device Management Routes
+        @self.app.post("/api/v1/devices/register")
+        async def register_device(request: RegisterDeviceRequest, req: Request,
+                                current_user: dict = Depends(self.get_current_user)):
+            """Register a new device"""
+            try:
+                device_id = self.db.register_device(
+                    request.device_id,
+                    request.machine_id,
+                    request.hostname,
+                    current_user['user_id'],
+                    request.metadata,
+                    req.client.host
+                )
+                return {"success": True, "device_id": device_id, "status": "pending_approval"}
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+        
+        @self.app.get("/api/v1/devices")
+        async def list_devices(status: Optional[str] = None, 
+                             current_user: dict = Depends(self.get_current_user)):
+            """List devices"""
+            try:
+                device_status = DeviceStatus(status) if status else None
+                owner_id = None if current_user['role'] == 'admin' else current_user['user_id']
+                
+                devices = self.db.list_devices(device_status, owner_id)
+                return [
+                    {
+                        "id": d.id,
+                        "device_id": d.device_id,
+                        "machine_id": d.machine_id,
+                        "hostname": d.hostname,
+                        "status": d.status.value,
+                        "metadata": d.metadata,
+                        "created_at": d.created_at.isoformat(),
+                        "approved_at": d.approved_at.isoformat() if d.approved_at else None,
+                        "last_seen": d.last_seen.isoformat() if d.last_seen else None,
+                        "ip_address": d.ip_address
+                    }
+                    for d in devices
+                ]
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+        
+        @self.app.post("/api/v1/devices/{device_id}/approve")
+        async def approve_device(device_id: str, current_user: dict = Depends(self.get_current_user)):
+            """Approve a pending device (admin only)"""
+            if current_user['role'] != 'admin':
+                raise HTTPException(status_code=403, detail="Admin access required")
+            
+            success = self.db.approve_device(device_id, current_user['user_id'])
+            if not success:
+                raise HTTPException(status_code=404, detail="Device not found or already approved")
+            
+            return {"success": True}
+        
+        # API Key Management Routes
+        @self.app.post("/api/v1/keys/generate")
+        async def generate_api_key(request: GenerateKeyRequest, 
+                                 current_user: dict = Depends(self.get_current_user)):
+            """Generate new API key for device"""
+            try:
+                # Get device and verify ownership/permissions
+                device = self.db.get_device(request.device_id)
+                if not device:
+                    raise HTTPException(status_code=404, detail="Device not found")
+                
+                if current_user['role'] != 'admin' and device.owner_id != current_user['user_id']:
+                    raise HTTPException(status_code=403, detail="Access denied")
+                
+                if device.status != DeviceStatus.APPROVED:
+                    raise HTTPException(status_code=400, detail="Device must be approved first")
+                
+                key_id, raw_key = self.db.generate_api_key(
+                    device.id, current_user['user_id'], request.name,
+                    request.scopes, request.expires_hours
+                )
+                
+                return {
+                    "key_id": key_id,
+                    "key": raw_key,
+                    "scopes": request.scopes,
+                    "expires_hours": request.expires_hours,
+                    "warning": "Save this key securely - it won't be shown again!"
+                }
+                
+            except HTTPException:
+                raise
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+        
+        @self.app.delete("/api/v1/keys/{key_id}")
+        async def revoke_api_key(key_id: str, current_user: dict = Depends(self.get_current_user)):
+            """Revoke an API key"""
+            success = self.db.revoke_api_key(key_id)
+            if not success:
+                raise HTTPException(status_code=404, detail="API key not found")
+            
+            return {"success": True}
+        
+        # MCP Configuration Routes
+        @self.app.post("/api/v1/config/generate")
+        async def generate_mcp_config(request: MCPConfigRequest,
+                                    current_user: dict = Depends(self.get_current_user)):
+            """Generate MCP configuration file"""
+            try:
+                device = self.db.get_device(request.device_id)
+                if not device:
+                    raise HTTPException(status_code=404, detail="Device not found")
+                
+                if current_user['role'] != 'admin' and device.owner_id != current_user['user_id']:
+                    raise HTTPException(status_code=403, detail="Access denied")
+                
+                # Generate config based on format
+                if request.format == "claude_desktop":
+                    config = self._generate_claude_desktop_config(device, request.include_auth)
+                elif request.format == "claude_code":
+                    config = self._generate_claude_code_config(device, request.include_auth)
+                else:
+                    config = self._generate_custom_config(device, request.include_auth)
+                
+                return {
+                    "config": config,
+                    "format": request.format,
+                    "device_id": device.device_id,
+                    "generated_at": datetime.utcnow().isoformat()
+                }
+                
+            except HTTPException:
+                raise
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+        
+        # Dashboard Stats
+        @self.app.get("/api/v1/admin/stats")
+        async def get_dashboard_stats(current_user: dict = Depends(self.get_current_user)):
+            """Get dashboard statistics"""
+            stats = self.db.get_dashboard_stats()
+            return stats
+        
+        @self.app.get("/admin/api/stats")
+        async def get_dashboard_stats_legacy(current_user: dict = Depends(self.get_current_user)):
+            """Get dashboard statistics (legacy route)"""
+            stats = self.db.get_dashboard_stats()
+            return stats
+    
+    def mount_static_files(self):
+        """Mount static file directories"""
+        if Path("admin/static").exists():
+            self.app.mount("/admin/static", StaticFiles(directory="admin/static"), name="static")
+    
+    async def get_current_user(self, credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer(auto_error=False))) -> dict:
+        """Get current authenticated user"""
+        if not credentials:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        
+        try:
+            payload = jwt.decode(credentials.credentials, self.jwt_secret, algorithms=['HS256'])
+            return {
+                'user_id': payload['user_id'],
+                'username': payload['username'],
+                'role': payload['role']
+            }
+        except jwt.ExpiredSignatureError:
+            raise HTTPException(status_code=401, detail="Token expired")
+        except jwt.InvalidTokenError:
+            raise HTTPException(status_code=401, detail="Invalid token")
+    
+    def _generate_claude_desktop_config(self, device, include_auth: bool) -> dict:
+        """Generate Claude Desktop MCP configuration"""
+        config = {
+            "mcpServers": {
+                "haivemind": {
+                    "command": "npx",
+                    "args": [
+                        "@modelcontextprotocol/server-http",
+                        f"http://{device.machine_id}:8900/sse"
+                    ],
+                    "env": {
+                        "HTTP_TIMEOUT": "30000"
+                    }
+                }
+            }
+        }
+        
+        if include_auth:
+            # Add authentication headers if needed
+            config["mcpServers"]["haivemind"]["env"]["AUTHORIZATION"] = "Bearer <your-api-key>"
+        
+        return config
+    
+    def _generate_claude_code_config(self, device, include_auth: bool) -> dict:
+        """Generate Claude Code CLI configuration"""
+        config = {
+            "mcp_servers": {
+                "haivemind": {
+                    "transport": "sse",
+                    "url": f"http://{device.machine_id}:8900/sse",
+                    "timeout": 30
+                }
+            }
+        }
+        
+        if include_auth:
+            config["mcp_servers"]["haivemind"]["headers"] = {
+                "Authorization": "Bearer <your-api-key>"
+            }
+        
+        return config
+    
+    def _generate_custom_config(self, device, include_auth: bool) -> dict:
+        """Generate custom MCP configuration"""
+        return {
+            "server": {
+                "name": "haivemind",
+                "version": "2.0.0",
+                "endpoints": {
+                    "sse": f"http://{device.machine_id}:8900/sse",
+                    "http": f"http://{device.machine_id}:8900/mcp",
+                    "health": f"http://{device.machine_id}:8900/health"
+                }
+            },
+            "auth": {
+                "enabled": include_auth,
+                "type": "bearer_token",
+                "header": "Authorization"
+            } if include_auth else {"enabled": False},
+            "features": {
+                "memory_storage": True,
+                "agent_coordination": True,
+                "knowledge_sync": True,
+                "broadcast_system": True
+            }
+        }
+    
+    def _get_default_templates(self) -> Dict[str, str]:
+        """Return default Jinja2 templates if template directory doesn't exist"""
+        return {
+            "mcp_config.json": """
+{
+  "mcpServers": {
+    "haivemind": {
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-http", 
+        "{{ endpoint }}"
+      ],
+      "env": {
+        "HTTP_TIMEOUT": "30000"
+        {% if auth_token %},"AUTHORIZATION": "Bearer {{ auth_token }}"{% endif %}
+      }
+    }
+  }
+}
+""".strip()
+        }
+
+# Standalone server runner
+def main():
+    import uvicorn
+    
+    dashboard = DashboardServer()
+    print("🚀 Starting hAIveMind Control Dashboard...")
+    print("📊 Dashboard: http://localhost:8901/admin/dashboard.html")
+    print("🔑 API Docs: http://localhost:8901/docs")
+    
+    uvicorn.run(dashboard.app, host="0.0.0.0", port=8901)
+
+if __name__ == "__main__":
+    main()
