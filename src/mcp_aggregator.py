@@ -11,9 +11,10 @@ import sys
 import time
 import sqlite3
 import threading
+import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 import aiohttp
 from aiohttp import web, ClientSession, ClientTimeout
 import redis
@@ -71,6 +72,10 @@ class ServerHealth:
             'success_rate': 0,
             'average_response_time': 0
         }
+        self._adaptive_interval_seconds = None  # set dynamically by health monitor
+        self._last_window_reset = time.time()
+        self._window_requests = 0
+        self._window_successes = 0
 
 
 class ServerConnection:
@@ -95,6 +100,7 @@ class ServerConnection:
             'failed_requests': 0,
             'total_response_time': 0
         }
+        self._last_connect_error: Optional[str] = None
     
     async def connect(self) -> bool:
         """Establish connection to MCP server"""
@@ -109,6 +115,7 @@ class ServerConnection:
                 self.health.status = 'healthy'
                 self.health.last_check = datetime.now()
                 self.health.consecutive_failures = 0
+                self._last_connect_error = None
                 
                 # Store connection memory if available
                 if self.memory_storage:
@@ -120,6 +127,7 @@ class ServerConnection:
             except Exception as e:
                 self.health.status = 'unreachable'
                 self.health.consecutive_failures += 1
+                self._last_connect_error = str(e)
                 
                 if self.memory_storage:
                     await self._store_connection_memory('failed', str(e))
@@ -186,6 +194,7 @@ class ServerConnection:
         
         start_time = time.time()
         self._request_stats['total_requests'] += 1
+        self.health._window_requests += 1
         
         try:
             async with self.session.post(f"{self.endpoint.rstrip('/sse')}/message",
@@ -203,6 +212,7 @@ class ServerConnection:
                 if response.status == 200:
                     result = await response.json()
                     self._request_stats['successful_requests'] += 1
+                    self.health._window_successes += 1
                     
                     # Store execution memory
                     if self.memory_storage:
@@ -302,6 +312,17 @@ class ServerConnection:
                 if response.status == 200:
                     self.health.status = 'healthy'
                     self.health.consecutive_failures = 0
+                    # Update rolling metrics window every minute
+                    now = time.time()
+                    if now - self.health._last_window_reset >= 60:
+                        total = max(self.health._window_requests, 1)
+                        self.health.metrics['requests_per_minute'] = total
+                        self.health.metrics['success_rate'] = self.health._window_successes / total
+                        avg_rt = (self._request_stats['total_response_time'] / max(self._request_stats['total_requests'], 1))
+                        self.health.metrics['average_response_time'] = avg_rt
+                        self.health._window_requests = 0
+                        self.health._window_successes = 0
+                        self.health._last_window_reset = now
                     return True
                 else:
                     self.health.status = 'degraded'
@@ -331,7 +352,8 @@ class MCPRegistry:
         self.config = config
         self.memory_storage = memory_storage
         self.servers: Dict[str, ServerConnection] = {}
-        self.tool_routing: Dict[str, str] = {}  # tool_name -> server_id
+        self.tool_routing: Dict[str, str] = {}  # tool_name -> server_id (primary)
+        self.tool_providers: Dict[str, List[str]] = {}  # original tool name -> [server_ids]
         self.namespace_prefixes: Dict[str, str] = {}  # server_id -> prefix
         
         # Initialize database
@@ -469,6 +491,11 @@ class MCPRegistry:
             if tool_name not in self.tool_routing:
                 self.tool_routing[tool_name] = server_id
             
+            # Track providers for failover (by original tool name)
+            providers = self.tool_providers.setdefault(tool_name, [])
+            if server_id not in providers:
+                providers.append(server_id)
+
             # Cache in Redis if available
             if self.redis_client:
                 self.redis_client.hset(f"tool:routing:{prefixed_name}", 
@@ -541,24 +568,59 @@ class MCPRegistry:
                 },
                 scope='hive-shared'
             )
+            if status in ('registered', 'discovered'):
+                # Broadcast discovery to hive
+                try:
+                    await self.memory_storage.broadcast_discovery(
+                        message=f"MCP server {server_id} available at {self.servers[server_id].endpoint}",
+                        category="mcp_discovery",
+                        severity="info"
+                    )
+                except Exception:
+                    pass
         except Exception as e:
             logger.warning(f"Failed to store registration memory: {e}")
     
     async def route_tool_call(self, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """Route tool call to appropriate server"""
-        server_id = self.tool_routing.get(tool_name)
-        if not server_id or server_id not in self.servers:
+        primary_server_id = self.tool_routing.get(tool_name)
+        if not primary_server_id or primary_server_id not in self.servers:
             raise Exception(f"Tool {tool_name} not found or server unavailable")
-        
-        connection = self.servers[server_id]
-        
+
         # Extract original tool name if prefixed
         original_name = tool_name
-        prefix = self.namespace_prefixes.get(server_id, '')
-        if tool_name.startswith(prefix):
-            original_name = tool_name[len(prefix):]
-        
-        return await connection.call_tool(original_name, arguments)
+        primary_prefix = self.namespace_prefixes.get(primary_server_id, '')
+        if tool_name.startswith(primary_prefix):
+            original_name = tool_name[len(primary_prefix):]
+
+        # Build candidate server list: primary first, then alternates that provide the tool
+        candidate_servers: List[str] = [primary_server_id]
+        for sid in self.tool_providers.get(original_name, []):
+            if sid not in candidate_servers:
+                candidate_servers.append(sid)
+
+        last_error: Optional[Exception] = None
+        for sid in candidate_servers:
+            connection = self.servers.get(sid)
+            if not connection:
+                continue
+            # Skip clearly unhealthy servers if we have alternates
+            if sid != primary_server_id and connection.health.status in ('unhealthy', 'unreachable'):
+                continue
+            try:
+                prefix = self.namespace_prefixes.get(sid, '')
+                call_name = original_name  # always call original on backend
+                return await connection.call_tool(call_name, arguments)
+            except Exception as e:
+                last_error = e
+                logger.warning(f"Tool call failed on {sid} for {original_name}: {e}")
+                # Try next server
+                continue
+
+        # If we reach here, all attempts failed
+        if last_error:
+            raise last_error
+        raise Exception(f"Tool {tool_name} has no available providers")
     
     def get_all_tools(self) -> List[Dict[str, Any]]:
         """Get unified tool catalog from all servers"""
@@ -588,22 +650,114 @@ class MCPRegistry:
     async def health_check_all(self) -> Dict[str, Dict]:
         """Perform health checks on all registered servers"""
         health_results = {}
-        
+
+        # Load health policy from config
+        policy = self.config.get('aggregator', {}).get('health', {})
+        failure_threshold = int(policy.get('failure_threshold', 3))
+        recovery_threshold = int(policy.get('recovery_threshold', 2))
+
         for server_id, connection in self.servers.items():
+            prev_status = connection.health.status
             is_healthy = await connection.health_check()
+
+            # Apply thresholds
+            if connection.health.status == 'degraded' and connection.health.consecutive_failures >= failure_threshold:
+                connection.health.status = 'unhealthy'
+            if is_healthy and prev_status in ('degraded', 'unhealthy'):
+                # Count a recovery if last N checks were successful
+                # We approximate by using consecutive_failures == 0 and marking healthy
+                pass
+
+            # Adaptive interval update (more reliable -> less frequent checks)
+            base_interval = int(policy.get('check_interval', 30))
+            success_rate = connection.health.metrics.get('success_rate', 1)
+            if connection.health.consecutive_failures > 0:
+                # Unreliable: check more often (down to half interval)
+                connection.health._adaptive_interval_seconds = max(5, base_interval // 2)
+            else:
+                # Reliable: scale up to 2x based on success rate
+                scale = 1 + min(max(success_rate, 0), 1)  # 1..2
+                connection.health._adaptive_interval_seconds = int(min(base_interval * scale, base_interval * 2))
+
+            # Take routing actions on status changes
+            await self._handle_health_actions(server_id, prev_status, connection.health.status)
+
             health_results[server_id] = {
                 'healthy': is_healthy,
                 'status': connection.health.status,
                 'response_time': connection.health.response_time,
                 'last_check': connection.health.last_check.isoformat() if connection.health.last_check else None,
                 'consecutive_failures': connection.health.consecutive_failures,
-                'capabilities': connection.health.capabilities
+                'capabilities': connection.health.capabilities,
+                'metrics': connection.health.metrics,
             }
-            
+
             # Store health record
             await self._store_health_record(server_id, connection.health)
-        
+
         return health_results
+
+    async def _handle_health_actions(self, server_id: str, prev_status: str, new_status: str) -> None:
+        """Apply policy-based actions and broadcast changes."""
+        if prev_status == new_status:
+            return
+
+        actions_cfg = self.config.get('aggregator', {}).get('health', {}).get('actions', {})
+        connection = self.servers[server_id]
+
+        try:
+            # Broadcast health change
+            severity = 'info'
+            if new_status == 'degraded':
+                severity = 'warning'
+            elif new_status in ('unhealthy', 'unreachable'):
+                severity = 'critical'
+            await self.memory_storage.broadcast_discovery(
+                message=f"Server {server_id} health changed: {prev_status} -> {new_status}",
+                category='mcp_health',
+                severity=severity
+            )
+        except Exception:
+            pass
+
+        # Routing adjustments
+        if new_status in ('unhealthy', 'unreachable'):
+            # Stop routing unprefixed names to this server to encourage failover
+            prefix = self.namespace_prefixes.get(server_id, '')
+            to_remove: List[Tuple[str, str]] = []
+            for name, sid in self.tool_routing.items():
+                if sid == server_id and not name.startswith(prefix):
+                    to_remove.append((name, sid))
+            for name, _ in to_remove:
+                # Repoint to another provider if available
+                original_name = name
+                for alt_sid in self.tool_providers.get(original_name, []):
+                    if alt_sid != server_id and self.servers[alt_sid].health.status == 'healthy':
+                        self.tool_routing[name] = alt_sid
+                        break
+
+        # Attempt reconnect when transitioning back from bad states
+        if new_status in ('unhealthy', 'unreachable') and connection._last_connect_error:
+            # Schedule a background reconnect attempt with backoff
+            asyncio.create_task(self._attempt_reconnect(server_id))
+
+    async def _attempt_reconnect(self, server_id: str) -> None:
+        """Attempt to reconnect to a server with exponential backoff."""
+        connection = self.servers.get(server_id)
+        if not connection:
+            return
+        max_attempts = 3
+        delay = 5
+        for _ in range(max_attempts):
+            await asyncio.sleep(delay)
+            try:
+                ok = await connection.connect()
+                if ok:
+                    logger.info(f"🔁 Reconnected to {server_id}")
+                    return
+            except Exception:
+                pass
+            delay = min(delay * 2, 60)
     
     async def _store_health_record(self, server_id: str, health: ServerHealth):
         """Store health check result in database"""
@@ -665,6 +819,7 @@ class MCPAggregatorService:
         
         # Health check task
         self._health_check_task = None
+        self._discovery_task = None
         
         logger.info(f"🔄 MCP SSE Aggregator initialized on {self.host}:{self.port}")
     
@@ -730,15 +885,107 @@ class MCPAggregatorService:
     async def start_health_monitoring(self):
         """Start background health monitoring"""
         async def health_monitor():
+            # Use adaptive per-server intervals
+            default_interval = int(self.config.get('aggregator', {}).get('health', {}).get('check_interval', 30))
             while True:
                 try:
                     await self.registry.health_check_all()
-                    await asyncio.sleep(30)  # Check every 30 seconds
+                    # Compute next sleep as the minimum adaptive interval among servers
+                    intervals = [
+                        (conn.health._adaptive_interval_seconds or default_interval)
+                        for conn in self.registry.servers.values()
+                    ] or [default_interval]
+                    await asyncio.sleep(max(5, min(intervals)))
                 except Exception as e:
                     logger.error(f"Health monitoring error: {e}")
-                    await asyncio.sleep(60)  # Wait longer on error
+                    await asyncio.sleep(default_interval)
         
         self._health_check_task = asyncio.create_task(health_monitor())
+
+    async def start_discovery(self):
+        """Start background discovery (Tailscale + network scan)."""
+        async def discover_loop():
+            discovery_cfg = self.config.get('aggregator', {}).get('discovery', {})
+            network_cfg = discovery_cfg.get('network_discovery', {})
+            interval = int(network_cfg.get('interval', 60))
+            ports = network_cfg.get('ports', [8900])
+
+            while True:
+                try:
+                    # Tailscale-based peer discovery
+                    hostnames = await self._tailscale_peers()
+                    # Also include explicitly configured machines if present
+                    hostnames.update(set(self.config.get('sync', {}).get('discovery', {}).get('machines', [])))
+
+                    await self._probe_hosts(list(hostnames), ports)
+                except Exception as e:
+                    logger.warning(f"Discovery error: {e}")
+                await asyncio.sleep(interval)
+
+        self._discovery_task = asyncio.create_task(discover_loop())
+
+    async def _tailscale_peers(self) -> Set[str]:
+        """Return set of Tailscale peer hostnames (best-effort)."""
+        peers: Set[str] = set()
+        try:
+            result = await asyncio.to_thread(
+                subprocess.run,
+                ['tailscale', 'status', '--json'],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if result.returncode == 0 and result.stdout:
+                data = json.loads(result.stdout)
+                for pk, info in (data.get('Peer') or {}).items():
+                    host = info.get('HostName')
+                    if host:
+                        peers.add(host)
+        except Exception:
+            pass
+        return peers
+
+    async def _probe_hosts(self, hosts: List[str], ports: List[int]):
+        """Probe hosts for MCP health endpoints and register servers."""
+        async with aiohttp.ClientSession(timeout=ClientTimeout(total=5)) as session:
+            tasks = []
+            for host in hosts:
+                for port in ports:
+                    tasks.append(self._probe_single_host(session, host, port))
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            # Log errors at debug level
+            for res in results:
+                if isinstance(res, Exception):
+                    logger.debug(f"Probe error: {res}")
+
+    async def _probe_single_host(self, session: ClientSession, host: str, port: int):
+        base = f"http://{host}:{port}"
+        try:
+            async with session.get(f"{base}/health") as resp:
+                if resp.status == 200:
+                    info = await resp.json()
+                    # Determine SSE endpoint
+                    sse_path = info.get('endpoints', {}).get('sse', f"{base}/sse")
+                    endpoint = sse_path
+                    # Create a deterministic server_id
+                    server_id = f"{host.replace('.', '-')}-{port}"
+                    if server_id not in self.registry.servers:
+                        cfg = {
+                            'id': server_id,
+                            'name': info.get('server', 'mcp-server'),
+                            'endpoint': endpoint,
+                            'transport': 'sse',
+                            'priority': 5,
+                            'auto_start': True,
+                            'health_check': f"{base}/health",
+                        }
+                        ok = await self.registry.register_server(server_id, cfg)
+                        if ok:
+                            # Mark as discovered in memory
+                            await self.registry._store_registration_memory(server_id, 'discovered', {})
+        except Exception:
+            # Not reachable; ignore
+            return
     
     async def run(self):
         """Start the aggregator service"""
@@ -748,6 +995,8 @@ class MCPAggregatorService:
             
             # Start health monitoring
             await self.start_health_monitoring()
+            # Start discovery
+            await self.start_discovery()
             
             # Store startup memory
             await self._store_startup_memory()
@@ -824,6 +1073,13 @@ class MCPAggregatorService:
             self._health_check_task.cancel()
             try:
                 await self._health_check_task
+            except asyncio.CancelledError:
+                pass
+        # Cancel discovery task
+        if self._discovery_task:
+            self._discovery_task.cancel()
+            try:
+                await self._discovery_task
             except asyncio.CancelledError:
                 pass
         
