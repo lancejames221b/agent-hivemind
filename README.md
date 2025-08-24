@@ -27,6 +27,8 @@
 
 **A Model Context Protocol (MCP) server enabling distributed AI agent coordination with persistent collective memory across infrastructure networks.**
 
+**Author:** Lance James, Unit 221B, Inc
+
 ## Overview
 
 **ClaudeOps hAIveMind** is a distributed memory and agent coordination system built on the Model Context Protocol (MCP). It enables multiple Claude agents to share knowledge, coordinate tasks, and maintain persistent memory across your entire infrastructure network.

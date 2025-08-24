@@ -739,6 +739,8 @@ NETWORK TOPOLOGY:
                     # Create default agent config
                     config_content = f"""# CLAUDE.md - {machine_id} Agent Configuration
 
+**Author:** Lance James, Unit 221B, Inc
+
 ## hAIveMind Collective Commands
 
 You are connected to the hAIveMind collective as agent {agent_id} on {machine_id}.

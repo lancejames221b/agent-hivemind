@@ -141,6 +141,8 @@ class CommandInstaller:
         
         config_content = f"""# CLAUDE.md - hAIveMind Agent Configuration
 
+**Author:** Lance James, Unit 221B, Inc
+
 ## hAIveMind Collective Connection
 
 You are connected to the **hAIveMind collective intelligence network** as:
