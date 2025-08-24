@@ -1,0 +1,55 @@
+# hAIveMind Authorship Rule Example
+# Ensures all code and content is attributed to Lance James, Unit 221B Inc
+
+name: "Global Authorship Attribution"
+description: "Ensure all work is attributed to Lance James, Unit 221B Inc with no AI attribution"
+rule_type: "authorship"
+scope: "global" 
+priority: 1000
+status: "active"
+
+# Conditions (empty means always apply)
+conditions: []
+
+# Actions to enforce
+actions:
+  - action_type: "set"
+    target: "author"
+    value: "Lance James"
+    parameters: {}
+  
+  - action_type: "set" 
+    target: "organization"
+    value: "Unit 221B, Inc"
+    parameters: {}
+    
+  - action_type: "set"
+    target: "disable_ai_attribution"
+    value: true
+    parameters: {}
+    
+  - action_type: "block"
+    target: "ai_attribution"
+    value: true
+    parameters:
+      message: "AI attribution disabled per authorship policy"
+
+# Categorization
+tags:
+  - "authorship"
+  - "attribution" 
+  - "global"
+  - "critical"
+
+# Rule metadata
+metadata:
+  policy_reference: "Unit 221B Authorship Policy v1.0"
+  enforcement_level: "strict"
+  created_for: "hAIveMind network compliance"
+
+# Effective dates (optional)
+# effective_from: "2025-08-24T00:00:00Z"
+# effective_until: null
+
+# Conflict resolution strategy
+conflict_resolution: "highest_priority"

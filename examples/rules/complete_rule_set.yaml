@@ -1,0 +1,292 @@
+# Complete hAIveMind Rule Set Example
+# Demonstrates comprehensive rule management capabilities
+
+export_timestamp: "2025-08-24T12:00:00Z"
+format_version: "1.0"
+
+rules:
+  # Global Authorship Rule
+  - id: "auth-global-001"
+    name: "Global Authorship Attribution"
+    description: "All work must be attributed to Lance James, Unit 221B Inc"
+    rule_type: "authorship"
+    scope: "global"
+    priority: 1000
+    status: "active"
+    conditions: []
+    actions:
+      - action_type: "set"
+        target: "author"
+        value: "Lance James"
+        parameters: {}
+      - action_type: "set"
+        target: "organization"
+        value: "Unit 221B, Inc"
+        parameters: {}
+      - action_type: "set"
+        target: "disable_ai_attribution"
+        value: true
+        parameters: {}
+    tags: ["authorship", "attribution", "global", "critical"]
+    created_at: "2025-08-24T12:00:00Z"
+    created_by: "system"
+    updated_at: "2025-08-24T12:00:00Z"
+    updated_by: "system"
+    version: 1
+    conflict_resolution: "highest_priority"
+    metadata:
+      policy_reference: "Unit 221B Authorship Policy v1.0"
+
+  # Global Security Rule - No Secrets
+  - id: "sec-global-001"
+    name: "Prevent Secret Exposure"
+    description: "Block exposure of API keys, tokens, passwords, and secrets"
+    rule_type: "security"
+    scope: "global"
+    priority: 1000
+    status: "active"
+    conditions:
+      - field: "task_type"
+        operator: "in"
+        value: ["code_generation", "code_review", "commit_creation"]
+        case_sensitive: false
+    actions:
+      - action_type: "validate"
+        target: "code_content"
+        value: "no_secrets"
+        parameters:
+          patterns: [".*api[_-]?key.*=.*", ".*secret.*=.*", ".*token.*=.*"]
+      - action_type: "block"
+        target: "secret_exposure"
+        value: true
+        parameters:
+          message: "Potential secret detected"
+    tags: ["security", "secrets", "privacy", "compliance"]
+    created_at: "2025-08-24T12:00:00Z"
+    created_by: "system"
+    updated_at: "2025-08-24T12:00:00Z"
+    updated_by: "system"
+    version: 1
+    conflict_resolution: "highest_priority"
+    metadata:
+      security_policy: "Zero Secrets Exposure"
+
+  # Global Security Rule - Defensive Only
+  - id: "sec-global-002"
+    name: "Defensive Security Only"
+    description: "Only assist with defensive security, refuse malicious code"
+    rule_type: "security"
+    scope: "global"
+    priority: 1000
+    status: "active"
+    conditions: []
+    actions:
+      - action_type: "validate"
+        target: "code_intent"
+        value: "defensive_only"
+        parameters: {}
+      - action_type: "block"
+        target: "malicious_code"
+        value: true
+        parameters:
+          message: "Only defensive security assistance allowed"
+    tags: ["security", "defensive", "ethical", "compliance"]
+    created_at: "2025-08-24T12:00:00Z"
+    created_by: "system"
+    updated_at: "2025-08-24T12:00:00Z"
+    updated_by: "system"
+    version: 1
+    conflict_resolution: "highest_priority"
+    metadata:
+      security_framework: "Defensive Security Only"
+
+  # Global Coding Style Rule
+  - id: "code-global-001"
+    name: "Minimal Comments Policy"
+    description: "Only add comments when explicitly requested"
+    rule_type: "coding_style"
+    scope: "global"
+    priority: 750
+    status: "active"
+    conditions:
+      - field: "task_type"
+        operator: "eq"
+        value: "code_generation"
+        case_sensitive: false
+    actions:
+      - action_type: "set"
+        target: "add_comments"
+        value: false
+        parameters: {}
+      - action_type: "validate"
+        target: "user_comment_request"
+        value: "explicit"
+        parameters:
+          keywords: ["comment", "document", "explain"]
+    tags: ["coding_style", "comments", "minimalism"]
+    created_at: "2025-08-24T12:00:00Z"
+    created_by: "system"
+    updated_at: "2025-08-24T12:00:00Z"
+    updated_by: "system"
+    version: 1
+    conflict_resolution: "most_specific"
+    metadata:
+      style_guide: "Unit 221B Coding Standards"
+
+  # Global Communication Rule
+  - id: "comm-global-001"
+    name: "Concise Response Style"
+    description: "Keep responses short and direct unless detail requested"
+    rule_type: "communication"
+    scope: "global"
+    priority: 500
+    status: "active"
+    conditions: []
+    actions:
+      - action_type: "set"
+        target: "response_style"
+        value: "concise"
+        parameters: {}
+      - action_type: "set"
+        target: "max_response_lines"
+        value: 4
+        parameters: {}
+      - action_type: "set"
+        target: "avoid_preamble"
+        value: true
+        parameters: {}
+    tags: ["communication", "style", "brevity"]
+    created_at: "2025-08-24T12:00:00Z"
+    created_by: "system"
+    updated_at: "2025-08-24T12:00:00Z"
+    updated_by: "system"
+    version: 1
+    conflict_resolution: "most_specific"
+    metadata:
+      communication_guide: "Unit 221B Communication Standards"
+
+  # Global Communication Rule - No Emojis
+  - id: "comm-global-002"
+    name: "No Emojis Default"
+    description: "Only use emojis when explicitly requested"
+    rule_type: "communication"
+    scope: "global"
+    priority: 750
+    status: "active"
+    conditions: []
+    actions:
+      - action_type: "set"
+        target: "use_emojis"
+        value: false
+        parameters: {}
+      - action_type: "validate"
+        target: "user_emoji_request"
+        value: "explicit"
+        parameters:
+          keywords: ["emoji", "emojis", "emoticon"]
+    tags: ["communication", "emojis", "formatting"]
+    created_at: "2025-08-24T12:00:00Z"
+    created_by: "system"
+    updated_at: "2025-08-24T12:00:00Z"
+    updated_by: "system"
+    version: 1
+    conflict_resolution: "highest_priority"
+    metadata:
+      formatting_policy: "Professional Communication"
+
+  # Project-Specific Rule Example
+  - id: "proj-haivemind-001"
+    name: "hAIveMind Enhanced Logging"
+    description: "Enhanced logging and monitoring for hAIveMind project"
+    rule_type: "operational"
+    scope: "project"
+    priority: 600
+    status: "active"
+    conditions:
+      - field: "project_id"
+        operator: "eq"
+        value: "haivemind"
+        case_sensitive: false
+    actions:
+      - action_type: "set"
+        target: "logging_level"
+        value: "debug"
+        parameters: {}
+      - action_type: "set"
+        target: "include_performance_metrics"
+        value: true
+        parameters:
+          track_execution_time: true
+          track_memory_usage: true
+    tags: ["operational", "logging", "monitoring", "haivemind"]
+    created_at: "2025-08-24T12:00:00Z"
+    created_by: "system"
+    updated_at: "2025-08-24T12:00:00Z"
+    updated_by: "system"
+    version: 1
+    conflict_resolution: "most_specific"
+    metadata:
+      project: "hAIveMind Rules Engine"
+
+  # Agent-Specific Rule Example
+  - id: "agent-claude-001"
+    name: "Claude Agent Behavior Customization"
+    description: "Specific behavior rules for Claude agents"
+    rule_type: "workflow"
+    scope: "agent"
+    priority: 400
+    status: "active"
+    conditions:
+      - field: "agent_type"
+        operator: "eq"
+        value: "claude"
+        case_sensitive: false
+    actions:
+      - action_type: "set"
+        target: "tool_usage_pattern"
+        value: "conservative"
+        parameters: {}
+      - action_type: "set"
+        target: "context_awareness"
+        value: "high"
+        parameters: {}
+    tags: ["workflow", "agent_specific", "claude", "behavior"]
+    created_at: "2025-08-24T12:00:00Z"
+    created_by: "system"
+    updated_at: "2025-08-24T12:00:00Z"
+    updated_by: "system"
+    version: 1
+    conflict_resolution: "most_specific"
+    metadata:
+      agent_family: "anthropic_claude"
+
+# Rule dependencies (relationships between rules)
+dependencies:
+  - rule_id: "proj-haivemind-001"
+    depends_on_rule_id: "code-global-001"
+    dependency_type: "enhances"
+    
+  - rule_id: "agent-claude-001"
+    depends_on_rule_id: "comm-global-001"
+    dependency_type: "requires"
+
+# Rule assignments (scope-specific assignments)
+assignments:
+  - rule_id: "proj-haivemind-001"
+    scope_type: "project"
+    scope_id: "haivemind"
+    priority_override: 650
+    effective_from: "2025-08-24T00:00:00Z"
+    
+  - rule_id: "agent-claude-001" 
+    scope_type: "agent"
+    scope_id: "claude-001"
+    effective_from: "2025-08-24T00:00:00Z"
+
+# Export metadata
+metadata:
+  exported_by: "hAIveMind Rules Management System"
+  export_reason: "Complete rule set demonstration"
+  rule_count: 8
+  categories: ["authorship", "security", "coding_style", "communication", "operational", "workflow"]
+  coverage: ["global", "project", "agent"]

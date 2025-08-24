@@ -1,0 +1,56 @@
+# Coding Style Rule Example
+# Controls when and how code comments are added
+
+name: "Minimal Comments Policy"
+description: "Only add code comments when explicitly requested by user"
+rule_type: "coding_style"
+scope: "global"
+priority: 750
+status: "active"
+
+conditions:
+  - field: "task_type"
+    operator: "eq"
+    value: "code_generation" 
+    case_sensitive: false
+    
+  - field: "file_type"
+    operator: "in"
+    value: ["py", "js", "ts", "java", "go", "rs", "cpp", "c"]
+    case_sensitive: false
+
+actions:
+  - action_type: "set"
+    target: "add_comments"
+    value: false
+    parameters: {}
+    
+  - action_type: "validate"
+    target: "user_comment_request"
+    value: "explicit"
+    parameters:
+      keywords: ["comment", "document", "explain", "describe"]
+      require_explicit: true
+      
+  - action_type: "set"
+    target: "comment_style"
+    value: "minimal"
+    parameters:
+      exclude_obvious: true
+      focus_on_why: true
+      avoid_what: true
+
+tags:
+  - "coding_style"
+  - "comments"
+  - "documentation"
+  - "minimalism"
+
+# Rule inheritance - this rule can be overridden by project-specific rules
+parent_rule_id: null
+conflict_resolution: "most_specific"
+
+metadata:
+  rationale: "Clean, self-documenting code is preferred over verbose comments"
+  style_guide: "Unit 221B Coding Standards"
+  exceptions: ["API documentation", "complex algorithms", "business logic"]
