@@ -2,7 +2,7 @@
   "mcpServers": {
     "haivemind": {
       "command": "python3",
-      "args": ["./mcp-client/src/haivemind-mcp-standalone.py"],
+      "args": ["/path/to/memory-mcp/mcp-client/src/haivemind-mcp-standalone.py"],
       "env": {
         "HAIVEMIND_URL": "http://localhost:8900"
       }

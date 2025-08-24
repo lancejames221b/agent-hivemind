@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "haivemind-remote": {
+      "command": "python3",
+      "args": ["/path/to/memory-mcp/mcp-client/src/haivemind-mcp-standalone.py", "--haivemind-url", "http://lance-dev:8900"],
+      "env": {
+        "HAIVEMIND_URL": "http://lance-dev:8900"
+      }
+    }
+  }
+}

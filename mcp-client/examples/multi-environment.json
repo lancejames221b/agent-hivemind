@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "haivemind-local": {
+      "command": "python3",
+      "args": ["./mcp-client/src/haivemind-mcp-standalone.py"],
+      "env": {
+        "HAIVEMIND_URL": "http://localhost:8900",
+        "HAIVEMIND_AGENT_ROLE": "local_dev"
+      }
+    },
+    "haivemind-remote": {
+      "command": "python3",
+      "args": ["./mcp-client/src/haivemind-mcp-standalone.py", "--haivemind-url", "http://lance-dev:8900"],
+      "env": {
+        "HAIVEMIND_URL": "http://lance-dev:8900",
+        "HAIVEMIND_AGENT_ROLE": "remote_coordinator"
+      }
+    }
+  }
+}
