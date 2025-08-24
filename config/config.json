@@ -123,7 +123,17 @@
         "token": "${CONFLUENCE_API_TOKEN}"
       },
       "spaces": ["INFRA", "DEVOPS", "DOCS", "EWITNESS"],
-      "enabled": false
+      "enabled": false,
+      "space_category_mapping": {
+        "INFRA": "infrastructure",
+        "DEVOPS": "devops", 
+        "DOCS": "documentation",
+        "EWITNESS": "monitoring"
+      },
+      "sync_interval": 3600,
+      "max_age_hours": 24,
+      "auto_import_new": true,
+      "auto_update_existing": true
     },
     "jira": {
       "url": "https://unit221b.atlassian.net",
