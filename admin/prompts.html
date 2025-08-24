@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>hAIveMind Admin - Prompts</title>
+  <link rel="stylesheet" href="/admin/static/admin.css" />
+</head>
+<body class="dashboard">
+  <nav class="nav-header">
+    <div class="nav-brand">
+      <img src="/admin/static/haivemind-logo.png" alt="hAIveMind" class="nav-logo" />
+      <h1>hAIveMind Admin</h1>
+    </div>
+    <div class="nav-links">
+      <a href="/admin/dashboard.html">Dashboard</a>
+      <a href="/admin/memory.html">Memory Browser</a>
+      <a href="/admin/mcp_servers.html">MCP Servers</a>
+      <a href="/admin/prompts.html" class="active">Prompts</a>
+    </div>
+    <button class="logout-btn" onclick="logout()">Logout</button>
+  </nav>
+
+  <main class="main-content">
+    <div class="card">
+      <h2>🧩 System Prompts</h2>
+      <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+        <input id="filter-query" placeholder="Filter by name..." />
+        <select id="filter-category">
+          <option value="">All Categories</option>
+          <option>security</option>
+          <option>code_review</option>
+          <option>incident_response</option>
+          <option>deployment</option>
+        </select>
+        <button class="btn" onclick="loadPrompts()">Refresh</button>
+      </div>
+      <div id="prompts-list"></div>
+    </div>
+
+    <div class="card">
+      <h2>➕ Create Prompt</h2>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div class="form-group">
+          <label>Name</label>
+          <input id="new-name" />
+        </div>
+        <div class="form-group">
+          <label>Category</label>
+          <select id="new-category">
+            <option>security</option>
+            <option>code_review</option>
+            <option>incident_response</option>
+            <option>deployment</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Description</label>
+        <input id="new-desc" />
+      </div>
+      <div class="form-group">
+        <label>Variables Schema (JSON)</label>
+        <textarea id="new-vars" rows="4" placeholder='{"project":"string","environment":"string"}'></textarea>
+      </div>
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom: 12px;">
+        <input type="checkbox" id="new-shared" /> <label for="new-shared">Share to marketplace</label>
+      </div>
+      <button class="btn btn-success" onclick="createPrompt()">Create</button>
+    </div>
+
+    <div class="card">
+      <h2>🧪 A/B Test</h2>
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px;">
+        <input id="ab-prompt-id" placeholder="Prompt ID" />
+        <input id="ab-version-a" placeholder="Version A ID" />
+        <input id="ab-version-b" placeholder="Version B ID" />
+        <input id="ab-split" placeholder="Split A (0-100)" value="50" />
+      </div>
+      <button class="btn" onclick="createABTest()">Start A/B Test</button>
+    </div>
+  </main>
+
+  <script src="/admin/static/admin.js"></script>
+  <script>
+    async function loadPrompts() {
+      const category = document.getElementById('filter-category').value || '';
+      const query = (document.getElementById('filter-query').value || '').toLowerCase();
+      const res = await authenticatedFetch(`/api/v1/prompts${category ? `?category=${encodeURIComponent(category)}`: ''}`);
+      if (!res.ok) { showError('Failed to load prompts'); return; }
+      const list = await res.json();
+      const filtered = list.filter(p => !query || p.name.toLowerCase().includes(query));
+      const container = document.getElementById('prompts-list');
+      if (filtered.length === 0) { container.innerHTML = '<p style="color:#666">No prompts</p>'; return; }
+      container.innerHTML = filtered.map(renderPromptCard).join('');
+    }
+
+    function renderPromptCard(p) {
+      return `
+        <div style="border:1px solid #e1e5e9; border-radius:6px; padding:12px; margin-bottom:10px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div>
+              <strong>${p.name}</strong>
+              <span class="status online" style="margin-left:8px;">${p.category}</span>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button class="btn" onclick="openVersions(${p.id})">Versions</button>
+              <button class="btn" onclick="openAssign(${p.id})">Assign</button>
+              <button class="btn btn-danger" onclick="deletePrompt(${p.id})">Delete</button>
+            </div>
+          </div>
+          ${p.description ? `<div style="margin-top:8px; color:#444;">${escapeHtml(p.description)}</div>` : ''}
+          ${p.default_version_id ? `<div style="margin-top:6px; font-size:12px; color:#666;">Default version: ${p.default_version_id}</div>` : ''}
+        </div>
+      `;
+    }
+
+    async function createPrompt() {
+      const name = document.getElementById('new-name').value.trim();
+      const category = document.getElementById('new-category').value;
+      const description = document.getElementById('new-desc').value.trim();
+      const is_shared = document.getElementById('new-shared').checked;
+      let variables_schema = {};
+      const raw = document.getElementById('new-vars').value.trim();
+      if (raw) {
+        try { variables_schema = JSON.parse(raw); } catch { showError('Variables schema must be JSON'); return; }
+      }
+      if (!name) { showError('Name required'); return; }
+      const res = await authenticatedFetch('/api/v1/prompts', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, category, description, variables_schema, is_shared })
+      });
+      if (res.ok) { showSuccess('Prompt created'); loadPrompts(); }
+      else { const e = await res.json(); showError(e.detail || 'Create failed'); }
+    }
+
+    async function deletePrompt(id) {
+      if (!confirm('Delete this prompt?')) return;
+      const res = await authenticatedFetch(`/api/v1/prompts/${id}`, { method: 'DELETE' });
+      if (res.ok) { showSuccess('Deleted'); loadPrompts(); }
+      else { const e = await res.json(); showError(e.detail || 'Delete failed'); }
+    }
+
+    async function openVersions(promptId) {
+      const versions = await (await authenticatedFetch(`/api/v1/prompts/${promptId}/versions`)).json();
+      const html = `
+        <div class="modal" style="display:block;">
+          <div class="modal-content">
+            <h3>Prompt Versions</h3>
+            <div id="versions-body">
+              ${versions.map(v => `<div style='border:1px solid #eee; padding:8px; margin:6px 0;'>
+                <div style='display:flex; justify-content:space-between;'>
+                  <div><strong>v${v.version}</strong> <span class='status online'>${v.status}</span></div>
+                  <div>
+                    <button class='btn' onclick='setDefault(${promptId}, ${v.id})'>Set Default</button>
+                  </div>
+                </div>
+                <pre style='white-space:pre-wrap; background:#fafafa; padding:8px; border-radius:6px;'>${escapeHtml(v.content_template)}</pre>
+                ${v.changelog ? `<div style='font-size:12px; color:#666;'>${escapeHtml(v.changelog)}</div>` : ''}
+              </div>`).join('')}
+            </div>
+            <h4>Create New Version</h4>
+            <textarea id='ver-content' rows='6' placeholder='System prompt template with {{ variables }}'></textarea>
+            <input id='ver-changelog' placeholder='Changelog (optional)' />
+            <select id='ver-status'>
+              <option value='draft'>draft</option>
+              <option value='active'>active</option>
+            </select>
+            <div style='margin-top:10px;'>
+              <button class='btn btn-success' onclick='createVersion(${promptId})'>Create Version</button>
+              <button class='btn' onclick='closeModal()'>Close</button>
+            </div>
+          </div>
+        </div>`;
+      const modal = document.createElement('div');
+      modal.innerHTML = html;
+      document.body.appendChild(modal.firstElementChild);
+    }
+
+    async function createVersion(promptId) {
+      const content_template = document.getElementById('ver-content').value.trim();
+      const changelog = document.getElementById('ver-changelog').value.trim() || null;
+      const status = document.getElementById('ver-status').value;
+      if (!content_template) { showError('Content required'); return; }
+      const res = await authenticatedFetch(`/api/v1/prompts/${promptId}/versions`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content_template, changelog, status })
+      });
+      if (res.ok) { showSuccess('Version created'); closeModal(); loadPrompts(); }
+      else { const e = await res.json(); showError(e.detail || 'Failed'); }
+    }
+
+    async function setDefault(promptId, versionId) {
+      const res = await authenticatedFetch(`/api/v1/prompts/${promptId}/default?version_id=${versionId}`, { method: 'POST' });
+      if (res.ok) { showSuccess('Default set'); loadPrompts(); }
+      else { const e = await res.json(); showError(e.detail || 'Failed'); }
+    }
+
+    async function openAssign(promptId) {
+      const html = `
+        <div class="modal" style="display:block;">
+          <div class="modal-content">
+            <h3>Assign Prompt</h3>
+            <div style='display:grid; grid-template-columns: 1fr 1fr; gap:10px;'>
+              <select id='as-scope'>
+                <option value='global'>global</option>
+                <option value='role'>role</option>
+                <option value='agent'>agent</option>
+              </select>
+              <input id='as-version' placeholder='Version ID (optional)' />
+              <input id='as-role' placeholder='Agent Role (if scope=role)' />
+              <input id='as-agent' placeholder='Agent ID (if scope=agent)' />
+            </div>
+            <div style='margin-top:10px;'>
+              <button class='btn btn-success' onclick='assign(${promptId})'>Assign</button>
+              <button class='btn' onclick='closeModal()'>Close</button>
+            </div>
+          </div>
+        </div>`;
+      const modal = document.createElement('div');
+      modal.innerHTML = html;
+      document.body.appendChild(modal.firstElementChild);
+    }
+
+    async function assign(promptId) {
+      const scope = document.getElementById('as-scope').value;
+      const version_id = parseInt(document.getElementById('as-version').value || '0') || null;
+      const agent_role = document.getElementById('as-role').value || null;
+      const agent_id = document.getElementById('as-agent').value || null;
+      const res = await authenticatedFetch(`/api/v1/prompts/${promptId}/assignments`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scope, version_id, agent_role, agent_id, is_active: true })
+      });
+      if (res.ok) { showSuccess('Assigned'); closeModal(); }
+      else { const e = await res.json(); showError(e.detail || 'Failed'); }
+    }
+
+    async function createABTest() {
+      const prompt_id = parseInt(document.getElementById('ab-prompt-id').value);
+      const version_a_id = parseInt(document.getElementById('ab-version-a').value);
+      const version_b_id = parseInt(document.getElementById('ab-version-b').value);
+      const traffic_split_a = parseInt(document.getElementById('ab-split').value || '50');
+      if (!prompt_id || !version_a_id || !version_b_id) { showError('All IDs are required'); return; }
+      const res = await authenticatedFetch(`/api/v1/prompts/${prompt_id}/ab_tests`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ version_a_id, version_b_id, traffic_split_a })
+      });
+      if (res.ok) { showSuccess('A/B test started'); }
+      else { const e = await res.json(); showError(e.detail || 'Failed'); }
+    }
+
+    loadPrompts();
+  </script>
+</body>
+</html>
