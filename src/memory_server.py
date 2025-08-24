@@ -6,6 +6,7 @@ Enables multi-agent collaboration across DevOps infrastructure via collective AI
 """
 
 import asyncio
+import threading
 import json
 import os
 import time
@@ -45,6 +46,7 @@ class MemoryStorage:
         self.collections = {}
         self.redis_client = None
         self.agents_registry = {}  # Track active agents
+        self._agent_cleanup_thread_started = False
         
         # Initialize ChromaDB
         self._init_chromadb()
@@ -55,6 +57,9 @@ class MemoryStorage:
         
         # Initialize agent registry
         self._init_agent_registry()
+
+        # Start periodic cleanup of stale agent IDs if Redis is enabled
+        self._start_agent_cleanup_task()
     
     def _get_machine_id(self) -> str:
         """Get unique machine identifier"""
@@ -244,20 +249,21 @@ class MemoryStorage:
         git_branch = None
         try:
             import subprocess
-            # Get git root
+            # Get git root with timeout
             result = subprocess.run(['git', 'rev-parse', '--show-toplevel'], 
-                                  capture_output=True, text=True, cwd=current_path)
+                                  capture_output=True, text=True, cwd=current_path, timeout=10)
             if result.returncode == 0:
                 git_root = result.stdout.strip()
                 if git_root != current_path:
                     project_name = os.path.basename(git_root)
             
-            # Get current branch
+            # Get current branch with timeout
             result = subprocess.run(['git', 'branch', '--show-current'], 
-                                  capture_output=True, text=True, cwd=current_path)
+                                  capture_output=True, text=True, cwd=current_path, timeout=10)
             if result.returncode == 0:
                 git_branch = result.stdout.strip()
-        except Exception:
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError, OSError):
+            # Handle git not available, timeouts, or other git-related errors
             pass
         
         return {
@@ -399,6 +405,50 @@ class MemoryStorage:
         except Exception as e:
             logger.warning(f"⚠️ Neural bridge connection failed: {e} - hive mind synchronization offline")
             self.redis_client = None
+
+    # ===== Redis agent set maintenance =====
+    def _cleanup_stale_agents_once(self) -> int:
+        """Remove agent IDs from active_agents with no corresponding agent hash.
+
+        Returns the number of removed IDs.
+        """
+        if not self.redis_client:
+            return 0
+
+        removed = 0
+        try:
+            agent_ids = self.redis_client.smembers("active_agents") or set()
+            for agent_id in agent_ids:
+                agent_key = f"agent:{agent_id}"
+                # If the agent hash no longer exists (expired), remove from the set
+                if not self.redis_client.exists(agent_key):
+                    self.redis_client.srem("active_agents", agent_id)
+                    removed += 1
+            if removed:
+                logger.info(f"🧹 Cleaned {removed} stale agent IDs from active_agents")
+        except Exception as e:
+            logger.warning(f"⚠️ Failed active_agents cleanup: {e}")
+        return removed
+
+    def _start_agent_cleanup_task(self, interval_seconds: int = 300) -> None:
+        """Start a background daemon thread to periodically clean stale agent IDs.
+
+        Uses a simple thread with time.sleep to avoid coupling to asyncio loop lifecycle.
+        """
+        if self._agent_cleanup_thread_started or not self.redis_client:
+            return
+
+        def _loop():
+            while True:
+                try:
+                    self._cleanup_stale_agents_once()
+                except Exception as e:
+                    logger.debug(f"agent cleanup loop error: {e}")
+                time.sleep(interval_seconds)
+
+        thread = threading.Thread(target=_loop, name="active_agents_cleanup", daemon=True)
+        thread.start()
+        self._agent_cleanup_thread_started = True
     
     async def store_memory(self, 
                           content: str, 
@@ -473,12 +523,18 @@ class MemoryStorage:
         if metadata:
             memory_metadata.update(metadata)
         
-        # Store in ChromaDB (embedding is generated automatically)
+        # Store in ChromaDB (embedding is generated automatically) with timeout protection
         try:
-            collection.add(
-                documents=[content],
-                metadatas=[memory_metadata],
-                ids=[memory_id]
+            await asyncio.wait_for(
+                asyncio.get_event_loop().run_in_executor(
+                    None,
+                    lambda: collection.add(
+                        documents=[content],
+                        metadatas=[memory_metadata],
+                        ids=[memory_id]
+                    )
+                ),
+                timeout=20.0
             )
             
             logger.info(f"📝 Knowledge absorbed into hive mind - memory {memory_id} integrated into {category} cluster")
@@ -600,17 +656,26 @@ class MemoryStorage:
                     # Will filter after retrieval
                     pass
                 
-                # Perform semantic search
-                results = collection.query(
-                    query_texts=[query],
-                    n_results=min(limit, 50),  # ChromaDB limit per query
-                    where=where_filter if where_filter else None
+                # Perform semantic search with timeout protection
+                results = await asyncio.wait_for(
+                    asyncio.get_event_loop().run_in_executor(
+                        None,
+                        lambda: collection.query(
+                            query_texts=[query],
+                            n_results=min(limit, 50),  # ChromaDB limit per query
+                            where=where_filter if where_filter else None
+                        )
+                    ),
+                    timeout=25.0  # Timeout for complex embedding searches
                 )
                 
-                # Process results
+                # Process results - ChromaDB query returns nested arrays, so access first level
                 if results['documents'] and results['documents'][0]:
-                    for i, doc in enumerate(results['documents'][0]):
-                        metadata = results['metadatas'][0][i]
+                    docs = results['documents'][0]
+                    metas = results['metadatas'][0] 
+                    ids = results['ids'][0]
+                    for i, doc in enumerate(docs):
+                        metadata = metas[i]
                         memory_machine = metadata.get('machine_id', '')
                         
                         # Apply machine filtering
@@ -625,16 +690,19 @@ class MemoryStorage:
                             continue
                         
                         memory_data = {
-                            'id': results['ids'][0][i],
+                            'id': ids[i],
                             'content': doc,
                             'category': cat_name,
                             'context': metadata.get('context', ''),
                             'metadata': metadata,
                             'created_at': metadata.get('created_at', ''),
-                            'score': 1.0 - results['distances'][0][i] if results['distances'] else 1.0
+                            'score': 1.0 - results['distances'][0][i] if results.get('distances') else 1.0
                         }
                         memories.append(memory_data)
                         
+            except asyncio.TimeoutError:
+                logger.error(f"Search timed out in collection {cat_name} after 25 seconds - skipping")
+                continue
             except Exception as e:
                 logger.error(f"Search failed in collection {cat_name}: {e}")
                 continue
@@ -670,10 +738,16 @@ class MemoryStorage:
                     where_filter["user_id"] = user_id
                 
                 # Get all memories (ChromaDB doesn't have great time filtering)
-                # We'll filter by time after retrieval
-                results = collection.get(
-                    where=where_filter if where_filter else None,
-                    limit=limit * 2  # Get more to filter by time
+                # We'll filter by time after retrieval, with timeout protection
+                results = await asyncio.wait_for(
+                    asyncio.get_event_loop().run_in_executor(
+                        None,
+                        lambda: collection.get(
+                            where=where_filter if where_filter else None,
+                            limit=limit * 2  # Get more to filter by time
+                        )
+                    ),
+                    timeout=25.0
                 )
                 
                 if results['documents']:
@@ -1017,8 +1091,14 @@ class MemoryStorage:
         
         for cat_name, collection in collections_to_check.items():
             try:
-                # Get all memories to analyze machines
-                results = collection.get(limit=10000)  # Large limit to get all
+                # Get all memories to analyze machines with timeout protection
+                results = await asyncio.wait_for(
+                    asyncio.get_event_loop().run_in_executor(
+                        None, 
+                        lambda: collection.get(limit=10000)  # Large limit to get all
+                    ),
+                    timeout=30.0
+                )
                 
                 if results['metadatas']:
                     for metadata in results['metadatas']:
@@ -1103,18 +1183,19 @@ class MemoryStorage:
             active_agent_ids = self.redis_client.smembers("active_agents")
             
             for agent_id in active_agent_ids:
-                agent_key = f"agent:{agent_id.decode()}"
+                # Redis is configured with decode_responses=True, values are already strings
+                agent_key = f"agent:{agent_id}"
                 agent_data = self.redis_client.hgetall(agent_key)
                 
                 if agent_data:
                     agent_info = {
-                        'agent_id': agent_data.get(b'agent_id', b'').decode(),
-                        'machine_id': agent_data.get(b'machine_id', b'').decode(),
-                        'role': agent_data.get(b'role', b'').decode(),
-                        'capabilities': agent_data.get(b'capabilities', b'').decode().split(','),
-                        'status': agent_data.get(b'status', b'').decode(),
-                        'last_seen': float(agent_data.get(b'last_seen', 0)),
-                        'registered_at': float(agent_data.get(b'registered_at', 0))
+                        'agent_id': agent_data.get('agent_id', ''),
+                        'machine_id': agent_data.get('machine_id', ''),
+                        'role': agent_data.get('role', ''),
+                        'capabilities': (agent_data.get('capabilities', '') or '').split(','),
+                        'status': agent_data.get('status', ''),
+                        'last_seen': float(agent_data.get('last_seen', 0)),
+                        'registered_at': float(agent_data.get('registered_at', 0))
                     }
                     
                     # Check if agent is still active (last seen within 1 hour)
@@ -1208,7 +1289,7 @@ class MemoryStorage:
                 'timestamp': str(time.time())
             }
             
-            # Store in memory as infrastructure discovery
+            # Store in memory as infrastructure discovery with enhanced metadata
             await self.store_memory(
                 content=f"ClaudeOps Discovery: {message}",
                 category="infrastructure",
@@ -1217,9 +1298,13 @@ class MemoryStorage:
                     'discovery_type': category,
                     'severity': severity,
                     'agent_id': self.agent_id,
-                    'machine_id': self.machine_id
+                    'machine_id': self.machine_id,
+                    'broadcast_timestamp': time.time(),
+                    'message_id': broadcast_data['message_id'],
+                    'target_roles': ','.join(target_roles) if target_roles else 'all',
+                    'creation_time': time.time()  # Ensure consistent timestamp field
                 },
-                tags=['claudeops', 'discovery', category, severity]
+                tags=['claudeops', 'discovery', 'broadcast', 'claudeops-broadcast', category, severity]
             )
             
             # Publish to broadcast channel
@@ -1231,6 +1316,64 @@ class MemoryStorage:
         except Exception as e:
             logger.error(f"💥 Hive broadcast failed: {e} - collective knowledge sharing disrupted")
             return {"error": str(e)}
+    
+    async def get_broadcasts(self, hours: int = 24, severity: str = None, 
+                           category: str = None, source_agent: str = None, 
+                           limit: int = 50) -> List[Dict[str, Any]]:
+        """Retrieve recent broadcast messages from the hive"""
+        try:
+            # Build search query for broadcast messages
+            query_parts = ["ClaudeOps Discovery"]
+            if category:
+                query_parts.append(f"category:{category}")
+            if severity:
+                query_parts.append(f"severity:{severity}")
+            if source_agent:
+                query_parts.append(f"from:{source_agent}")
+            
+            query = " ".join(query_parts)
+            
+            # Search for broadcasts in infrastructure category with claudeops tag
+            results = await self.search_memories(
+                query=query,
+                category="infrastructure",
+                limit=limit,
+                semantic=False  # Use text search for broadcasts
+            )
+            
+            # Filter by time (last N hours)
+            cutoff_time = time.time() - (hours * 3600)
+            recent_broadcasts = []
+            
+            for result in results:
+                # Get timestamp from metadata or creation time
+                timestamp = result.get('metadata', {}).get('creation_time', 0)
+                if timestamp > cutoff_time:
+                    # Extract broadcast info
+                    content = result.get('content', '')
+                    if content.startswith('ClaudeOps Discovery: '):
+                        message = content.replace('ClaudeOps Discovery: ', '', 1)
+                        broadcast_info = {
+                            'message': message,
+                            'timestamp': timestamp,
+                            'severity': result.get('metadata', {}).get('severity', 'info'),
+                            'category': result.get('metadata', {}).get('discovery_type', 'unknown'),
+                            'source_agent': result.get('metadata', {}).get('agent_id', 'unknown'),
+                            'machine_id': result.get('metadata', {}).get('machine_id', 'unknown'),
+                            'memory_id': result.get('id', ''),
+                            'formatted_time': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(timestamp))
+                        }
+                        recent_broadcasts.append(broadcast_info)
+            
+            # Sort by timestamp (newest first)
+            recent_broadcasts.sort(key=lambda x: x['timestamp'], reverse=True)
+            
+            logger.info(f"🔍 Retrieved {len(recent_broadcasts)} broadcasts from last {hours} hours")
+            return recent_broadcasts
+            
+        except Exception as e:
+            logger.error(f"💥 Failed to retrieve broadcasts: {e}")
+            return []
     
     async def track_infrastructure_state(self, machine_id: str, state_data: Dict[str, Any], 
                                        state_type: str, tags: List[str] = None) -> Dict[str, Any]:
@@ -1424,7 +1567,7 @@ class MemoryStorage:
             # Search for memories created by this agent
             search_results = await self.search_memories(
                 query=query,
-                from_machines=[agent_data.get(b'machine_id', b'').decode()],
+                from_machines=[agent_data.get('machine_id', '')],
                 limit=20
             )
             

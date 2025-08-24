@@ -426,6 +426,41 @@ NETWORK TOPOLOGY:
                 return f"Error broadcasting discovery: {str(e)}"
         
         @self.mcp.tool()
+        async def get_broadcasts(
+            hours: int = 24,
+            severity: Optional[str] = None,
+            category: Optional[str] = None,
+            source_agent: Optional[str] = None,
+            limit: int = 50
+        ) -> str:
+            """Retrieve recent broadcast messages from ClaudeOps agents"""
+            try:
+                broadcasts = await self.storage.get_broadcasts(
+                    hours=hours,
+                    severity=severity,
+                    category=category,
+                    source_agent=source_agent,
+                    limit=limit
+                )
+                
+                if not broadcasts:
+                    return f"No broadcasts found in the last {hours} hours"
+                
+                # Format broadcasts for display
+                formatted = f"📢 Found {len(broadcasts)} broadcasts from last {hours} hours:\n\n"
+                for i, broadcast in enumerate(broadcasts, 1):
+                    formatted += f"{i}. [{broadcast['formatted_time']}] {broadcast['severity'].upper()}\n"
+                    formatted += f"   From: {broadcast['source_agent']} ({broadcast['machine_id']})\n"
+                    formatted += f"   Category: {broadcast['category']}\n"
+                    formatted += f"   Message: {broadcast['message']}\n\n"
+                
+                return formatted
+                
+            except Exception as e:
+                logger.error(f"Error retrieving broadcasts: {e}")
+                return f"Error retrieving broadcasts: {str(e)}"
+        
+        @self.mcp.tool()
         async def track_infrastructure_state(
             machine_id: str,
             state_data: Dict[str, Any],
@@ -648,47 +683,27 @@ NETWORK TOPOLOGY:
         async def sync_agent_commands(
             agent_id: Optional[str] = None,
             target_location: str = "auto",
-            force: bool = False
+            force: bool = False,
+            verbose: bool = False
         ) -> str:
             """Sync hAIveMind commands to agent's Claude installation"""
             try:
-                if not agent_id:
-                    agent_id = self.storage.agent_id
-                
-                # Get command templates from collective
-                commands_query = await self.storage.search_memories(
-                    query="hv-* command templates",
-                    category="agent",
-                    limit=20
+                # Use the CommandInstaller for complete sync workflow
+                result = await self.command_installer.sync_agent_installation(
+                    agent_id=agent_id,
+                    target_location=target_location,
+                    force=force,
+                    verbose=verbose
                 )
                 
-                # Determine target location
-                if target_location == "auto":
-                    # Check if in project directory
-                    import os
-                    if os.path.exists(".claude"):
-                        target_location = "project"
-                    else:
-                        target_location = "personal"
-                
-                # Store sync record
-                sync_record = {
-                    'agent_id': agent_id,
-                    'target_location': target_location,
-                    'commands_synced': len(commands_query.get('memories', [])),
-                    'sync_time': time.time(),
-                    'force_sync': force
-                }
-                
-                await self.storage.store_memory(
-                    content=f"Agent {agent_id} synced {sync_record['commands_synced']} commands to {target_location}",
-                    category="agent",
-                    context=f"Command sync operation for {agent_id}",
-                    metadata=sync_record,
-                    tags=["command-sync", "agent-management", agent_id]
-                )
-                
-                return f"🔄 Commands synced for {agent_id}: {sync_record['commands_synced']} commands to {target_location} location"
+                if verbose and result.get('verbose_output'):
+                    # Return detailed output
+                    output = [result['message']]
+                    output.extend(result['verbose_output'])
+                    return "\n".join(output)
+                else:
+                    # Return concise summary
+                    return result['message']
                 
             except Exception as e:
                 logger.error(f"Error syncing agent commands: {e}")
@@ -717,8 +732,8 @@ NETWORK TOPOLOGY:
                     limit=1
                 )
                 
-                if existing_config.get('memories'):
-                    config_content = existing_config['memories'][0]['content']
+                if existing_config and len(existing_config) > 0:
+                    config_content = existing_config[0]['content']
                     config_action = "Retrieved existing"
                 else:
                     # Create default agent config
@@ -877,28 +892,59 @@ The agent is now synchronized with the hAIveMind collective. All commands and co
         from starlette.responses import HTMLResponse, JSONResponse, FileResponse
         from starlette.staticfiles import StaticFiles
         import os
+        import re
         
         admin_dir = str(Path(__file__).parent.parent / "admin")
         
-        # Serve static files
+        # Serve static files (with path traversal protection)
         @self.mcp.custom_route("/admin/static/{path:path}", methods=["GET"])
         async def admin_static(request):
-            static_path = os.path.join(admin_dir, "static", request.path_params["path"])
-            if os.path.exists(static_path):
-                return FileResponse(static_path)
-            return JSONResponse({"error": "File not found"}, status_code=404)
+            try:
+                # Base static directory
+                base_dir = (Path(admin_dir) / "static").resolve()
+                # Requested path (may include nested paths)
+                requested = request.path_params.get("path", "")
+
+                # Normalize and resolve against base directory
+                candidate = (base_dir / requested).resolve()
+
+                # Ensure the resolved path is within the static directory
+                if not str(candidate).startswith(str(base_dir) + os.sep) and candidate != base_dir:
+                    return JSONResponse({"error": "Invalid path"}, status_code=400)
+
+                if candidate.is_file():
+                    return FileResponse(str(candidate))
+                return JSONResponse({"error": "File not found"}, status_code=404)
+            except Exception:
+                # On any resolution error, return 404 to avoid information leaks
+                return JSONResponse({"error": "File not found"}, status_code=404)
         
-        # Serve admin HTML pages
+        # Serve admin HTML pages (with validation)
         @self.mcp.custom_route("/admin/{page}", methods=["GET"])
         async def admin_pages(request):
-            page = request.path_params["page"]
-            if not page.endswith('.html'):
-                page += '.html'
-            
-            page_path = os.path.join(admin_dir, page)
-            if os.path.exists(page_path):
-                return FileResponse(page_path)
-            return JSONResponse({"error": "Page not found"}, status_code=404)
+            try:
+                page = request.path_params.get("page", "")
+
+                # Only allow simple filenames without path separators
+                if not re.fullmatch(r"[A-Za-z0-9_-]+(?:\.html)?", page):
+                    return JSONResponse({"error": "Invalid page"}, status_code=400)
+
+                # Enforce .html extension
+                if not page.endswith(".html"):
+                    page = f"{page}.html"
+
+                base_dir = Path(admin_dir).resolve()
+                candidate = (base_dir / page).resolve()
+
+                # Ensure the resolved path is within the admin directory
+                if not str(candidate).startswith(str(base_dir) + os.sep) and candidate != base_dir:
+                    return JSONResponse({"error": "Invalid page"}, status_code=400)
+
+                if candidate.is_file():
+                    return FileResponse(str(candidate))
+                return JSONResponse({"error": "Page not found"}, status_code=404)
+            except Exception:
+                return JSONResponse({"error": "Page not found"}, status_code=404)
         
         # Admin login endpoint
         @self.mcp.custom_route("/admin/api/login", methods=["POST"])

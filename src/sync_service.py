@@ -220,10 +220,16 @@ class MemorySyncService:
                 try:
                     collection = client.get_collection(collection_name)
                     
-                    # Get all memories from this collection
-                    results = collection.get(
-                        limit=1000,  # Adjust based on needs
-                        include=['documents', 'metadatas', 'embeddings']
+                    # Get all memories from this collection with timeout protection
+                    results = await asyncio.wait_for(
+                        asyncio.get_event_loop().run_in_executor(
+                            None,
+                            lambda: collection.get(
+                                limit=1000,  # Adjust based on needs
+                                include=['documents', 'metadatas', 'embeddings']
+                            )
+                        ),
+                        timeout=30.0
                     )
                     
                     if results['documents']:
@@ -323,16 +329,34 @@ class MemorySyncService:
                                 existing_meta = existing['metadatas'][0]
                                 remote_meta = memory['metadata']
                                 
+                                # Sanitize remote metadata to ensure only primitive types
+                                clean_remote_meta = {}
+                                for key, value in remote_meta.items():
+                                    if isinstance(value, (str, int, float, bool)) or value is None:
+                                        clean_remote_meta[key] = value
+                                    elif isinstance(value, list):
+                                        # Convert lists to comma-separated strings
+                                        clean_remote_meta[key] = ', '.join(str(item) for item in value)
+                                    else:
+                                        # Convert other types to strings
+                                        clean_remote_meta[key] = str(value)
+                                
                                 # Simple timestamp-based conflict resolution
                                 existing_time = existing_meta.get('created_at', '')
-                                remote_time = remote_meta.get('created_at', '')
+                                remote_time = clean_remote_meta.get('created_at', '')
                                 
                                 if remote_time > existing_time:
-                                    # Remote is newer, update
-                                    collection.update(
-                                        ids=[memory_id],
-                                        documents=[memory['content']],
-                                        metadatas=[remote_meta]
+                                    # Remote is newer, update with timeout protection
+                                    await asyncio.wait_for(
+                                        asyncio.get_event_loop().run_in_executor(
+                                            None,
+                                            lambda: collection.update(
+                                                ids=[memory_id],
+                                                documents=[memory['content']],
+                                                metadatas=[clean_remote_meta]
+                                            )
+                                        ),
+                                        timeout=20.0
                                     )
                                     logger.info(f"Updated existing memory {memory_id}")
                                 continue
@@ -341,9 +365,21 @@ class MemorySyncService:
                             # Memory doesn't exist, add it
                             pass
                         
-                        # Add new memory
+                        # Add new memory with sanitized metadata
+                        # Sanitize metadata to ensure only primitive types
+                        clean_metadata = {}
+                        for key, value in memory['metadata'].items():
+                            if isinstance(value, (str, int, float, bool)) or value is None:
+                                clean_metadata[key] = value
+                            elif isinstance(value, list):
+                                # Convert lists to comma-separated strings
+                                clean_metadata[key] = ', '.join(str(item) for item in value)
+                            else:
+                                # Convert other types to strings
+                                clean_metadata[key] = str(value)
+                        
                         documents.append(memory['content'])
-                        metadatas.append(memory['metadata'])
+                        metadatas.append(clean_metadata)
                         ids.append(memory_id)
                         
                         # Add embedding if available
@@ -362,7 +398,14 @@ class MemorySyncService:
                         if embeddings and len(embeddings) == len(documents):
                             add_kwargs['embeddings'] = embeddings
                         
-                        collection.add(**add_kwargs)
+                        # Batch add with timeout protection
+                        await asyncio.wait_for(
+                            asyncio.get_event_loop().run_in_executor(
+                                None,
+                                lambda: collection.add(**add_kwargs)
+                            ),
+                            timeout=30.0
+                        )
                         logger.info(f"Added {len(documents)} new memories to {collection_name}")
                 
                 except Exception as e:
