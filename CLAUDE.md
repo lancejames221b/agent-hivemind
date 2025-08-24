@@ -126,6 +126,17 @@ The system supports comprehensive memory categories for DevOps operations:
 - `list_memory_sources`: List all machines with memory statistics
 - `import_conversation`: Import full conversations as structured memories
 
+### Memory Deletion & Lifecycle Management Tools:
+- `delete_memory`: Delete memory by ID with soft delete (recoverable) or hard delete (permanent)
+- `bulk_delete_memories`: Bulk delete memories based on filters with confirmation required
+- `recover_deleted_memory`: Recover soft-deleted memory from recycle bin within 30 days
+- `list_deleted_memories`: List memories in recycle bin that can be recovered
+- `detect_duplicate_memories`: Detect potentially duplicate memories using semantic similarity
+- `merge_duplicate_memories`: Merge two duplicate memories, keeping one and deleting the other
+- `cleanup_expired_deletions`: Clean up expired soft deletions and apply data retention policies
+- `gdpr_delete_user_data`: GDPR compliant deletion of all data for specific user (right to be forgotten)
+- `gdpr_export_user_data`: GDPR compliant export of all data for specific user (data portability)
+
 ### ClaudeOps hAIveMind Management Tools:
 - `register_agent`: Register new hAIveMind agent with role and capabilities
 - `get_agent_roster`: List all active hAIveMind agents and their current status
@@ -220,6 +231,39 @@ fetch_from_jira project_key="INFRA" issue_types=["Bug", "Incident"] limit=25
 
 # Sync all external knowledge sources
 sync_external_knowledge sources=["confluence", "jira"]
+```
+
+### Memory Deletion & Lifecycle Management:
+```bash
+# Soft delete a memory (recoverable for 30 days)
+delete_memory memory_id="abc123" hard_delete=false reason="No longer needed"
+
+# Hard delete a memory permanently
+delete_memory memory_id="def456" hard_delete=true reason="Contains sensitive data"
+
+# List deleted memories in recycle bin
+list_deleted_memories limit=20
+
+# Recover a soft-deleted memory
+recover_deleted_memory memory_id="abc123"
+
+# Bulk delete old memories (with required confirmation)
+bulk_delete_memories category="incidents" date_to="2024-01-01" hard_delete=false confirm=true reason="Archive old incidents"
+
+# Detect duplicate memories
+detect_duplicate_memories threshold=0.9
+
+# Merge duplicate memories
+merge_duplicate_memories memory_id_1="abc123" memory_id_2="def456" keep_memory="newest"
+
+# Clean up expired deletions and apply retention policies
+cleanup_expired_deletions
+
+# GDPR right to be forgotten (with required confirmation)
+gdpr_delete_user_data user_id="john.doe@example.com" confirm=true
+
+# GDPR data export (data portability)
+gdpr_export_user_data user_id="john.doe@example.com" format="json"
 ```
 
 ## Troubleshooting

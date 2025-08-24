@@ -610,12 +610,20 @@ class MemoryStorage:
                 cached = self.redis_client.get(f"memory:{memory_id}")
                 if cached:
                     cache_data = json.loads(cached)
+                    metadata = cache_data.get('metadata', {})
+                    if isinstance(metadata, str):
+                        metadata = json.loads(metadata)
+                    
+                    # Check if memory is soft deleted
+                    if metadata.get('deleted_at'):
+                        return None
+                        
                     return {
                         'id': cache_data['id'],
                         'content': cache_data['content'],
                         'category': cache_data['category'],
                         'context': cache_data['context'],
-                        'metadata': json.loads(cache_data['metadata']),
+                        'metadata': metadata,
                         'created_at': cache_data['created_at']
                     }
             except Exception as e:
@@ -626,13 +634,19 @@ class MemoryStorage:
             try:
                 result = collection.get(ids=[memory_id])
                 if result['documents']:
+                    metadata = result['metadatas'][0] if result['metadatas'] else {}
+                    
+                    # Check if memory is soft deleted
+                    if metadata.get('deleted_at'):
+                        return None
+                        
                     return {
                         'id': memory_id,
                         'content': result['documents'][0],
                         'category': category,
-                        'context': result['metadatas'][0].get('context', ''),
-                        'metadata': result['metadatas'][0],
-                        'created_at': result['metadatas'][0].get('created_at', '')
+                        'context': metadata.get('context', ''),
+                        'metadata': metadata,
+                        'created_at': metadata.get('created_at', metadata.get('timestamp', ''))
                     }
             except Exception as e:
                 logger.debug(f"Memory {memory_id} not found in {category}: {e}")
@@ -1861,6 +1875,900 @@ class MemoryStorage:
             logger.error(f"Failed to sync external knowledge: {e}")
             return {"error": str(e)}
 
+    async def delete_memory(self, memory_id: str, hard_delete: bool = False, reason: str = "User request") -> Dict[str, Any]:
+        """Delete a memory by ID (soft delete by default, hard delete optional)"""
+        try:
+            # First retrieve the memory to confirm it exists
+            memory = await self.retrieve_memory(memory_id)
+            if not memory:
+                return {"error": "Memory not found", "memory_id": memory_id}
+            
+            current_time = datetime.now()
+            
+            if hard_delete:
+                # Hard delete - permanently remove from ChromaDB and Redis
+                deleted_from_collections = []
+                
+                # Remove from ChromaDB collections
+                for collection_name, collection in self.collections.items():
+                    try:
+                        collection.delete(ids=[memory_id])
+                        deleted_from_collections.append(collection_name)
+                    except Exception as e:
+                        logger.warning(f"Failed to delete from collection {collection_name}: {e}")
+                
+                # Remove from Redis cache
+                if self.redis_client:
+                    try:
+                        self.redis_client.delete(f"memory:{memory_id}")
+                        # Also remove from recycle bin if it exists
+                        self.redis_client.delete(f"deleted_memory:{memory_id}")
+                    except Exception as e:
+                        logger.warning(f"Failed to delete from Redis: {e}")
+                
+                # Log the hard deletion with hAIveMind awareness
+                deletion_log = {
+                    "action": "hard_delete",
+                    "memory_id": memory_id,
+                    "deleted_at": current_time.isoformat(),
+                    "reason": reason,
+                    "original_metadata": memory.get('metadata', {}),
+                    "deleted_from_collections": deleted_from_collections,
+                    "machine_id": self.machine_id
+                }
+                
+                # Store deletion audit trail
+                await self._log_deletion_audit(deletion_log)
+                
+                # Broadcast deletion event to hAIveMind
+                await self._broadcast_deletion_event(memory_id, "hard_delete", reason)
+                
+                return {
+                    "success": True,
+                    "action": "hard_delete",
+                    "memory_id": memory_id,
+                    "deleted_at": current_time.isoformat(),
+                    "collections_affected": deleted_from_collections
+                }
+                
+            else:
+                # Soft delete - mark as deleted but keep in storage for recovery
+                updated_metadata = memory['metadata'].copy()
+                updated_metadata.update({
+                    'deleted_at': current_time.isoformat(),
+                    'deleted_by': self.machine_id,
+                    'deletion_reason': reason,
+                    'recoverable_until': (current_time + timedelta(days=30)).isoformat()
+                })
+                
+                # Update in ChromaDB with soft delete markers
+                for collection_name, collection in self.collections.items():
+                    try:
+                        # Check if memory exists in this collection
+                        result = collection.get(ids=[memory_id])
+                        if result['documents'] and result['documents'][0]:
+                            collection.update(
+                                ids=[memory_id],
+                                metadatas=[updated_metadata]
+                            )
+                            break
+                    except Exception as e:
+                        logger.warning(f"Failed to soft delete in collection {collection_name}: {e}")
+                
+                # Store in Redis recycle bin
+                if self.redis_client:
+                    try:
+                        # Remove from active cache
+                        self.redis_client.delete(f"memory:{memory_id}")
+                        
+                        # Add to recycle bin with 30-day TTL
+                        recycle_data = {
+                            "memory_id": memory_id,
+                            "content": memory['content'],
+                            "metadata": updated_metadata,
+                            "deleted_at": current_time.isoformat(),
+                            "recoverable_until": updated_metadata['recoverable_until']
+                        }
+                        self.redis_client.setex(
+                            f"deleted_memory:{memory_id}", 
+                            2592000,  # 30 days in seconds
+                            json.dumps(recycle_data)
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to add to recycle bin: {e}")
+                
+                # Log the soft deletion
+                deletion_log = {
+                    "action": "soft_delete",
+                    "memory_id": memory_id,
+                    "deleted_at": current_time.isoformat(),
+                    "recoverable_until": updated_metadata['recoverable_until'],
+                    "reason": reason,
+                    "machine_id": self.machine_id
+                }
+                
+                await self._log_deletion_audit(deletion_log)
+                await self._broadcast_deletion_event(memory_id, "soft_delete", reason)
+                
+                return {
+                    "success": True,
+                    "action": "soft_delete",
+                    "memory_id": memory_id,
+                    "deleted_at": current_time.isoformat(),
+                    "recoverable_until": updated_metadata['recoverable_until'],
+                    "recovery_instructions": "Use recover_deleted_memory to restore within 30 days"
+                }
+                
+        except Exception as e:
+            logger.error(f"Memory deletion error: {e}")
+            return {"error": str(e), "memory_id": memory_id}
+
+    async def bulk_delete_memories(self, 
+                                   category: Optional[str] = None,
+                                   project: Optional[str] = None,
+                                   user_id: Optional[str] = None,
+                                   date_from: Optional[str] = None,
+                                   date_to: Optional[str] = None,
+                                   tags: Optional[List[str]] = None,
+                                   hard_delete: bool = False,
+                                   reason: str = "Bulk deletion",
+                                   confirm: bool = False) -> Dict[str, Any]:
+        """Bulk delete memories based on filters"""
+        
+        if not confirm:
+            return {"error": "Bulk deletion requires explicit confirmation. Set confirm=True"}
+        
+        try:
+            # First, search for memories matching the criteria
+            search_filters = {}
+            if category:
+                search_filters['category'] = category
+            if user_id:
+                search_filters['user_id'] = user_id
+                
+            # Get memories matching criteria
+            matching_memories = []
+            for collection_name, collection in self.collections.items():
+                try:
+                    # Build where filter
+                    where_filter = {}
+                    if category:
+                        where_filter['category'] = category
+                    if project:
+                        where_filter['project'] = project
+                    if user_id:
+                        where_filter['user_id'] = user_id
+                        
+                    result = collection.get(
+                        where=where_filter if where_filter else None,
+                        include=['documents', 'metadatas']
+                    )
+                    
+                    if result['documents']:
+                        for i, doc in enumerate(result['documents']):
+                            metadata = result['metadatas'][i] if result['metadatas'] else {}
+                            memory_id = result['ids'][i] if result['ids'] else f"unknown_{i}"
+                            
+                            # Skip already deleted memories
+                            if metadata.get('deleted_at'):
+                                continue
+                                
+                            # Apply date filters
+                            timestamp_str = metadata.get('timestamp', '')
+                            if date_from or date_to:
+                                try:
+                                    memory_date = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                                    if date_from and memory_date < datetime.fromisoformat(date_from):
+                                        continue
+                                    if date_to and memory_date > datetime.fromisoformat(date_to):
+                                        continue
+                                except (ValueError, AttributeError):
+                                    continue
+                            
+                            # Apply tag filters
+                            if tags:
+                                memory_tags = metadata.get('tags', [])
+                                if not any(tag in memory_tags for tag in tags):
+                                    continue
+                            
+                            matching_memories.append({
+                                'id': memory_id,
+                                'collection': collection_name,
+                                'metadata': metadata
+                            })
+                            
+                except Exception as e:
+                    logger.warning(f"Error searching collection {collection_name}: {e}")
+            
+            if not matching_memories:
+                return {
+                    "success": True,
+                    "deleted_count": 0,
+                    "message": "No memories found matching the criteria"
+                }
+            
+            # Perform deletions
+            deleted_count = 0
+            failed_deletions = []
+            
+            for memory in matching_memories:
+                try:
+                    result = await self.delete_memory(
+                        memory['id'], 
+                        hard_delete=hard_delete, 
+                        reason=f"{reason} (bulk operation)"
+                    )
+                    if result.get('success'):
+                        deleted_count += 1
+                    else:
+                        failed_deletions.append({
+                            'memory_id': memory['id'],
+                            'error': result.get('error', 'Unknown error')
+                        })
+                except Exception as e:
+                    failed_deletions.append({
+                        'memory_id': memory['id'],
+                        'error': str(e)
+                    })
+            
+            # Log bulk deletion event
+            bulk_log = {
+                "action": "bulk_delete",
+                "deleted_count": deleted_count,
+                "failed_count": len(failed_deletions),
+                "hard_delete": hard_delete,
+                "filters": {
+                    "category": category,
+                    "project": project,
+                    "user_id": user_id,
+                    "date_from": date_from,
+                    "date_to": date_to,
+                    "tags": tags
+                },
+                "reason": reason,
+                "timestamp": datetime.now().isoformat(),
+                "machine_id": self.machine_id
+            }
+            
+            await self._log_deletion_audit(bulk_log)
+            
+            return {
+                "success": True,
+                "deleted_count": deleted_count,
+                "failed_count": len(failed_deletions),
+                "failed_deletions": failed_deletions,
+                "action": "hard_delete" if hard_delete else "soft_delete"
+            }
+            
+        except Exception as e:
+            logger.error(f"Bulk deletion error: {e}")
+            return {"error": str(e)}
+
+    async def recover_deleted_memory(self, memory_id: str) -> Dict[str, Any]:
+        """Recover a soft-deleted memory from the recycle bin"""
+        try:
+            if not self.redis_client:
+                return {"error": "Recovery requires Redis to be enabled"}
+            
+            # Check if memory is in recycle bin
+            recycle_key = f"deleted_memory:{memory_id}"
+            deleted_data = self.redis_client.get(recycle_key)
+            
+            if not deleted_data:
+                return {"error": "Memory not found in recycle bin or recovery period expired"}
+            
+            deleted_memory = json.loads(deleted_data)
+            
+            # Check if still recoverable
+            recoverable_until = datetime.fromisoformat(deleted_memory['recoverable_until'])
+            if datetime.now() > recoverable_until:
+                # Clean up expired recovery data
+                self.redis_client.delete(recycle_key)
+                return {"error": "Memory recovery period has expired"}
+            
+            # Restore metadata by removing deletion markers
+            restored_metadata = deleted_memory['metadata'].copy()
+            deletion_info = {
+                'was_deleted_at': restored_metadata.pop('deleted_at', None),
+                'was_deleted_by': restored_metadata.pop('deleted_by', None),
+                'deletion_reason': restored_metadata.pop('deletion_reason', None),
+                'recovered_at': datetime.now().isoformat(),
+                'recovered_by': self.machine_id
+            }
+            restored_metadata['recovery_info'] = deletion_info
+            restored_metadata.pop('recoverable_until', None)
+            
+            # Restore to ChromaDB
+            category = restored_metadata.get('category', 'global')
+            collection = self.collections.get(category, self.collections['global'])
+            
+            try:
+                collection.update(
+                    ids=[memory_id],
+                    documents=[deleted_memory['content']],
+                    metadatas=[restored_metadata]
+                )
+            except Exception:
+                # If update fails, try add (memory might not exist in collection)
+                collection.add(
+                    ids=[memory_id],
+                    documents=[deleted_memory['content']],
+                    metadatas=[restored_metadata]
+                )
+            
+            # Remove from recycle bin and restore to active cache
+            self.redis_client.delete(recycle_key)
+            
+            restored_memory = {
+                'id': memory_id,
+                'content': deleted_memory['content'],
+                'metadata': restored_metadata,
+                'timestamp': restored_metadata.get('timestamp', ''),
+                'category': category,
+                'recovered_at': deletion_info['recovered_at']
+            }
+            
+            # Cache restored memory
+            self.redis_client.setex(
+                f"memory:{memory_id}",
+                self.config.get('storage', {}).get('redis', {}).get('cache_ttl', 3600),
+                json.dumps(restored_memory)
+            )
+            
+            # Log recovery event
+            recovery_log = {
+                "action": "memory_recovered",
+                "memory_id": memory_id,
+                "recovered_at": deletion_info['recovered_at'],
+                "originally_deleted_at": deletion_info['was_deleted_at'],
+                "machine_id": self.machine_id
+            }
+            
+            await self._log_deletion_audit(recovery_log)
+            await self._broadcast_deletion_event(memory_id, "recovered", "Memory recovered from recycle bin")
+            
+            return {
+                "success": True,
+                "memory_id": memory_id,
+                "recovered_at": deletion_info['recovered_at'],
+                "memory": restored_memory
+            }
+            
+        except Exception as e:
+            logger.error(f"Memory recovery error: {e}")
+            return {"error": str(e), "memory_id": memory_id}
+
+    async def list_deleted_memories(self, limit: int = 50) -> Dict[str, Any]:
+        """List memories in the recycle bin"""
+        try:
+            if not self.redis_client:
+                return {"error": "Recycle bin requires Redis to be enabled"}
+            
+            # Get all keys matching deleted memory pattern
+            deleted_keys = []
+            for key in self.redis_client.scan_iter(match="deleted_memory:*"):
+                deleted_keys.append(key.decode() if isinstance(key, bytes) else key)
+            
+            deleted_memories = []
+            current_time = datetime.now()
+            
+            for key in deleted_keys[:limit]:
+                try:
+                    data = self.redis_client.get(key)
+                    if data:
+                        memory_data = json.loads(data)
+                        
+                        # Check if still recoverable
+                        recoverable_until = datetime.fromisoformat(memory_data['recoverable_until'])
+                        is_expired = current_time > recoverable_until
+                        
+                        if is_expired:
+                            # Clean up expired entries
+                            self.redis_client.delete(key)
+                            continue
+                        
+                        deleted_memories.append({
+                            'memory_id': memory_data['memory_id'],
+                            'deleted_at': memory_data['deleted_at'],
+                            'recoverable_until': memory_data['recoverable_until'],
+                            'category': memory_data['metadata'].get('category', 'unknown'),
+                            'project': memory_data['metadata'].get('project', ''),
+                            'deletion_reason': memory_data['metadata'].get('deletion_reason', ''),
+                            'content_preview': memory_data['content'][:200] + '...' if len(memory_data['content']) > 200 else memory_data['content']
+                        })
+                except Exception as e:
+                    logger.warning(f"Error processing deleted memory key {key}: {e}")
+            
+            return {
+                "success": True,
+                "deleted_memories": sorted(deleted_memories, key=lambda x: x['deleted_at'], reverse=True),
+                "total_count": len(deleted_memories)
+            }
+            
+        except Exception as e:
+            logger.error(f"Error listing deleted memories: {e}")
+            return {"error": str(e)}
+
+    async def detect_duplicate_memories(self, threshold: float = 0.9) -> Dict[str, Any]:
+        """Detect potentially duplicate memories using semantic similarity"""
+        try:
+            duplicates = []
+            
+            for collection_name, collection in self.collections.items():
+                try:
+                    # Get all memories from this collection
+                    result = collection.get(include=['documents', 'metadatas', 'embeddings'])
+                    
+                    if not result['documents'] or len(result['documents']) < 2:
+                        continue
+                    
+                    # Compare embeddings to find duplicates
+                    import numpy as np
+                    from sklearn.metrics.pairwise import cosine_similarity
+                    
+                    embeddings = np.array(result['embeddings'])
+                    similarities = cosine_similarity(embeddings)
+                    
+                    # Find pairs above threshold
+                    for i in range(len(similarities)):
+                        for j in range(i + 1, len(similarities)):
+                            if similarities[i][j] >= threshold:
+                                duplicates.append({
+                                    'memory_1': {
+                                        'id': result['ids'][i],
+                                        'content': result['documents'][i][:200] + '...' if len(result['documents'][i]) > 200 else result['documents'][i],
+                                        'metadata': result['metadatas'][i]
+                                    },
+                                    'memory_2': {
+                                        'id': result['ids'][j], 
+                                        'content': result['documents'][j][:200] + '...' if len(result['documents'][j]) > 200 else result['documents'][j],
+                                        'metadata': result['metadatas'][j]
+                                    },
+                                    'similarity_score': float(similarities[i][j]),
+                                    'collection': collection_name
+                                })
+                                
+                except Exception as e:
+                    logger.warning(f"Error detecting duplicates in collection {collection_name}: {e}")
+                    continue
+            
+            return {
+                "success": True,
+                "duplicates": duplicates,
+                "total_duplicates": len(duplicates),
+                "threshold": threshold
+            }
+            
+        except Exception as e:
+            logger.error(f"Duplicate detection error: {e}")
+            return {"error": str(e)}
+
+    async def merge_duplicate_memories(self, memory_id_1: str, memory_id_2: str, keep_memory: str = "newest") -> Dict[str, Any]:
+        """Merge two duplicate memories"""
+        try:
+            # Retrieve both memories
+            memory_1 = await self.retrieve_memory(memory_id_1)
+            memory_2 = await self.retrieve_memory(memory_id_2)
+            
+            if not memory_1 or not memory_2:
+                return {"error": "One or both memories not found"}
+            
+            # Determine which memory to keep
+            if keep_memory == "newest":
+                time_1 = datetime.fromisoformat(memory_1.get('created_at', memory_1.get('timestamp', '')))
+                time_2 = datetime.fromisoformat(memory_2.get('created_at', memory_2.get('timestamp', '')))
+                keep_id = memory_id_1 if time_1 >= time_2 else memory_id_2
+                delete_id = memory_id_2 if keep_id == memory_id_1 else memory_id_1
+                keep_mem = memory_1 if keep_id == memory_id_1 else memory_2
+                delete_mem = memory_2 if keep_id == memory_id_1 else memory_1
+            elif keep_memory == "longest":
+                keep_id = memory_id_1 if len(memory_1['content']) >= len(memory_2['content']) else memory_id_2
+                delete_id = memory_id_2 if keep_id == memory_id_1 else memory_id_1
+                keep_mem = memory_1 if keep_id == memory_id_1 else memory_2
+                delete_mem = memory_2 if keep_id == memory_id_1 else memory_1
+            else:
+                return {"error": "keep_memory must be 'newest' or 'longest'"}
+            
+            # Merge metadata and tags
+            merged_metadata = keep_mem['metadata'].copy()
+            merged_tags = set(merged_metadata.get('tags', []))
+            merged_tags.update(delete_mem['metadata'].get('tags', []))
+            merged_metadata['tags'] = list(merged_tags)
+            merged_metadata['merged_from'] = delete_id
+            merged_metadata['merged_at'] = datetime.now().isoformat()
+            
+            # Update the kept memory with merged metadata
+            category = keep_mem['category']
+            collection = self.collections.get(category, self.collections['global'])
+            
+            collection.update(
+                ids=[keep_id],
+                metadatas=[merged_metadata]
+            )
+            
+            # Delete the duplicate memory
+            delete_result = await self.delete_memory(
+                delete_id, 
+                hard_delete=True, 
+                reason=f"Merged with {keep_id} - duplicate content"
+            )
+            
+            # Log merge activity
+            merge_log = {
+                "action": "memories_merged",
+                "kept_memory": keep_id,
+                "deleted_memory": delete_id,
+                "merge_strategy": keep_memory,
+                "merged_at": datetime.now().isoformat(),
+                "machine_id": self.machine_id
+            }
+            
+            await self._log_deletion_audit(merge_log)
+            
+            return {
+                "success": True,
+                "kept_memory": keep_id,
+                "deleted_memory": delete_id,
+                "merge_strategy": keep_memory,
+                "merged_metadata": merged_metadata
+            }
+            
+        except Exception as e:
+            logger.error(f"Memory merge error: {e}")
+            return {"error": str(e)}
+
+    async def cleanup_expired_deletions(self) -> Dict[str, Any]:
+        """Clean up expired soft deletions and apply retention policies"""
+        try:
+            current_time = datetime.now()
+            cleaned_count = 0
+            
+            # Clean up expired Redis recycle bin entries
+            if self.redis_client:
+                deleted_keys = []
+                for key in self.redis_client.scan_iter(match="deleted_memory:*"):
+                    key_str = key.decode() if isinstance(key, bytes) else key
+                    try:
+                        data = self.redis_client.get(key_str)
+                        if data:
+                            memory_data = json.loads(data)
+                            recoverable_until = datetime.fromisoformat(memory_data['recoverable_until'])
+                            if current_time > recoverable_until:
+                                deleted_keys.append(key_str)
+                    except Exception as e:
+                        logger.warning(f"Error checking expired deletion key {key_str}: {e}")
+                        deleted_keys.append(key_str)  # Clean up corrupted entries
+                
+                # Remove expired entries
+                for key in deleted_keys:
+                    self.redis_client.delete(key)
+                    cleaned_count += 1
+            
+            # Apply data retention policies from config
+            retention_days = self.config.get('memory', {}).get('max_age_days', 365)
+            retention_cutoff = current_time - timedelta(days=retention_days)
+            
+            old_memories_cleaned = 0
+            
+            for collection_name, collection in self.collections.items():
+                try:
+                    # Get all memories
+                    result = collection.get(include=['metadatas'])
+                    
+                    if result['metadatas']:
+                        old_memory_ids = []
+                        for i, metadata in enumerate(result['metadatas']):
+                            try:
+                                timestamp_str = metadata.get('timestamp', metadata.get('created_at', ''))
+                                if timestamp_str:
+                                    memory_date = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                                    if memory_date < retention_cutoff and not metadata.get('preserve', False):
+                                        old_memory_ids.append(result['ids'][i])
+                            except (ValueError, AttributeError):
+                                continue
+                        
+                        # Hard delete old memories
+                        if old_memory_ids:
+                            for memory_id in old_memory_ids:
+                                await self.delete_memory(
+                                    memory_id, 
+                                    hard_delete=True, 
+                                    reason=f"Automatic cleanup - exceeds retention policy of {retention_days} days"
+                                )
+                                old_memories_cleaned += 1
+                                
+                except Exception as e:
+                    logger.error(f"Error cleaning old memories from collection {collection_name}: {e}")
+            
+            # Log cleanup activity
+            cleanup_log = {
+                "action": "automatic_cleanup",
+                "expired_deletions_cleaned": cleaned_count,
+                "old_memories_cleaned": old_memories_cleaned,
+                "retention_policy_days": retention_days,
+                "cleaned_at": current_time.isoformat(),
+                "machine_id": self.machine_id
+            }
+            
+            await self._log_deletion_audit(cleanup_log)
+            
+            return {
+                "success": True,
+                "expired_deletions_cleaned": cleaned_count,
+                "old_memories_cleaned": old_memories_cleaned,
+                "total_cleaned": cleaned_count + old_memories_cleaned
+            }
+            
+        except Exception as e:
+            logger.error(f"Cleanup error: {e}")
+            return {"error": str(e)}
+
+    async def _log_deletion_audit(self, log_data: Dict[str, Any]) -> None:
+        """Log deletion activities for audit trails"""
+        try:
+            audit_memory_id = str(uuid.uuid4())
+            await self.store_memory(
+                content=f"Memory Deletion Audit Log: {json.dumps(log_data, indent=2)}",
+                category="security",
+                context="audit_log",
+                metadata={
+                    "audit_type": "memory_deletion",
+                    "action": log_data.get("action", "unknown"),
+                    "machine_id": self.machine_id,
+                    "timestamp": datetime.now().isoformat()
+                },
+                tags=["audit", "deletion", "compliance"],
+                scope="team-global"  # Audit logs should be widely accessible
+            )
+        except Exception as e:
+            logger.error(f"Failed to log deletion audit: {e}")
+
+    async def _broadcast_deletion_event(self, memory_id: str, action: str, reason: str) -> None:
+        """Broadcast memory deletion events to hAIveMind network"""
+        try:
+            event_data = {
+                "event_type": "memory_deletion",
+                "memory_id": memory_id,
+                "action": action,
+                "reason": reason,
+                "machine_id": self.machine_id,
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            # Broadcast via Redis pub/sub if available
+            if self.redis_client:
+                try:
+                    self.redis_client.publish(
+                        "claudeops:memory_events",
+                        json.dumps(event_data)
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to broadcast deletion event: {e}")
+                    
+            # Also store as a broadcast memory for hAIveMind awareness
+            await self.broadcast_discovery(
+                message=f"Memory {action}: {memory_id} - {reason}",
+                category="infrastructure",
+                severity="info" if action == "recovered" else "warning"
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to broadcast deletion event: {e}")
+
+    async def gdpr_delete_user_data(self, user_id: str, confirm: bool = False) -> Dict[str, Any]:
+        """GDPR compliant deletion of all data for a specific user (right to be forgotten)"""
+        if not confirm:
+            return {"error": "GDPR data deletion requires explicit confirmation. Set confirm=True"}
+        
+        try:
+            deleted_memories = []
+            failed_deletions = []
+            
+            # Find all memories for this user across all collections
+            for collection_name, collection in self.collections.items():
+                try:
+                    result = collection.get(
+                        where={"user_id": user_id},
+                        include=['documents', 'metadatas']
+                    )
+                    
+                    if result['documents']:
+                        for i, doc in enumerate(result['documents']):
+                            memory_id = result['ids'][i] if result['ids'] else f"unknown_{i}"
+                            try:
+                                delete_result = await self.delete_memory(
+                                    memory_id,
+                                    hard_delete=True,  # GDPR requires permanent deletion
+                                    reason=f"GDPR right to be forgotten request for user {user_id}"
+                                )
+                                if delete_result.get('success'):
+                                    deleted_memories.append(memory_id)
+                                else:
+                                    failed_deletions.append({
+                                        'memory_id': memory_id,
+                                        'error': delete_result.get('error', 'Unknown error')
+                                    })
+                            except Exception as e:
+                                failed_deletions.append({
+                                    'memory_id': memory_id,
+                                    'error': str(e)
+                                })
+                                
+                except Exception as e:
+                    logger.error(f"Error searching for user data in collection {collection_name}: {e}")
+            
+            # Also clean up any deleted memories in Redis recycle bin
+            redis_cleaned = 0
+            if self.redis_client:
+                try:
+                    for key in self.redis_client.scan_iter(match="deleted_memory:*"):
+                        key_str = key.decode() if isinstance(key, bytes) else key
+                        try:
+                            data = self.redis_client.get(key_str)
+                            if data:
+                                memory_data = json.loads(data)
+                                if memory_data['metadata'].get('user_id') == user_id:
+                                    self.redis_client.delete(key_str)
+                                    redis_cleaned += 1
+                        except Exception as e:
+                            logger.warning(f"Error cleaning GDPR data from Redis key {key_str}: {e}")
+                except Exception as e:
+                    logger.error(f"Error cleaning Redis data for GDPR: {e}")
+            
+            # Log GDPR deletion for compliance
+            gdpr_log = {
+                "action": "gdpr_delete_user_data",
+                "user_id": user_id,
+                "deleted_memories": len(deleted_memories),
+                "failed_deletions": len(failed_deletions),
+                "redis_cleaned": redis_cleaned,
+                "timestamp": datetime.now().isoformat(),
+                "machine_id": self.machine_id,
+                "compliance_basis": "GDPR Article 17 - Right to erasure"
+            }
+            
+            await self._log_deletion_audit(gdpr_log)
+            
+            # Broadcast GDPR deletion event
+            await self._broadcast_deletion_event(
+                f"user:{user_id}", 
+                "gdpr_deletion", 
+                f"GDPR right to be forgotten - {len(deleted_memories)} memories deleted"
+            )
+            
+            return {
+                "success": True,
+                "user_id": user_id,
+                "deleted_memories_count": len(deleted_memories),
+                "failed_deletions_count": len(failed_deletions),
+                "redis_cleaned": redis_cleaned,
+                "failed_deletions": failed_deletions,
+                "compliance_basis": "GDPR Article 17 - Right to erasure",
+                "deleted_at": datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"GDPR deletion error: {e}")
+            return {"error": str(e), "user_id": user_id}
+
+    async def gdpr_export_user_data(self, user_id: str, format: str = "json") -> Dict[str, Any]:
+        """GDPR compliant export of all data for a specific user (data portability)"""
+        try:
+            user_memories = []
+            
+            # Collect all memories for this user
+            for collection_name, collection in self.collections.items():
+                try:
+                    result = collection.get(
+                        where={"user_id": user_id},
+                        include=['documents', 'metadatas']
+                    )
+                    
+                    if result['documents']:
+                        for i, doc in enumerate(result['documents']):
+                            metadata = result['metadatas'][i] if result['metadatas'] else {}
+                            memory_id = result['ids'][i] if result['ids'] else f"unknown_{i}"
+                            
+                            # Skip deleted memories for export
+                            if metadata.get('deleted_at'):
+                                continue
+                            
+                            memory_export = {
+                                'memory_id': memory_id,
+                                'content': doc,
+                                'category': collection_name,
+                                'metadata': metadata,
+                                'created_at': metadata.get('timestamp', metadata.get('created_at', '')),
+                                'context': metadata.get('context', ''),
+                                'tags': metadata.get('tags', []),
+                                'project': metadata.get('project', ''),
+                                'machine_id': metadata.get('machine_id', ''),
+                                'scope': metadata.get('scope', '')
+                            }
+                            user_memories.append(memory_export)
+                            
+                except Exception as e:
+                    logger.error(f"Error exporting user data from collection {collection_name}: {e}")
+            
+            # Also include deleted memories that are still in recycle bin
+            deleted_memories = []
+            if self.redis_client:
+                try:
+                    for key in self.redis_client.scan_iter(match="deleted_memory:*"):
+                        key_str = key.decode() if isinstance(key, bytes) else key
+                        try:
+                            data = self.redis_client.get(key_str)
+                            if data:
+                                memory_data = json.loads(data)
+                                if memory_data['metadata'].get('user_id') == user_id:
+                                    deleted_memories.append({
+                                        'memory_id': memory_data['memory_id'],
+                                        'content': memory_data['content'],
+                                        'metadata': memory_data['metadata'],
+                                        'deleted_at': memory_data['deleted_at'],
+                                        'recoverable_until': memory_data['recoverable_until'],
+                                        'status': 'soft_deleted'
+                                    })
+                        except Exception as e:
+                            logger.warning(f"Error processing deleted memory for export: {e}")
+                except Exception as e:
+                    logger.error(f"Error exporting deleted memories: {e}")
+            
+            export_data = {
+                "user_id": user_id,
+                "export_timestamp": datetime.now().isoformat(),
+                "data_controller": "ClaudeOps hAIveMind Memory System",
+                "legal_basis": "GDPR Article 20 - Right to data portability",
+                "memories": user_memories,
+                "deleted_memories": deleted_memories,
+                "total_active_memories": len(user_memories),
+                "total_deleted_memories": len(deleted_memories),
+                "machine_id": self.machine_id
+            }
+            
+            # Log export for compliance
+            export_log = {
+                "action": "gdpr_export_user_data", 
+                "user_id": user_id,
+                "memories_exported": len(user_memories),
+                "deleted_memories_exported": len(deleted_memories),
+                "format": format,
+                "timestamp": datetime.now().isoformat(),
+                "machine_id": self.machine_id,
+                "compliance_basis": "GDPR Article 20 - Right to data portability"
+            }
+            
+            await self._log_deletion_audit(export_log)
+            
+            if format == "csv":
+                # Convert to CSV format for easier consumption
+                import csv
+                import io
+                
+                output = io.StringIO()
+                if user_memories:
+                    fieldnames = ['memory_id', 'content', 'category', 'created_at', 'context', 'tags', 'project', 'machine_id', 'scope']
+                    writer = csv.DictWriter(output, fieldnames=fieldnames)
+                    writer.writeheader()
+                    
+                    for memory in user_memories:
+                        row = {k: v for k, v in memory.items() if k in fieldnames}
+                        row['tags'] = ','.join(row.get('tags', []))
+                        writer.writerow(row)
+                
+                export_data['csv_data'] = output.getvalue()
+                output.close()
+            
+            return {
+                "success": True,
+                "export_data": export_data,
+                "format": format
+            }
+            
+        except Exception as e:
+            logger.error(f"GDPR export error: {e}")
+            return {"error": str(e), "user_id": user_id}
+
 class MemoryMCPServer:
     """MCP Server for distributed memory management using ChromaDB"""
     
@@ -2210,6 +3118,118 @@ class MemoryMCPServer:
                         },
                         "required": []
                     }
+                ),
+                # ============ Memory Deletion & Lifecycle Management Tools ============
+                Tool(
+                    name="delete_memory",
+                    description="Delete a memory by ID with soft delete (recoverable) or hard delete (permanent)",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "memory_id": {"type": "string", "description": "ID of the memory to delete"},
+                            "hard_delete": {"type": "boolean", "description": "Permanently delete (true) or soft delete with recovery (false)", "default": False},
+                            "reason": {"type": "string", "description": "Reason for deletion", "default": "User request"}
+                        },
+                        "required": ["memory_id"]
+                    }
+                ),
+                Tool(
+                    name="bulk_delete_memories",
+                    description="Bulk delete memories based on filters with confirmation required",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "category": {"type": "string", "description": "Filter by category", "enum": ["project", "conversation", "agent", "global", "infrastructure", "incidents", "deployments", "monitoring", "runbooks", "security"]},
+                            "project": {"type": "string", "description": "Filter by project"},
+                            "user_id": {"type": "string", "description": "Filter by user ID"},
+                            "date_from": {"type": "string", "description": "Delete memories from this date (ISO format)"},
+                            "date_to": {"type": "string", "description": "Delete memories until this date (ISO format)"},
+                            "tags": {"type": "array", "items": {"type": "string"}, "description": "Filter by tags"},
+                            "hard_delete": {"type": "boolean", "description": "Permanently delete (true) or soft delete (false)", "default": False},
+                            "reason": {"type": "string", "description": "Reason for bulk deletion", "default": "Bulk deletion"},
+                            "confirm": {"type": "boolean", "description": "Required confirmation for bulk deletion", "default": False}
+                        },
+                        "required": ["confirm"]
+                    }
+                ),
+                Tool(
+                    name="recover_deleted_memory", 
+                    description="Recover a soft-deleted memory from the recycle bin within 30 days",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "memory_id": {"type": "string", "description": "ID of the deleted memory to recover"}
+                        },
+                        "required": ["memory_id"]
+                    }
+                ),
+                Tool(
+                    name="list_deleted_memories",
+                    description="List memories in the recycle bin that can be recovered",
+                    inputSchema={
+                        "type": "object", 
+                        "properties": {
+                            "limit": {"type": "integer", "description": "Maximum number of deleted memories to return", "default": 50}
+                        },
+                        "required": []
+                    }
+                ),
+                Tool(
+                    name="detect_duplicate_memories",
+                    description="Detect potentially duplicate memories using semantic similarity",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "threshold": {"type": "number", "description": "Similarity threshold (0.0-1.0)", "default": 0.9}
+                        },
+                        "required": []
+                    }
+                ),
+                Tool(
+                    name="merge_duplicate_memories",
+                    description="Merge two duplicate memories, keeping one and deleting the other",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "memory_id_1": {"type": "string", "description": "First memory ID"},
+                            "memory_id_2": {"type": "string", "description": "Second memory ID"},
+                            "keep_memory": {"type": "string", "enum": ["newest", "longest"], "description": "Strategy for which memory to keep", "default": "newest"}
+                        },
+                        "required": ["memory_id_1", "memory_id_2"]
+                    }
+                ),
+                Tool(
+                    name="cleanup_expired_deletions",
+                    description="Clean up expired soft deletions and apply data retention policies",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {},
+                        "required": []
+                    }
+                ),
+                Tool(
+                    name="gdpr_delete_user_data",
+                    description="GDPR compliant deletion of all data for a specific user (right to be forgotten)",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "user_id": {"type": "string", "description": "User ID whose data should be deleted"},
+                            "confirm": {"type": "boolean", "description": "Required confirmation for GDPR deletion", "default": False}
+                        },
+                        "required": ["user_id", "confirm"]
+                    }
+                ),
+                Tool(
+                    name="gdpr_export_user_data",
+                    description="GDPR compliant export of all data for a specific user (data portability)",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "user_id": {"type": "string", "description": "User ID whose data should be exported"},
+                            "format": {"type": "string", "enum": ["json", "csv"], "description": "Export format", "default": "json"}
+                        },
+                        "required": ["user_id"]
+                    }
                 )
             ]
         
@@ -2337,6 +3357,43 @@ class MemoryMCPServer:
                     else:
                         # For other rules tools, create generic handlers
                         return [TextContent(type="text", text=f"🧠 Rules tool '{name}' executed successfully")]
+                
+                # ============ Memory Deletion & Lifecycle Management Handlers ============
+                elif name == "delete_memory":
+                    result = await self.storage.delete_memory(**arguments)
+                    return [TextContent(type="text", text=json.dumps(result, indent=2))]
+                
+                elif name == "bulk_delete_memories":
+                    result = await self.storage.bulk_delete_memories(**arguments)
+                    return [TextContent(type="text", text=json.dumps(result, indent=2))]
+                
+                elif name == "recover_deleted_memory":
+                    result = await self.storage.recover_deleted_memory(**arguments)
+                    return [TextContent(type="text", text=json.dumps(result, indent=2))]
+                
+                elif name == "list_deleted_memories":
+                    result = await self.storage.list_deleted_memories(**arguments)
+                    return [TextContent(type="text", text=json.dumps(result, indent=2))]
+                
+                elif name == "detect_duplicate_memories":
+                    result = await self.storage.detect_duplicate_memories(**arguments)
+                    return [TextContent(type="text", text=json.dumps(result, indent=2))]
+                
+                elif name == "merge_duplicate_memories":
+                    result = await self.storage.merge_duplicate_memories(**arguments)
+                    return [TextContent(type="text", text=json.dumps(result, indent=2))]
+                
+                elif name == "cleanup_expired_deletions":
+                    result = await self.storage.cleanup_expired_deletions()
+                    return [TextContent(type="text", text=json.dumps(result, indent=2))]
+                
+                elif name == "gdpr_delete_user_data":
+                    result = await self.storage.gdpr_delete_user_data(**arguments)
+                    return [TextContent(type="text", text=json.dumps(result, indent=2))]
+                
+                elif name == "gdpr_export_user_data":
+                    result = await self.storage.gdpr_export_user_data(**arguments)
+                    return [TextContent(type="text", text=json.dumps(result, indent=2))]
                 
                 else:
                     raise ValueError(f"Unknown tool: {name}")
