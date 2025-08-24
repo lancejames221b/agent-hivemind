@@ -21,6 +21,7 @@ import jinja2
 
 from database import ControlDatabase, UserRole, DeviceStatus, KeyStatus
 from playbook_engine import PlaybookEngine, load_playbook_content, PlaybookValidationError
+from config_generator import ConfigGenerator, ConfigFormat, create_config_generator
 from pathlib import Path
 import uuid
 
@@ -56,8 +57,22 @@ class GenerateKeyRequest(BaseModel):
 
 class MCPConfigRequest(BaseModel):
     device_id: str
-    format: str = "claude_desktop"  # or "claude_code", "custom"
+    format: str = "claude_desktop"  # or "claude_code", "custom", "mcp_json", "yaml", "shell_script", "docker_compose"
     include_auth: bool = True
+    auth_expires_hours: Optional[int] = None
+    server_filter: Optional[List[str]] = None
+
+class ConfigGenerateRequest(BaseModel):
+    user_id: str
+    device_id: str
+    formats: List[str]
+    include_auth: bool = True
+    auth_expires_hours: Optional[int] = None
+    server_filter: Optional[List[str]] = None
+
+class ConfigDownloadRequest(BaseModel):
+    config_id: str
+    format: str
 
 class DashboardServer:
     def __init__(self, db_path: str = "database/haivemind.db"):
@@ -96,6 +111,8 @@ class DashboardServer:
         self.playbook_engine = PlaybookEngine(allow_unsafe_shell=False)
         # Memory storage for hAIveMind awareness (initialized lazily when needed)
         self._memory_storage = None
+        # Configuration generator (initialized lazily when needed)
+        self._config_generator = None
 
     def _get_config(self) -> dict:
         try:
@@ -114,6 +131,18 @@ class DashboardServer:
             self._memory_storage = MemoryStorage(cfg)
             return self._memory_storage
         except Exception:
+            return None
+    
+    def _get_config_generator(self):
+        if self._config_generator is not None:
+            return self._config_generator
+        try:
+            cfg = self._get_config()
+            memory_storage = self._get_memory_storage()
+            self._config_generator = ConfigGenerator(cfg, memory_storage)
+            return self._config_generator
+        except Exception as e:
+            print(f"Failed to initialize config generator: {e}")
             return None
     
     def setup_routes(self):
@@ -327,19 +356,307 @@ class DashboardServer:
                 if current_user['role'] != 'admin' and device.owner_id != current_user['user_id']:
                     raise HTTPException(status_code=403, detail="Access denied")
                 
-                # Generate config based on format
-                if request.format == "claude_desktop":
-                    config = self._generate_claude_desktop_config(device, request.include_auth)
-                elif request.format == "claude_code":
-                    config = self._generate_claude_code_config(device, request.include_auth)
-                else:
-                    config = self._generate_custom_config(device, request.include_auth)
+                # Use new configuration generator
+                config_generator = self._get_config_generator()
+                if not config_generator:
+                    raise HTTPException(status_code=500, detail="Configuration generator not available")
+                
+                # Map format string to enum
+                format_map = {
+                    "claude_desktop": ConfigFormat.CLAUDE_DESKTOP,
+                    "claude_code": ConfigFormat.CLAUDE_CODE,
+                    "custom": ConfigFormat.CUSTOM_JSON,
+                    "mcp_json": ConfigFormat.MCP_JSON,
+                    "yaml": ConfigFormat.YAML,
+                    "shell_script": ConfigFormat.SHELL_SCRIPT,
+                    "docker_compose": ConfigFormat.DOCKER_COMPOSE
+                }
+                
+                config_format = format_map.get(request.format, ConfigFormat.CLAUDE_DESKTOP)
+                
+                # Generate configuration
+                client_config = config_generator.generate_client_config(
+                    user_id=str(current_user['user_id']),
+                    device_id=request.device_id,
+                    format=config_format,
+                    include_auth=request.include_auth,
+                    auth_expires_hours=request.auth_expires_hours,
+                    server_filter=request.server_filter
+                )
+                
+                config_string = config_generator.template_engine.generate(client_config)
+                
+                # Store in hAIveMind memory
+                await config_generator.store_config_memory(client_config, "generated")
+                
+                # Get suggestions for improvement
+                suggestions = await config_generator.suggest_configuration_improvements(client_config)
+                
+                # Parse config for JSON response (if it's JSON format)
+                config_data = config_string
+                if request.format in ["claude_desktop", "claude_code", "custom", "mcp_json"]:
+                    try:
+                        config_data = json.loads(config_string)
+                    except:
+                        pass
                 
                 return {
-                    "config": config,
+                    "config": config_data,
+                    "config_string": config_string,
                     "format": request.format,
                     "device_id": device.device_id,
+                    "client_id": client_config.client_id,
+                    "suggestions": suggestions,
                     "generated_at": datetime.utcnow().isoformat()
+                }
+                
+            except HTTPException:
+                raise
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+        
+        @self.app.post("/api/v1/config/generate-multiple")
+        async def generate_multiple_configs(request: ConfigGenerateRequest,
+                                          current_user: dict = Depends(self.get_current_user)):
+            """Generate configurations in multiple formats"""
+            try:
+                # Verify device access
+                device = self.db.get_device(request.device_id)
+                if not device:
+                    raise HTTPException(status_code=404, detail="Device not found")
+                
+                if current_user['role'] != 'admin' and device.owner_id != current_user['user_id']:
+                    raise HTTPException(status_code=403, detail="Access denied")
+                
+                config_generator = self._get_config_generator()
+                if not config_generator:
+                    raise HTTPException(status_code=500, detail="Configuration generator not available")
+                
+                # Map format strings to enums
+                format_map = {
+                    "claude_desktop": ConfigFormat.CLAUDE_DESKTOP,
+                    "claude_code": ConfigFormat.CLAUDE_CODE,
+                    "custom": ConfigFormat.CUSTOM_JSON,
+                    "mcp_json": ConfigFormat.MCP_JSON,
+                    "yaml": ConfigFormat.YAML,
+                    "shell_script": ConfigFormat.SHELL_SCRIPT,
+                    "docker_compose": ConfigFormat.DOCKER_COMPOSE
+                }
+                
+                formats = [format_map.get(f, ConfigFormat.CLAUDE_DESKTOP) for f in request.formats]
+                
+                # Generate multiple configurations
+                configs = config_generator.generate_multiple_formats(
+                    user_id=request.user_id,
+                    device_id=request.device_id,
+                    formats=formats,
+                    include_auth=request.include_auth,
+                    auth_expires_hours=request.auth_expires_hours
+                )
+                
+                return {
+                    "configs": configs,
+                    "device_id": request.device_id,
+                    "generated_at": datetime.utcnow().isoformat()
+                }
+                
+            except HTTPException:
+                raise
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+        
+        @self.app.get("/api/v1/config/download/{format}")
+        async def download_config(format: str, device_id: str,
+                                current_user: dict = Depends(self.get_current_user)):
+            """Download configuration file"""
+            try:
+                device = self.db.get_device(device_id)
+                if not device:
+                    raise HTTPException(status_code=404, detail="Device not found")
+                
+                if current_user['role'] != 'admin' and device.owner_id != current_user['user_id']:
+                    raise HTTPException(status_code=403, detail="Access denied")
+                
+                config_generator = self._get_config_generator()
+                if not config_generator:
+                    raise HTTPException(status_code=500, detail="Configuration generator not available")
+                
+                # Map format to enum
+                format_map = {
+                    "claude_desktop": ConfigFormat.CLAUDE_DESKTOP,
+                    "claude_code": ConfigFormat.CLAUDE_CODE,
+                    "custom": ConfigFormat.CUSTOM_JSON,
+                    "mcp_json": ConfigFormat.MCP_JSON,
+                    "yaml": ConfigFormat.YAML,
+                    "shell_script": ConfigFormat.SHELL_SCRIPT,
+                    "docker_compose": ConfigFormat.DOCKER_COMPOSE
+                }
+                
+                config_format = format_map.get(format, ConfigFormat.CLAUDE_DESKTOP)
+                
+                # Generate configuration
+                config_string = config_generator.generate_config_string(
+                    user_id=str(current_user['user_id']),
+                    device_id=device_id,
+                    format=config_format,
+                    include_auth=True
+                )
+                
+                # Determine file extension and content type
+                extensions = {
+                    "claude_desktop": ".json",
+                    "claude_code": ".json", 
+                    "custom": ".json",
+                    "mcp_json": ".json",
+                    "yaml": ".yaml",
+                    "shell_script": ".sh",
+                    "docker_compose": ".yml"
+                }
+                
+                content_types = {
+                    "claude_desktop": "application/json",
+                    "claude_code": "application/json",
+                    "custom": "application/json", 
+                    "mcp_json": "application/json",
+                    "yaml": "application/x-yaml",
+                    "shell_script": "application/x-sh",
+                    "docker_compose": "application/x-yaml"
+                }
+                
+                filename = f"haivemind-{device_id}-{format}{extensions.get(format, '.txt')}"
+                content_type = content_types.get(format, "text/plain")
+                
+                from fastapi.responses import Response
+                return Response(
+                    content=config_string,
+                    media_type=content_type,
+                    headers={"Content-Disposition": f"attachment; filename={filename}"}
+                )
+                
+            except HTTPException:
+                raise
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+        
+        @self.app.get("/api/v1/config/servers")
+        async def list_available_servers(current_user: dict = Depends(self.get_current_user)):
+            """List available MCP servers for configuration"""
+            try:
+                config_generator = self._get_config_generator()
+                if not config_generator:
+                    raise HTTPException(status_code=500, detail="Configuration generator not available")
+                
+                servers = config_generator.discover_servers()
+                
+                return {
+                    "servers": [
+                        {
+                            "id": s.id,
+                            "name": s.name,
+                            "host": s.host,
+                            "port": s.port,
+                            "transport": s.transport.value,
+                            "ssl": s.ssl,
+                            "priority": s.priority,
+                            "description": s.description,
+                            "tags": s.tags,
+                            "health_check": s.health_check
+                        }
+                        for s in servers
+                    ]
+                }
+                
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+        
+        @self.app.get("/api/v1/config/analytics")
+        async def get_config_analytics(current_user: dict = Depends(self.get_current_user)):
+            """Get configuration generation analytics"""
+            try:
+                config_generator = self._get_config_generator()
+                if not config_generator:
+                    raise HTTPException(status_code=500, detail="Configuration generator not available")
+                
+                # Get basic analytics
+                analytics = config_generator.get_config_analytics()
+                
+                # Get hAIveMind usage patterns
+                usage_patterns = await config_generator.analyze_client_usage_patterns()
+                analytics.update(usage_patterns)
+                
+                return analytics
+                
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+        
+        @self.app.get("/api/v1/config/suggestions/{device_id}")
+        async def get_config_suggestions(device_id: str, format: str = "claude_desktop",
+                                       current_user: dict = Depends(self.get_current_user)):
+            """Get configuration improvement suggestions"""
+            try:
+                device = self.db.get_device(device_id)
+                if not device:
+                    raise HTTPException(status_code=404, detail="Device not found")
+                
+                if current_user['role'] != 'admin' and device.owner_id != current_user['user_id']:
+                    raise HTTPException(status_code=403, detail="Access denied")
+                
+                config_generator = self._get_config_generator()
+                if not config_generator:
+                    raise HTTPException(status_code=500, detail="Configuration generator not available")
+                
+                # Create a sample config to analyze
+                format_map = {
+                    "claude_desktop": ConfigFormat.CLAUDE_DESKTOP,
+                    "claude_code": ConfigFormat.CLAUDE_CODE,
+                    "custom": ConfigFormat.CUSTOM_JSON,
+                    "mcp_json": ConfigFormat.MCP_JSON,
+                    "yaml": ConfigFormat.YAML,
+                    "shell_script": ConfigFormat.SHELL_SCRIPT,
+                    "docker_compose": ConfigFormat.DOCKER_COMPOSE
+                }
+                
+                config_format = format_map.get(format, ConfigFormat.CLAUDE_DESKTOP)
+                
+                client_config = config_generator.generate_client_config(
+                    user_id=str(current_user['user_id']),
+                    device_id=device_id,
+                    format=config_format,
+                    include_auth=True
+                )
+                
+                suggestions = await config_generator.suggest_configuration_improvements(client_config)
+                
+                return {
+                    "device_id": device_id,
+                    "suggestions": suggestions,
+                    "generated_at": datetime.utcnow().isoformat()
+                }
+                
+            except HTTPException:
+                raise
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+        
+        @self.app.post("/api/v1/config/performance")
+        async def report_client_performance(request: dict, current_user: dict = Depends(self.get_current_user)):
+            """Report client performance data for hAIveMind learning"""
+            try:
+                config_generator = self._get_config_generator()
+                if not config_generator:
+                    raise HTTPException(status_code=500, detail="Configuration generator not available")
+                
+                client_id = request.get('client_id')
+                performance_data = request.get('performance_data', {})
+                
+                if not client_id:
+                    raise HTTPException(status_code=400, detail="client_id is required")
+                
+                await config_generator.learn_from_client_performance(client_id, performance_data)
+                
+                return {
+                    "success": True,
+                    "message": "Performance data recorded successfully"
                 }
                 
             except HTTPException:
