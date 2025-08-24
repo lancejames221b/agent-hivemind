@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Servers - hAIveMind Control Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .status-online { color: #10B981; }
+        .status-offline { color: #EF4444; }
+        .status-error { color: #F59E0B; }
+        .status-disabled { color: #6B7280; }
+        .status-unknown { color: #9CA3AF; }
+        
+        .server-card {
+            transition: all 0.2s;
+            border-left: 4px solid transparent;
+        }
+        .server-card:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        .server-card.online { border-left-color: #10B981; }
+        .server-card.offline { border-left-color: #EF4444; }
+        .server-card.error { border-left-color: #F59E0B; }
+        .server-card.disabled { border-left-color: #6B7280; }
+        
+        .modal {
+            display: none;
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+        .modal.show {
+            display: flex;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <nav class="bg-blue-900 text-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center space-x-8">
+                    <a href="/" class="flex items-center space-x-2 text-xl font-bold">
+                        <i class="fas fa-brain"></i>
+                        <span>hAIveMind Control</span>
+                    </a>
+                    <div class="hidden md:flex space-x-6">
+                        <a href="/" class="hover:text-blue-200">Dashboard</a>
+                        <a href="/devices" class="hover:text-blue-200">Devices</a>
+                        <a href="/mcp_servers" class="bg-blue-800 px-3 py-2 rounded">MCP Servers</a>
+                        <a href="/users" class="hover:text-blue-200">Users</a>
+                    </div>
+                </div>
+                <div class="flex items-center">
+                    <span class="mr-4" id="current-user">Loading...</span>
+                    <button onclick="logout()" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded">
+                        <i class="fas fa-sign-out-alt mr-2"></i>Logout
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="max-w-7xl mx-auto py-6 px-4">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-6">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900">MCP Servers</h1>
+                <p class="text-gray-600 mt-1">Manage Model Context Protocol servers and monitor their health</p>
+            </div>
+            <button onclick="showAddServerModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center">
+                <i class="fas fa-plus mr-2"></i>Add Server
+            </button>
+        </div>
+
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <div class="bg-white rounded-lg p-4 shadow">
+                <div class="flex items-center">
+                    <div class="p-2 bg-green-100 rounded-lg">
+                        <i class="fas fa-check-circle text-green-600"></i>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-sm text-gray-600">Online Servers</p>
+                        <p class="text-lg font-semibold" id="online-count">0</p>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-white rounded-lg p-4 shadow">
+                <div class="flex items-center">
+                    <div class="p-2 bg-red-100 rounded-lg">
+                        <i class="fas fa-times-circle text-red-600"></i>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-sm text-gray-600">Offline Servers</p>
+                        <p class="text-lg font-semibold" id="offline-count">0</p>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-white rounded-lg p-4 shadow">
+                <div class="flex items-center">
+                    <div class="p-2 bg-yellow-100 rounded-lg">
+                        <i class="fas fa-exclamation-triangle text-yellow-600"></i>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-sm text-gray-600">Error Servers</p>
+                        <p class="text-lg font-semibold" id="error-count">0</p>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-white rounded-lg p-4 shadow">
+                <div class="flex items-center">
+                    <div class="p-2 bg-blue-100 rounded-lg">
+                        <i class="fas fa-server text-blue-600"></i>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-sm text-gray-600">Total Servers</p>
+                        <p class="text-lg font-semibold" id="total-count">0</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Servers List -->
+        <div class="bg-white rounded-lg shadow overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h2 class="text-lg font-medium text-gray-900">MCP Servers</h2>
+            </div>
+            <div id="servers-list" class="divide-y divide-gray-200">
+                <!-- Server cards will be populated here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit Server Modal -->
+    <div id="server-modal" class="fixed inset-0 z-50 modal items-center justify-center">
+        <div class="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+            <div class="flex justify-between items-center mb-4">
+                <h3 id="modal-title" class="text-lg font-medium">Add MCP Server</h3>
+                <button onclick="hideServerModal()" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form id="server-form" onsubmit="saveServer(event)">
+                <input type="hidden" id="server-id">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Server Name *</label>
+                        <input type="text" id="server-name" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Server Type *</label>
+                        <select id="server-type" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="">Select type...</option>
+                            <option value="stdio">STDIO</option>
+                            <option value="http">HTTP</option>
+                            <option value="sse">SSE</option>
+                            <option value="websocket">WebSocket</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Endpoint *</label>
+                        <input type="text" id="server-endpoint" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="http://localhost:8900/sse">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                        <textarea id="server-description" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" rows="3"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                        <input type="number" id="server-priority" value="100" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" min="1">
+                        <p class="text-xs text-gray-500 mt-1">Lower number = higher priority</p>
+                    </div>
+                    <div>
+                        <label class="flex items-center">
+                            <input type="checkbox" id="server-enabled" checked class="mr-2">
+                            <span class="text-sm font-medium text-gray-700">Enabled</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="flex justify-end space-x-3 mt-6">
+                    <button type="button" onclick="hideServerModal()" class="px-4 py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50">Cancel</button>
+                    <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let servers = [];
+        
+        // Auth functions
+        function getAuthToken() {
+            return localStorage.getItem('auth_token');
+        }
+        
+        function logout() {
+            localStorage.removeItem('auth_token');
+            window.location.href = '/login';
+        }
+        
+        // API helper
+        async function apiRequest(url, options = {}) {
+            const token = getAuthToken();
+            if (!token) {
+                window.location.href = '/login';
+                return;
+            }
+            
+            const response = await fetch(url, {
+                ...options,
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                    ...options.headers
+                }
+            });
+            
+            if (response.status === 401) {
+                logout();
+                return;
+            }
+            
+            return response;
+        }
+        
+        // Load current user
+        async function loadCurrentUser() {
+            try {
+                const response = await apiRequest('/api/v1/auth/verify');
+                const data = await response.json();
+                document.getElementById('current-user').textContent = data.user.username;
+            } catch (error) {
+                console.error('Error loading user:', error);
+            }
+        }
+        
+        // Load servers
+        async function loadServers() {
+            try {
+                const response = await apiRequest('/api/v1/mcp/servers');
+                const data = await response.json();
+                servers = data.servers;
+                renderServers();
+                updateStats();
+            } catch (error) {
+                console.error('Error loading servers:', error);
+            }
+        }
+        
+        // Render servers
+        function renderServers() {
+            const container = document.getElementById('servers-list');
+            
+            if (servers.length === 0) {
+                container.innerHTML = `
+                    <div class="p-8 text-center text-gray-500">
+                        <i class="fas fa-server text-4xl mb-4"></i>
+                        <p class="text-lg">No MCP servers configured</p>
+                        <p class="text-sm">Add your first server to get started</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = servers.map(server => {
+                const statusClass = `status-${server.health.status}`;
+                const cardClass = `server-card ${server.health.status}`;
+                const statusIcon = {
+                    online: 'fas fa-check-circle',
+                    offline: 'fas fa-times-circle',
+                    error: 'fas fa-exclamation-triangle',
+                    disabled: 'fas fa-pause-circle',
+                    unknown: 'fas fa-question-circle'
+                }[server.health.status] || 'fas fa-question-circle';
+                
+                return `
+                    <div class="${cardClass} p-6">
+                        <div class="flex justify-between items-start">
+                            <div class="flex-1">
+                                <div class="flex items-center space-x-3">
+                                    <h3 class="text-lg font-medium text-gray-900">${server.name}</h3>
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-${server.server_type === 'sse' ? 'blue' : server.server_type === 'http' ? 'green' : 'purple'}-100 text-${server.server_type === 'sse' ? 'blue' : server.server_type === 'http' ? 'green' : 'purple'}-800">
+                                        ${server.server_type.toUpperCase()}
+                                    </span>
+                                    <span class="inline-flex items-center space-x-1">
+                                        <i class="${statusIcon} ${statusClass}"></i>
+                                        <span class="text-sm ${statusClass} font-medium">${server.health.status.charAt(0).toUpperCase() + server.health.status.slice(1)}</span>
+                                    </span>
+                                </div>
+                                <p class="text-sm text-gray-600 mt-1">${server.endpoint}</p>
+                                ${server.description ? `<p class="text-sm text-gray-500 mt-1">${server.description}</p>` : ''}
+                                
+                                <div class="flex items-center space-x-4 mt-3 text-xs text-gray-500">
+                                    <span>Priority: ${server.priority}</span>
+                                    ${server.health.response_time_ms ? `<span>Response: ${server.health.response_time_ms}ms</span>` : ''}
+                                    ${server.health.tools_available && server.health.tools_available.length > 0 ? `<span>Tools: ${server.health.tools_available.length}</span>` : ''}
+                                    ${server.health.last_check ? `<span>Last Check: ${new Date(server.health.last_check).toLocaleString()}</span>` : ''}
+                                </div>
+                                
+                                ${server.health.error_message ? `<p class="text-sm text-red-600 mt-2"><i class="fas fa-exclamation-circle mr-1"></i>${server.health.error_message}</p>` : ''}
+                            </div>
+                            
+                            <div class="flex items-center space-x-2">
+                                <button onclick="toggleServer(${server.id})" class="px-3 py-1 text-xs rounded ${server.enabled ? 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200' : 'bg-green-100 text-green-800 hover:bg-green-200'}">
+                                    <i class="fas fa-${server.enabled ? 'pause' : 'play'} mr-1"></i>
+                                    ${server.enabled ? 'Disable' : 'Enable'}
+                                </button>
+                                <button onclick="editServer(${server.id})" class="px-3 py-1 text-xs bg-blue-100 text-blue-800 rounded hover:bg-blue-200">
+                                    <i class="fas fa-edit mr-1"></i>Edit
+                                </button>
+                                <button onclick="deleteServer(${server.id})" class="px-3 py-1 text-xs bg-red-100 text-red-800 rounded hover:bg-red-200">
+                                    <i class="fas fa-trash mr-1"></i>Delete
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        // Update stats
+        function updateStats() {
+            const stats = servers.reduce((acc, server) => {
+                acc.total++;
+                acc[server.health.status] = (acc[server.health.status] || 0) + 1;
+                return acc;
+            }, { total: 0, online: 0, offline: 0, error: 0, disabled: 0, unknown: 0 });
+            
+            document.getElementById('total-count').textContent = stats.total;
+            document.getElementById('online-count').textContent = stats.online || 0;
+            document.getElementById('offline-count').textContent = stats.offline || 0;
+            document.getElementById('error-count').textContent = stats.error || 0;
+        }
+        
+        // Modal functions
+        function showAddServerModal() {
+            document.getElementById('modal-title').textContent = 'Add MCP Server';
+            document.getElementById('server-form').reset();
+            document.getElementById('server-id').value = '';
+            document.getElementById('server-enabled').checked = true;
+            document.getElementById('server-modal').classList.add('show');
+        }
+        
+        function hideServerModal() {
+            document.getElementById('server-modal').classList.remove('show');
+        }
+        
+        function editServer(serverId) {
+            const server = servers.find(s => s.id === serverId);
+            if (!server) return;
+            
+            document.getElementById('modal-title').textContent = 'Edit MCP Server';
+            document.getElementById('server-id').value = server.id;
+            document.getElementById('server-name').value = server.name;
+            document.getElementById('server-type').value = server.server_type;
+            document.getElementById('server-endpoint').value = server.endpoint;
+            document.getElementById('server-description').value = server.description || '';
+            document.getElementById('server-priority').value = server.priority;
+            document.getElementById('server-enabled').checked = server.enabled;
+            document.getElementById('server-modal').classList.add('show');
+        }
+        
+        // Save server
+        async function saveServer(event) {
+            event.preventDefault();
+            
+            const serverId = document.getElementById('server-id').value;
+            const serverData = {
+                name: document.getElementById('server-name').value,
+                server_type: document.getElementById('server-type').value,
+                endpoint: document.getElementById('server-endpoint').value,
+                description: document.getElementById('server-description').value || null,
+                priority: parseInt(document.getElementById('server-priority').value),
+                enabled: document.getElementById('server-enabled').checked,
+                config: {},
+                tags: []
+            };
+            
+            try {
+                let response;
+                if (serverId) {
+                    response = await apiRequest(`/api/v1/mcp/servers/${serverId}`, {
+                        method: 'PUT',
+                        body: JSON.stringify(serverData)
+                    });
+                } else {
+                    response = await apiRequest('/api/v1/mcp/servers', {
+                        method: 'POST',
+                        body: JSON.stringify(serverData)
+                    });
+                }
+                
+                if (response.ok) {
+                    hideServerModal();
+                    loadServers();
+                } else {
+                    const error = await response.json();
+                    alert('Error: ' + error.detail);
+                }
+            } catch (error) {
+                alert('Error saving server: ' + error.message);
+            }
+        }
+        
+        // Toggle server
+        async function toggleServer(serverId) {
+            try {
+                const response = await apiRequest(`/api/v1/mcp/servers/${serverId}/toggle`, {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    loadServers();
+                } else {
+                    const error = await response.json();
+                    alert('Error: ' + error.detail);
+                }
+            } catch (error) {
+                alert('Error toggling server: ' + error.message);
+            }
+        }
+        
+        // Delete server
+        async function deleteServer(serverId) {
+            const server = servers.find(s => s.id === serverId);
+            if (!server) return;
+            
+            if (!confirm(`Are you sure you want to delete "${server.name}"? This action cannot be undone.`)) {
+                return;
+            }
+            
+            try {
+                const response = await apiRequest(`/api/v1/mcp/servers/${serverId}`, {
+                    method: 'DELETE'
+                });
+                
+                if (response.ok) {
+                    loadServers();
+                } else {
+                    const error = await response.json();
+                    alert('Error: ' + error.detail);
+                }
+            } catch (error) {
+                alert('Error deleting server: ' + error.message);
+            }
+        }
+        
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            loadCurrentUser();
+            loadServers();
+            
+            // Auto-refresh every 30 seconds
+            setInterval(loadServers, 30000);
+        });
+        
+        // Close modal on escape key
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                hideServerModal();
+            }
+        });
+    </script>
+</body>
+</html>
