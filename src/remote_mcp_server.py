@@ -24,6 +24,7 @@ except ImportError:
 
 from memory_server import MemoryStorage
 from auth import AuthManager
+from command_installer import CommandInstaller
 
 # Setup logging
 logging.basicConfig(
@@ -46,6 +47,7 @@ class RemoteMemoryMCPServer:
         # Initialize memory storage and auth
         self.storage = MemoryStorage(self.config)
         self.auth = AuthManager(self.config)
+        self.command_installer = CommandInstaller(self.storage, self.config)
         
         # Get remote server config
         remote_config = self.config.get('remote_server', {})
@@ -641,6 +643,232 @@ NETWORK TOPOLOGY:
             except Exception as e:
                 logger.error(f"Error uploading file: {e}")
                 return f"❌ Error uploading file: {str(e)}"
+
+        @self.mcp.tool()
+        async def sync_agent_commands(
+            agent_id: Optional[str] = None,
+            target_location: str = "auto",
+            force: bool = False
+        ) -> str:
+            """Sync hAIveMind commands to agent's Claude installation"""
+            try:
+                if not agent_id:
+                    agent_id = self.storage.agent_id
+                
+                # Get command templates from collective
+                commands_query = await self.storage.search_memories(
+                    query="hv-* command templates",
+                    category="agent",
+                    limit=20
+                )
+                
+                # Determine target location
+                if target_location == "auto":
+                    # Check if in project directory
+                    import os
+                    if os.path.exists(".claude"):
+                        target_location = "project"
+                    else:
+                        target_location = "personal"
+                
+                # Store sync record
+                sync_record = {
+                    'agent_id': agent_id,
+                    'target_location': target_location,
+                    'commands_synced': len(commands_query.get('memories', [])),
+                    'sync_time': time.time(),
+                    'force_sync': force
+                }
+                
+                await self.storage.store_memory(
+                    content=f"Agent {agent_id} synced {sync_record['commands_synced']} commands to {target_location}",
+                    category="agent",
+                    context=f"Command sync operation for {agent_id}",
+                    metadata=sync_record,
+                    tags=["command-sync", "agent-management", agent_id]
+                )
+                
+                return f"🔄 Commands synced for {agent_id}: {sync_record['commands_synced']} commands to {target_location} location"
+                
+            except Exception as e:
+                logger.error(f"Error syncing agent commands: {e}")
+                return f"❌ Error syncing commands: {str(e)}"
+
+        @self.mcp.tool()
+        async def sync_agent_config(
+            agent_id: Optional[str] = None,
+            machine_id: Optional[str] = None,
+            config_type: str = "claude_md"
+        ) -> str:
+            """Sync agent-specific CLAUDE.md configuration from collective storage"""
+            try:
+                if not agent_id:
+                    agent_id = self.storage.agent_id
+                if not machine_id:
+                    machine_id = self.storage.machine_id
+                
+                # Create agent-specific config key
+                config_key = f"{machine_id}-{agent_id}-{config_type}"
+                
+                # Search for existing config or create default
+                existing_config = await self.storage.search_memories(
+                    query=config_key,
+                    category="agent",
+                    limit=1
+                )
+                
+                if existing_config.get('memories'):
+                    config_content = existing_config['memories'][0]['content']
+                    config_action = "Retrieved existing"
+                else:
+                    # Create default agent config
+                    config_content = f"""# CLAUDE.md - {machine_id} Agent Configuration
+
+## hAIveMind Collective Commands
+
+You are connected to the hAIveMind collective as agent {agent_id} on {machine_id}.
+
+Available commands:
+- `/hv-sync` - Sync commands and configuration
+- `/hv-status` - Check collective status  
+- `/hv-broadcast <message>` - Broadcast to all agents
+- `/hv-query <question>` - Query collective knowledge
+- `/hv-delegate <task>` - Delegate task to best agent
+- `/hv-install` - Install/update hAIveMind system
+
+## Your Agent Identity
+- **Machine**: {machine_id}
+- **Agent ID**: {agent_id}
+- **Role**: Determined by capabilities and context
+- **Collective**: hAIveMind distributed intelligence network
+
+## Agent Capabilities
+This agent is automatically assigned capabilities based on the machine type and available tools.
+"""
+                    
+                    # Store the new config
+                    await self.storage.store_memory(
+                        content=config_content,
+                        category="agent", 
+                        context=f"CLAUDE.md configuration for {config_key}",
+                        metadata={
+                            'agent_id': agent_id,
+                            'machine_id': machine_id,
+                            'config_type': config_type,
+                            'config_key': config_key,
+                            'auto_generated': True,
+                            'creation_time': time.time()
+                        },
+                        tags=["claude-md", "agent-config", agent_id, machine_id]
+                    )
+                    config_action = "Created new"
+                
+                return f"⚙️ {config_action} configuration for {config_key}\n\nConfig stored in hAIveMind collective. Use with local CLAUDE.md integration."
+                
+            except Exception as e:
+                logger.error(f"Error syncing agent config: {e}")
+                return f"❌ Error syncing agent config: {str(e)}"
+
+        @self.mcp.tool()
+        async def install_agent_commands(
+            target_location: str = "auto",
+            force: bool = False
+        ) -> str:
+            """Install hAIveMind commands and complete agent setup"""
+            try:
+                result = await self.command_installer.sync_agent_installation(
+                    target_location=target_location,
+                    force=force
+                )
+                
+                if result['status'] == 'success':
+                    operations = '\n'.join(f"  • {op}" for op in result['operations'])
+                    return f"""🚀 hAIveMind Agent Installation Complete!
+
+**Agent**: {result['agent_id']} on {result['machine_id']}
+**Target**: {result['target_location']} commands directory
+**Commands**: {len(result.get('installed_commands', []))} hv-* commands installed
+
+**Operations Completed**:
+{operations}
+
+You can now use hAIveMind commands like:
+- `/hv-sync` - Sync commands and configuration  
+- `/hv-status` - Check collective status
+- `/hv-broadcast <message>` - Broadcast to collective
+- `/hv-query <question>` - Query collective knowledge
+
+🧠 Welcome to the hAIveMind collective intelligence network!"""
+                else:
+                    return f"❌ Installation failed: {result.get('error', 'Unknown error')}"
+                
+            except Exception as e:
+                logger.error(f"Error in agent installation: {e}")
+                return f"❌ Agent installation error: {str(e)}"
+
+        @self.mcp.tool()
+        async def check_agent_sync_status(
+            agent_id: Optional[str] = None
+        ) -> str:
+            """Check current sync status for this agent"""
+            try:
+                status = await self.command_installer.check_sync_status(agent_id)
+                
+                status_msg = f"""📊 hAIveMind Agent Sync Status
+
+**Agent**: {status['agent_id']} on {status['machine_id']}
+**Commands Installed**: {len(status['commands_installed'])} ({', '.join(status['commands_installed'][:3])}{'...' if len(status['commands_installed']) > 3 else ''})
+**Config Synced**: {'✅ Yes' if status['config_synced'] else '❌ No'}
+"""
+                
+                if status['last_sync']:
+                    from datetime import datetime
+                    sync_time = datetime.fromtimestamp(status['last_sync'])
+                    status_msg += f"**Last Sync**: {sync_time.strftime('%Y-%m-%d %H:%M:%S')}\n"
+                else:
+                    status_msg += "**Last Sync**: Never\n"
+                    status_msg += "\n💡 Run `/hv-install` to complete initial setup"
+                
+                return status_msg
+                
+            except Exception as e:
+                logger.error(f"Error checking sync status: {e}")
+                return f"❌ Error checking sync status: {str(e)}"
+
+        @self.mcp.tool()
+        async def trigger_auto_sync(
+            new_connection: bool = False
+        ) -> str:
+            """Trigger automatic sync workflow for agent connection"""
+            try:
+                agent_id = self.storage.agent_id
+                machine_id = self.storage.machine_id
+                
+                # Check if this is first connection
+                status = await self.command_installer.check_sync_status()
+                is_first_time = status['last_sync'] is None
+                
+                if is_first_time or new_connection:
+                    # Full installation for new agents
+                    result = await self.command_installer.sync_agent_installation(force=new_connection)
+                    
+                    if result['status'] == 'success':
+                        return f"""🎯 Auto-sync completed for {agent_id}!
+
+**First-time setup**: {'✅ Yes' if is_first_time else '❌ No (update)'}
+**Operations**: {len(result['operations'])} completed
+**Commands**: {len(result.get('installed_commands', []))} hv-* commands ready
+
+The agent is now synchronized with the hAIveMind collective. All commands and configurations are up to date."""
+                    else:
+                        return f"⚠️ Auto-sync partially failed: {result.get('error', 'Unknown error')}"
+                else:
+                    # Just update check for existing agents
+                    return f"✅ Agent {agent_id} already synchronized. Use `/hv-sync force` to force update."
+                
+            except Exception as e:
+                logger.error(f"Error in auto-sync: {e}")
+                return f"❌ Auto-sync error: {str(e)}"
         
         logger.info("🤝 All hive mind tools synchronized with network portal - collective intelligence ready")
     
