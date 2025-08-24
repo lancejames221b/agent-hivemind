@@ -44,43 +44,106 @@
 
 ```
         🧠 Distributed AI Collective Memory Network 🧠
-                                                                                
-   ┌─[node-alpha]─────────┐  ┌─[node-beta]─────────┐  ┌─[node-gamma]────────┐ 
-   │  🤖 Claude Agent     │  │  🤖 Claude Agent    │  │  🤖 Claude Agent    │ 
-   │  Role: Hive Mind     │  │  Role: Worker Drone │  │  Role: Worker Drone │ 
-   │                      │  │                     │  │                     │ 
-   │ ┌──🧠 Memory Hub──┐  │  │ ┌──🧠 Memory Hub──┐ │  │ ┌──🧠 Memory Hub──┐ │ 
-   │ │  hAIveMind MCP  │  │  │ │  hAIveMind MCP  │ │  │ │  hAIveMind MCP  │ │ 
-   │ │   Port: 8899    │◄─┼──┼►│   Port: 8899    │◄┼──┼►│   Port: 8899    │ │ 
-   │ └─────────────────┘  │  │ └─────────────────┘ │  │ └─────────────────┘ │ 
-   │          ║           │  │          ║          │  │          ║          │ 
-   │ ┌──Vector Store───┐  │  │ ┌──Vector Store───┐ │  │ ┌──Vector Store───┐ │ 
-   │ │ ChromaDB+Redis  │  │  │ │ ChromaDB+Redis  │ │  │ │ ChromaDB+Redis  │ │ 
-   │ │ 🔍 Semantic     │  │  │ │ 🔍 Semantic     │ │  │ │ 🔍 Semantic     │ │ 
-   │ │    Search       │  │  │ │    Search       │ │  │ │    Search       │ │ 
-   │ └─────────────────┘  │  │ └─────────────────┘ │  │ └─────────────────┘ │ 
-   └──────────────────────┘  └─────────────────────┘  └─────────────────────┘ 
-              ║                          ║                          ║           
-              ╚══════════════════════════╬══════════════════════════╝           
-                                         ║                                      
-                          🌐 Tailscale Encrypted VPN Network 🌐                
-                                         ║                                      
-              ┌──────────DevOps Infrastructure Fleet──────────┐                
-              │                                               │                
-    ┌─[db-cluster-01]─┐ ┌─[auth-gateway]─┐ ┌─[scraper-farm]─┐ ┌─[monitor-hub]─┐      
-    │ 🔍 Data Hub     │ │ 🔐 Auth Hub    │ │ 🕷️ Scrapers    │ │ 📊 Insights   │      
-    │ Capability:     │ │ Capability:    │ │ Capability:    │ │ Capability:   │      
-    │ Data Storage    │ │ Security       │ │ Collection     │ │ Monitoring    │      
-    └─────────────────┘ └────────────────┘ └────────────────┘ └───────────────┘      
-                                         ║                                      
-                          ⚡ Real-time Agent Collaboration ⚡                   
-                                                                               
-             🧠 Shared Knowledge • 🤝 Task Coordination • 📋 Runbooks          
+        
+                  ┌─────────────── TAILSCALE VPN ───────────────┐
+                  │          🔒 Encrypted Network Layer          │
+                  │                                              │
+                  │    ┌─[primary-node]───────┐                 │
+                  │    │  🤖 Claude Agent     │  tag:primary    │
+                  │    │  Role: Orchestrator  │                 │
+                  │    │  IP: 100.x.x.x       │                 │
+                  │    │ ┌──🧠 Memory Hub──┐  │                 │
+                  │    │ │  hAIveMind MCP  │  │                 │
+                  │    │ │   :8899 :8900   │◄─┼─────────────┐   │
+                  │    │ └─────────────────┘  │             │   │
+                  │    │ ┌──Vector Store───┐  │             │   │
+                  │    │ │ ChromaDB+Redis  │  │             │   │
+                  │    │ │ 🔍 Auth Required│  │             │   │
+                  │    │ └─────────────────┘  │             │   │
+                  │    └──────────────────────┘             │   │
+                  │                                         │   │
+        ┌─────────┼─────────────────────────────────────────┘   │
+        │         │   ┌─[worker-node]────────┐                 │
+        │         │   │  🤖 Claude Agent     │  tag:worker     │
+        │         │   │  Role: ES Specialist │                 │
+        │         │   │  IP: 100.x.x.x       │                 │
+        │         │   │ ┌──🧠 Memory Hub──┐  │                 │
+        │         │   │ │  hAIveMind MCP  │◄─┼─────────────────┘
+        │         │   │ │   :8899 :8900   │  │
+        │         │   │ └─────────────────┘  │
+        │         │   │ ┌──Vector Store───┐  │
+        │         │   │ │ ChromaDB+Redis  │  │
+        │         │   │ │ 🔐 Whitelisted  │  │
+        │         │   │ └─────────────────┘  │
+        │         │   └──────────────────────┘
+        │         │
+        │         └─ ✅ ACL PROTECTED PORTS:
+        │            • 8899: Sync Service
+        │            • 8900: MCP Remote  
+        │            • 6379: Redis Cache
+        │
+        │   🛡️ SECURITY LAYERS:
+        │   ┌─────────────────────────────────────┐
+        │   │ 1. Tailscale Network Encryption     │
+        │   │ 2. Machine Tags & ACL Whitelisting  │
+        │   │ 3. Firewall Port Restrictions       │
+        │   │ 4. API Token Authentication         │
+        │   │ 5. Redis Password Protection        │
+        │   └─────────────────────────────────────┘
+        │
+        └─── COORDINATED INFRASTRUCTURE FLEET ───
+                         │                        
+        ┌─[elastic1-5]─┐ ┌─[proxy0-9]─┐ ┌─[auth-server]─┐ ┌─[monitoring]─┐
+        │ 🔍 Search    │ │ 🕷️ Scrapers│ │ 🔐 Auth       │ │ 📊 Grafana   │
+        │ Capability:  │ │ Capability: │ │ Capability:   │ │ Capability:  │
+        │ elasticsearch│ │ data_collect│ │ security      │ │ monitoring   │
+        └──────────────┘ └─────────────┘ └───────────────┘ └──────────────┘
+                         
+             ⚡ Secure Multi-Agent Coordination via Tailscale ⚡
+                                                           
+          🧠 Encrypted Knowledge • 🤝 Authenticated Tasks • 📋 Secure Runbooks
 ```
 
 ## Installation
 
-### Server Setup (Primary Node)
+### SECURITY-FIRST Installation
+
+⚠️ **MANDATORY**: Complete Tailscale setup BEFORE installing hAIveMind services.
+
+#### Prerequisites (All Machines)
+
+1. **Install and configure Tailscale**:
+```bash
+# Install Tailscale
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+
+# Tag your machines for hAIveMind access
+sudo tailscale set --advertise-tags=tag:haivemind-primary  # Primary node
+sudo tailscale set --advertise-tags=tag:haivemind-node     # Worker nodes
+
+# Verify connectivity
+tailscale status
+```
+
+2. **Configure Tailscale ACLs** (see Security section for full ACL configuration)
+
+3. **Setup firewall protection**:
+```bash
+# Restrict hAIveMind ports to Tailscale interface ONLY
+sudo ufw allow in on tailscale0 to any port 8899 proto tcp
+sudo ufw allow in on tailscale0 to any port 8900 proto tcp
+sudo ufw allow in on tailscale0 to any port 6379 proto tcp
+
+# Block public access
+sudo ufw deny 8899
+sudo ufw deny 8900  
+sudo ufw deny 6379
+
+sudo ufw enable
+```
+
+#### Server Setup (Primary Node)
 
 1. **Clone and setup hAIveMind**:
 ```bash
@@ -89,25 +152,46 @@ cd agent-hivemind
 pip install -r requirements.txt
 ```
 
-2. **Install Redis**:
+2. **Install and secure Redis**:
 ```bash
 sudo apt-get install redis-server
-sudo systemctl start redis-server
+
+# Set Redis password
+sudo redis-cli CONFIG SET requirepass "$(openssl rand -hex 32)"
+
+# Configure Redis to bind localhost only
+sudo sed -i 's/bind 127.0.0.1/bind 127.0.0.1/' /etc/redis/redis.conf
+
+sudo systemctl restart redis-server
 ```
 
-3. **Configure the system**:
+3. **Generate security credentials**:
 ```bash
-# Edit config/config.json for your setup
-# Update machine IDs in discovery.machines to match your network
+# Generate API token
+mkdir -p /etc/haivemind
+openssl rand -hex 32 > /etc/haivemind/api-token
+chmod 600 /etc/haivemind/api-token
+
+# Optional: Generate TLS certificates
+openssl req -x509 -newkey rsa:4096 -keyout haivemind.key -out haivemind.crt -days 365 -nodes
 ```
 
-4. **Start hAIveMind server**:
+4. **Configure secure system settings**:
+```bash
+# Edit config/config.json with your Tailscale network info
+# See Security section for complete configuration template
+```
+
+5. **Start hAIveMind server with security**:
 ```bash
 # Start the memory server
 python src/memory_server.py &
 
-# Start the remote MCP server (for network access)
-python src/remote_mcp_server.py --host 0.0.0.0 --port 8900 &
+# Start the remote MCP server (bound to Tailscale interface)
+python src/remote_mcp_server.py --host 100.x.x.x --port 8900 &
+
+# Start sync service for machine coordination
+python src/sync_service.py --host 100.x.x.x --port 8899 &
 ```
 
 ### Agent Setup (Claude Code Integration)
@@ -129,14 +213,14 @@ python src/remote_mcp_server.py --host 0.0.0.0 --port 8900 &
 #### Option 2: Remote Connection (Network Access)
 ```bash
 # Add hAIveMind to Claude Code
-claude mcp add --transport sse haivemind http://node-alpha:8900/sse
+claude mcp add --transport sse haivemind http://primary-node:8900/sse
 
 # Or add to .mcp.json
 {
   "mcpServers": {
     "haivemind-remote": {
       "command": "npx",
-      "args": ["-y", "mcp-proxy", "--target", "http://node-alpha:8900/sse"],
+      "args": ["-y", "mcp-proxy", "--target", "http://primary-node:8900/sse"],
       "env": {}
     }
   }
@@ -174,7 +258,7 @@ For distributed hAIveMind across multiple machines:
 {
   "sync": {
     "discovery": {
-      "machines": ["node-alpha", "node-beta", "node-gamma", "node-delta"]
+      "machines": ["primary-node", "worker-node-1", "worker-node-2", "worker-node-3"]
     }
   }
 }
@@ -206,7 +290,7 @@ Edit `config/config.json`:
   },
   "sync": {
     "discovery": {
-      "machines": ["node-alpha", "node-beta", "node-gamma", "node-delta"]
+      "machines": ["primary-node", "worker-node-1", "worker-node-2", "worker-node-3"]
     }
   }
 }
@@ -312,25 +396,229 @@ Connect to real-time updates:
 - **agent**: Agent-specific knowledge and preferences  
 - **global**: Cross-project shared knowledge
 
-## Security
+## Security & Tailscale Configuration
 
-- JWT authentication for API endpoints
-- Encrypted credentials storage
-- Tailscale VPN for secure machine communication
-- Redis password protection (configure in config.json)
+### ⚠️ CRITICAL SECURITY REQUIREMENTS
 
-## Network Setup
+**hAIveMind operates as a distributed system across your infrastructure network. Proper security configuration is MANDATORY for safe operation.**
 
-Ensure machines can communicate via Tailscale:
+### Tailscale VPN Setup (Required)
+
+Tailscale provides the secure networking foundation for hAIveMind. All inter-machine communication MUST go through Tailscale.
+
+#### 1. Install Tailscale on All Machines
+
+**Ubuntu/Debian:**
+```bash
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+```
+
+**macOS:**
+```bash
+brew install tailscale
+sudo tailscale up
+```
+
+**After installation, authenticate with your Tailscale account and note the assigned IP addresses.**
+
+#### 2. Configure Tailscale Access Controls (ACLs)
+
+**CRITICAL**: Configure Tailscale ACLs to whitelist only authorized hAIveMind communication.
+
+In your Tailscale admin console, add this ACL configuration:
+
+```json
+{
+  "tagOwners": {
+    "tag:haivemind-node": ["your-email@domain.com"],
+    "tag:haivemind-primary": ["your-email@domain.com"]
+  },
+  "acls": [
+    {
+      "action": "accept",
+      "src": ["tag:haivemind-node", "tag:haivemind-primary"],
+      "dst": ["tag:haivemind-node:8899", "tag:haivemind-primary:8899"],
+      "proto": "tcp"
+    },
+    {
+      "action": "accept", 
+      "src": ["tag:haivemind-node", "tag:haivemind-primary"],
+      "dst": ["tag:haivemind-node:8900", "tag:haivemind-primary:8900"],
+      "proto": "tcp"
+    },
+    {
+      "action": "accept",
+      "src": ["tag:haivemind-node", "tag:haivemind-primary"], 
+      "dst": ["tag:haivemind-node:6379", "tag:haivemind-primary:6379"],
+      "proto": "tcp"
+    }
+  ]
+}
+```
+
+#### 3. Tag Your hAIveMind Machines
 
 ```bash
-# Check Tailscale status
+# Primary hAIveMind node (coordinator)
+sudo tailscale set --advertise-tags=tag:haivemind-primary
+
+# Worker nodes  
+sudo tailscale set --advertise-tags=tag:haivemind-node
+```
+
+#### 4. Verify Secure Connectivity
+
+```bash
+# Check Tailscale status and IPs
 tailscale status
 
-# Test connectivity to other machines
-ping node-beta
-ping node-gamma
-ping node-delta
+# Test connectivity to other hAIveMind machines (use Tailscale IPs)
+ping 100.x.x.x  # Example Tailscale IP
+ping worker-node.your-tailnet.ts.net
+
+# Verify port access
+nc -zv worker-node.your-tailnet.ts.net 8899
+nc -zv worker-node.your-tailnet.ts.net 8900
+```
+
+### Network Security Requirements
+
+#### Firewall Configuration
+```bash
+# Only allow hAIveMind ports from Tailscale interface
+sudo ufw allow in on tailscale0 to any port 8899 proto tcp
+sudo ufw allow in on tailscale0 to any port 8900 proto tcp  
+sudo ufw allow in on tailscale0 to any port 6379 proto tcp
+
+# Deny these ports from all other interfaces
+sudo ufw deny 8899
+sudo ufw deny 8900
+sudo ufw deny 6379
+```
+
+#### Required Ports
+- **8899**: hAIveMind sync service (machine-to-machine coordination)
+- **8900**: Remote MCP server (Claude agent connections)
+- **6379**: Redis (memory storage and caching)
+
+### Authentication & Authorization
+
+#### API Token Configuration
+```bash
+# Generate secure API tokens for each machine
+openssl rand -hex 32 > /etc/haivemind/api-token
+
+# Configure in config.json
+{
+  "security": {
+    "api_token": "your-generated-token-here",
+    "require_auth": true,
+    "allowed_origins": ["tailscale"]
+  }
+}
+```
+
+#### Machine Whitelisting
+```json
+{
+  "sync": {
+    "discovery": {
+      "machines": {
+        "primary-node": {
+          "tailscale_ip": "100.x.x.x",
+          "roles": ["primary", "orchestrator"],
+          "capabilities": ["coordination", "deployment"]
+        },
+        "worker-node": {
+          "tailscale_ip": "100.y.y.y", 
+          "roles": ["worker"],
+          "capabilities": ["elasticsearch_ops", "search_tuning"]
+        }
+      }
+    },
+    "security": {
+      "whitelist_only": true,
+      "verify_certificates": true,
+      "max_sync_attempts": 3
+    }
+  }
+}
+```
+
+### Additional Security Measures
+
+#### 1. Redis Security
+```bash
+# Set Redis password
+redis-cli CONFIG SET requirepass "your-secure-redis-password"
+
+# Configure in config.json
+{
+  "storage": {
+    "redis": {
+      "password": "your-secure-redis-password",
+      "bind": "127.0.0.1"  // Only localhost access
+    }
+  }
+}
+```
+
+#### 2. Certificate Verification
+```bash
+# Generate TLS certificates for hAIveMind services
+openssl req -x509 -newkey rsa:4096 -keyout haivemind.key -out haivemind.crt -days 365 -nodes
+```
+
+#### 3. Logging & Monitoring
+```json
+{
+  "logging": {
+    "audit_enabled": true,
+    "log_auth_failures": true,
+    "log_sync_events": true,
+    "max_log_size": "100MB"
+  }
+}
+```
+
+### Deployment Security Checklist
+
+- [ ] Tailscale installed and configured on all machines
+- [ ] Tailscale ACLs configured with machine tags
+- [ ] Firewall rules restrict hAIveMind ports to Tailscale interface only
+- [ ] API tokens generated and configured
+- [ ] Machine whitelist configured in config.json
+- [ ] Redis password protection enabled
+- [ ] TLS certificates generated (optional but recommended)
+- [ ] Audit logging enabled
+- [ ] All machines can ping each other via Tailscale IPs
+- [ ] Port connectivity verified (8899, 8900, 6379)
+
+### Security Best Practices
+
+1. **Never expose hAIveMind ports to the public internet**
+2. **Always use Tailscale hostnames/IPs for machine discovery**
+3. **Regularly rotate API tokens and Redis passwords**
+4. **Monitor authentication failures and unusual sync activity**
+5. **Keep Tailscale client updated on all machines**
+6. **Use machine tags for granular access control**
+7. **Implement network segmentation for production environments**
+
+### Network Verification Commands
+
+```bash
+# Verify Tailscale connectivity
+tailscale status | grep -E "(primary-node|worker-node-1|worker-node-2)"
+
+# Test hAIveMind service connectivity  
+curl -s http://worker-node.tailnet.ts.net:8899/api/status
+
+# Verify secure Redis connection
+redis-cli -h worker-node.tailnet.ts.net -a your-password ping
+
+# Check firewall rules
+sudo ufw status numbered | grep -E "(8899|8900|6379)"
 ```
 
 ## Monitoring
