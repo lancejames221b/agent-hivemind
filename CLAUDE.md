@@ -230,3 +230,4 @@ sync_external_knowledge sources=["confluence", "jira"]
 - Sync failures often relate to API token configuration or port 8899 accessibility
 - hAIveMind agent registration requires Redis for coordination features to work
 - ClaudeOps hAIveMind features require the updated config.json with claudeops section
+- if you get an mcp failure for haivemind, we need to stop and fix it.

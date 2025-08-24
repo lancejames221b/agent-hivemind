@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>hAIveMind Admin - API Keys</title>
+    <link rel="stylesheet" href="/admin/static/admin.css">
+</head>
+<body class="dashboard">
+    <nav class="nav-header">
+        <h1>🧠 hAIveMind Control</h1>
+        <div class="nav-links">
+            <a href="/admin/dashboard.html">Dashboard</a>
+            <a href="/admin/devices.html">Devices</a>
+            <a href="/admin/users.html">Users</a>
+            <a href="/admin/keys.html" class="active">API Keys</a>
+            <a href="/admin/memory.html">Memory</a>
+        </div>
+        <div class="user-info">
+            <span id="current-user">Loading...</span>
+            <button class="logout-btn" onclick="logout()">Logout</button>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <!-- Key Stats -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value" id="total-keys">-</div>
+                <div class="stat-label">Total Keys</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="active-keys">-</div>
+                <div class="stat-label">Active Keys</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="expiring-keys">-</div>
+                <div class="stat-label">Expiring Soon</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="total-usage">-</div>
+                <div class="stat-label">Total Usage</div>
+            </div>
+        </div>
+
+        <!-- Generate New Key -->
+        <div class="card">
+            <h2>🔑 Generate New API Key</h2>
+            <form id="generate-key-form" onsubmit="generateKey(event)">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="key-device">Device</label>
+                        <select id="key-device" name="device_id" required>
+                            <option value="">Select a device...</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="key-name">Key Name</label>
+                        <input type="text" id="key-name" name="name" required 
+                               placeholder="e.g., Production MCP Key">
+                    </div>
+                    <div class="form-group">
+                        <label for="key-expiry">Expiry (hours)</label>
+                        <select id="key-expiry" name="expires_hours">
+                            <option value="">Never</option>
+                            <option value="24">24 hours</option>
+                            <option value="168">1 week</option>
+                            <option value="720">1 month</option>
+                            <option value="8760">1 year</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Scopes (permissions)</label>
+                    <div class="checkbox-grid">
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="scopes" value="mcp:read" checked>
+                            <span>MCP Read</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="scopes" value="mcp:write" checked>
+                            <span>MCP Write</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="scopes" value="memory:read">
+                            <span>Memory Read</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="scopes" value="memory:write">
+                            <span>Memory Write</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="scopes" value="agent:coordination">
+                            <span>Agent Coordination</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="scopes" value="broadcast:send">
+                            <span>Send Broadcasts</span>
+                        </label>
+                    </div>
+                </div>
+                
+                <button type="submit" class="btn btn-primary">🔑 Generate API Key</button>
+            </form>
+        </div>
+
+        <!-- MCP Configuration Generator -->
+        <div class="card">
+            <h2>⚙️ MCP Configuration Generator</h2>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="config-device">Select Device</label>
+                    <select id="config-device" onchange="updateConfigPreview()">
+                        <option value="">Choose device...</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="config-format">Configuration Format</label>
+                    <select id="config-format" onchange="updateConfigPreview()">
+                        <option value="claude_desktop">Claude Desktop</option>
+                        <option value="claude_code">Claude Code CLI</option>
+                        <option value="custom">Custom/Raw</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="config-auth" checked onchange="updateConfigPreview()">
+                        <span>Include Authentication</span>
+                    </label>
+                </div>
+            </div>
+            
+            <div id="config-preview">
+                <h4>Configuration Preview</h4>
+                <pre id="config-content">Select a device to generate configuration</pre>
+                <div class="config-actions" style="display: none;">
+                    <button class="btn btn-secondary" onclick="copyConfig()">📋 Copy to Clipboard</button>
+                    <button class="btn btn-primary" onclick="downloadConfig()">💾 Download File</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- API Keys List -->
+        <div class="card">
+            <div class="card-header">
+                <h2>🔐 API Key Management</h2>
+                <div class="filters">
+                    <select id="status-filter" onchange="filterKeys()">
+                        <option value="">All Status</option>
+                        <option value="active">Active</option>
+                        <option value="expired">Expired</option>
+                        <option value="revoked">Revoked</option>
+                    </select>
+                    <input type="text" id="search-filter" placeholder="Search keys..." 
+                           onkeyup="filterKeys()">
+                    <button class="btn btn-secondary" onclick="refreshKeys()">🔄 Refresh</button>
+                </div>
+            </div>
+            
+            <div class="table-container">
+                <table id="keys-table">
+                    <thead>
+                        <tr>
+                            <th>Key Name</th>
+                            <th>Device</th>
+                            <th>Scopes</th>
+                            <th>Status</th>
+                            <th>Usage</th>
+                            <th>Expires</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="keys-tbody">
+                        <tr>
+                            <td colspan="7" class="loading">Loading API keys...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Key Display Modal -->
+        <div id="key-modal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>🔑 New API Key Generated</h3>
+                    <button class="modal-close" onclick="closeKeyModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="key-warning">
+                        <strong>⚠️ Important:</strong> This is the only time you'll see this key. Save it securely!
+                    </div>
+                    
+                    <div class="key-details">
+                        <div class="form-group">
+                            <label>Key ID:</label>
+                            <div class="key-value">
+                                <code id="generated-key-id"></code>
+                                <button class="btn-copy" onclick="copyToClipboard('generated-key-id')">📋</button>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>API Key:</label>
+                            <div class="key-value">
+                                <code id="generated-key"></code>
+                                <button class="btn-copy" onclick="copyToClipboard('generated-key')">📋</button>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Scopes:</label>
+                            <div id="generated-scopes" class="scope-list"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="closeKeyModal()">Close</button>
+                    <button class="btn btn-primary" onclick="downloadKeyInfo()">💾 Download Info</button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="/admin/static/admin.js"></script>
+    <script>
+        let devices = [];
+        let keys = [];
+        let generatedKeyData = null;
+
+        // Load data on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            checkAuth();
+            loadDevices();
+            loadKeys();
+            loadKeyStats();
+        });
+
+        async function loadDevices() {
+            try {
+                const response = await fetchWithAuth('/api/v1/devices?status=approved');
+                if (response.ok) {
+                    devices = await response.json();
+                    populateDeviceSelects();
+                }
+            } catch (error) {
+                console.error('Error loading devices:', error);
+            }
+        }
+
+        function populateDeviceSelects() {
+            const selects = ['key-device', 'config-device'];
+            
+            selects.forEach(selectId => {
+                const select = document.getElementById(selectId);
+                select.innerHTML = '<option value="">Select a device...</option>';
+                
+                devices.forEach(device => {
+                    const option = document.createElement('option');
+                    option.value = device.device_id;
+                    option.textContent = `${device.device_id} (${device.hostname})`;
+                    select.appendChild(option);
+                });
+            });
+        }
+
+        async function loadKeys() {
+            try {
+                const response = await fetchWithAuth('/api/v1/keys');
+                if (response.ok) {
+                    keys = await response.json();
+                    renderKeys();
+                }
+            } catch (error) {
+                console.error('Error loading keys:', error);
+                showError('Failed to load API keys');
+            }
+        }
+
+        async function loadKeyStats() {
+            try {
+                const response = await fetchWithAuth('/api/v1/admin/stats');
+                if (response.ok) {
+                    const stats = await response.json();
+                    document.getElementById('total-keys').textContent = stats.total_keys || 0;
+                    document.getElementById('active-keys').textContent = stats.active_keys || 0;
+                    document.getElementById('expiring-keys').textContent = stats.expiring_keys || 0;
+                    document.getElementById('total-usage').textContent = stats.total_usage || 0;
+                }
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+
+        function renderKeys() {
+            const tbody = document.getElementById('keys-tbody');
+            
+            if (keys.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="no-data">No API keys found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = keys.map(key => {
+                const device = devices.find(d => d.device_id === key.device_id) || {};
+                const statusClass = getKeyStatusClass(key.status);
+                const expiresText = key.expires_at ? formatDateTime(key.expires_at) : 'Never';
+                
+                return `
+                    <tr class="key-row" data-key-id="${key.key_id}">
+                        <td>
+                            <strong>${escapeHtml(key.name)}</strong><br>
+                            <small class="text-muted">${key.key_id}</small>
+                        </td>
+                        <td>${escapeHtml(device.hostname || 'Unknown')}</td>
+                        <td>
+                            <div class="scope-badges">
+                                ${key.scopes.map(scope => 
+                                    `<span class="scope-badge">${scope}</span>`
+                                ).join('')}
+                            </div>
+                        </td>
+                        <td><span class="status-badge ${statusClass}">${key.status}</span></td>
+                        <td>
+                            ${key.usage_count} uses<br>
+                            <small class="text-muted">Last: ${key.last_used ? formatDateTime(key.last_used) : 'Never'}</small>
+                        </td>
+                        <td>${expiresText}</td>
+                        <td class="actions">
+                            <button class="btn-small btn-info" onclick="viewKey('${key.key_id}')">
+                                👁️ View
+                            </button>
+                            ${key.status === 'active' ? 
+                                `<button class="btn-small btn-warning" onclick="revokeKey('${key.key_id}')">
+                                    🚫 Revoke
+                                </button>` : ''
+                            }
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        async function generateKey(event) {
+            event.preventDefault();
+            
+            const formData = new FormData(event.target);
+            const scopes = Array.from(formData.getAll('scopes'));
+            
+            const keyData = {
+                device_id: formData.get('device_id'),
+                name: formData.get('name'),
+                scopes: scopes,
+                expires_hours: formData.get('expires_hours') || null
+            };
+
+            try {
+                const response = await fetchWithAuth('/api/v1/keys/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(keyData),
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    generatedKeyData = result;
+                    
+                    // Show the key in modal
+                    document.getElementById('generated-key-id').textContent = result.key_id;
+                    document.getElementById('generated-key').textContent = result.key;
+                    
+                    const scopesContainer = document.getElementById('generated-scopes');
+                    scopesContainer.innerHTML = result.scopes.map(scope => 
+                        `<span class="scope-badge">${scope}</span>`
+                    ).join('');
+                    
+                    document.getElementById('key-modal').style.display = 'block';
+                    
+                    // Reset form and reload
+                    event.target.reset();
+                    loadKeys();
+                    loadKeyStats();
+                } else {
+                    const error = await response.json();
+                    showError(error.detail || 'Key generation failed');
+                }
+            } catch (error) {
+                console.error('Key generation error:', error);
+                showError('Network error during key generation');
+            }
+        }
+
+        async function revokeKey(keyId) {
+            if (!confirm(`Revoke API key "${keyId}"? This cannot be undone.`)) return;
+
+            try {
+                const response = await fetchWithAuth(`/api/v1/keys/${keyId}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    showSuccess('API key revoked successfully');
+                    loadKeys();
+                    loadKeyStats();
+                } else {
+                    const error = await response.json();
+                    showError(error.detail || 'Key revocation failed');
+                }
+            } catch (error) {
+                console.error('Key revocation error:', error);
+                showError('Network error during key revocation');
+            }
+        }
+
+        async function updateConfigPreview() {
+            const deviceId = document.getElementById('config-device').value;
+            const format = document.getElementById('config-format').value;
+            const includeAuth = document.getElementById('config-auth').checked;
+            
+            if (!deviceId) {
+                document.getElementById('config-content').textContent = 'Select a device to generate configuration';
+                document.querySelector('.config-actions').style.display = 'none';
+                return;
+            }
+
+            try {
+                const response = await fetchWithAuth('/api/v1/config/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        device_id: deviceId,
+                        format: format,
+                        include_auth: includeAuth
+                    }),
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    document.getElementById('config-content').textContent = 
+                        JSON.stringify(result.config, null, 2);
+                    document.querySelector('.config-actions').style.display = 'block';
+                } else {
+                    showError('Failed to generate configuration');
+                }
+            } catch (error) {
+                console.error('Config generation error:', error);
+                showError('Error generating configuration');
+            }
+        }
+
+        function copyConfig() {
+            const configContent = document.getElementById('config-content').textContent;
+            copyToClipboard('config-content');
+        }
+
+        function downloadConfig() {
+            const configContent = document.getElementById('config-content').textContent;
+            const format = document.getElementById('config-format').value;
+            const deviceId = document.getElementById('config-device').value;
+            
+            const filename = `haivemind-${deviceId}-${format}.json`;
+            downloadTextAsFile(configContent, filename, 'application/json');
+        }
+
+        function closeKeyModal() {
+            document.getElementById('key-modal').style.display = 'none';
+            generatedKeyData = null;
+        }
+
+        function downloadKeyInfo() {
+            if (!generatedKeyData) return;
+            
+            const keyInfo = {
+                key_id: generatedKeyData.key_id,
+                key: generatedKeyData.key,
+                scopes: generatedKeyData.scopes,
+                generated_at: new Date().toISOString(),
+                warning: "Keep this key secure! It provides access to your hAIveMind system."
+            };
+            
+            const filename = `haivemind-key-${generatedKeyData.key_id}.json`;
+            downloadTextAsFile(JSON.stringify(keyInfo, null, 2), filename, 'application/json');
+        }
+
+        function getKeyStatusClass(status) {
+            const statusMap = {
+                'active': 'status-success',
+                'expired': 'status-warning',
+                'revoked': 'status-error'
+            };
+            return statusMap[status] || 'status-default';
+        }
+
+        function filterKeys() {
+            // Implement filtering logic similar to devices page
+            loadKeys(); // For now, just reload
+        }
+
+        function refreshKeys() {
+            loadKeys();
+            loadKeyStats();
+        }
+
+        // Helper function to download text as file
+        function downloadTextAsFile(content, filename, mimeType = 'text/plain') {
+            const blob = new Blob([content], { type: mimeType });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html>

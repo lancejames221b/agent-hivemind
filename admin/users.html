@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>hAIveMind Admin - User Management</title>
+    <link rel="stylesheet" href="/admin/static/admin.css">
+</head>
+<body class="dashboard">
+    <nav class="nav-header">
+        <h1>🧠 hAIveMind Control</h1>
+        <div class="nav-links">
+            <a href="/admin/dashboard.html">Dashboard</a>
+            <a href="/admin/devices.html">Devices</a>
+            <a href="/admin/users.html" class="active">Users</a>
+            <a href="/admin/keys.html">API Keys</a>
+            <a href="/admin/memory.html">Memory</a>
+        </div>
+        <div class="user-info">
+            <span id="current-user">Loading...</span>
+            <button class="logout-btn" onclick="logout()">Logout</button>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <!-- User Stats -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value" id="total-users">-</div>
+                <div class="stat-label">Total Users</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="active-users">-</div>
+                <div class="stat-label">Active Users</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="admin-users">-</div>
+                <div class="stat-label">Administrators</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="recent-logins">-</div>
+                <div class="stat-label">Recent Logins</div>
+            </div>
+        </div>
+
+        <!-- Create New User -->
+        <div class="card">
+            <h2>👤 Create New User</h2>
+            <form id="create-user-form" onsubmit="createUser(event)">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="user-username">Username</label>
+                        <input type="text" id="user-username" name="username" required 
+                               placeholder="Enter username" pattern="[a-zA-Z0-9_-]+" 
+                               title="Username can only contain letters, numbers, underscores, and hyphens">
+                    </div>
+                    <div class="form-group">
+                        <label for="user-email">Email</label>
+                        <input type="email" id="user-email" name="email" required 
+                               placeholder="user@example.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="user-role">Role</label>
+                        <select id="user-role" name="role" required>
+                            <option value="viewer">Viewer - Read-only access</option>
+                            <option value="operator">Operator - Can manage devices</option>
+                            <option value="admin">Administrator - Full access</option>
+                            <option value="agent">Agent - API access only</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="user-password">Password</label>
+                        <input type="password" id="user-password" name="password" required 
+                               minlength="8" placeholder="Minimum 8 characters">
+                    </div>
+                    <div class="form-group">
+                        <label for="user-password-confirm">Confirm Password</label>
+                        <input type="password" id="user-password-confirm" name="password_confirm" required 
+                               placeholder="Re-enter password">
+                    </div>
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="user-active" name="is_active" checked>
+                            <span>Account Active</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="send-welcome" name="send_welcome">
+                            <span>Send Welcome Email</span>
+                        </label>
+                    </div>
+                </div>
+                
+                <button type="submit" class="btn btn-primary">👤 Create User</button>
+            </form>
+        </div>
+
+        <!-- User Management -->
+        <div class="card">
+            <div class="card-header">
+                <h2>👥 User Management</h2>
+                <div class="filters">
+                    <select id="role-filter" onchange="filterUsers()">
+                        <option value="">All Roles</option>
+                        <option value="admin">Admin</option>
+                        <option value="operator">Operator</option>
+                        <option value="viewer">Viewer</option>
+                        <option value="agent">Agent</option>
+                    </select>
+                    <select id="status-filter" onchange="filterUsers()">
+                        <option value="">All Status</option>
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                    </select>
+                    <input type="text" id="search-filter" placeholder="Search users..." 
+                           onkeyup="filterUsers()">
+                    <button class="btn btn-secondary" onclick="refreshUsers()">🔄 Refresh</button>
+                </div>
+            </div>
+            
+            <div class="table-container">
+                <table id="users-table">
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>Role</th>
+                            <th>Status</th>
+                            <th>Devices</th>
+                            <th>Last Login</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="users-tbody">
+                        <tr>
+                            <td colspan="7" class="loading">Loading users...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- User Details Modal -->
+        <div id="user-modal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="modal-title">User Details</h3>
+                    <button class="modal-close" onclick="closeUserModal()">&times;</button>
+                </div>
+                <div id="modal-body">
+                    <!-- User details will be loaded here -->
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="closeUserModal()">Close</button>
+                    <button id="modal-action-btn" class="btn btn-primary" onclick="performUserAction()">
+                        Action
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Activity Log -->
+        <div class="card">
+            <h2>📋 Recent User Activity</h2>
+            <div class="activity-log">
+                <div id="activity-loading" class="loading">Loading activity...</div>
+                <div id="activity-list" style="display: none;">
+                    <!-- Activity items will be populated here -->
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="/admin/static/admin.js"></script>
+    <script>
+        let users = [];
+        let devices = [];
+        let currentUser = null;
+
+        // Load data on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            checkAuth();
+            loadUsers();
+            loadDevices();
+            loadUserStats();
+            loadActivity();
+            
+            // Password confirmation validation
+            document.getElementById('user-password-confirm').addEventListener('input', validatePasswordConfirm);
+        });
+
+        async function loadUsers() {
+            try {
+                const response = await fetchWithAuth('/api/v1/users');
+                if (response.ok) {
+                    users = await response.json();
+                    renderUsers();
+                } else {
+                    showError('Failed to load users');
+                }
+            } catch (error) {
+                console.error('Error loading users:', error);
+                showError('Error loading users');
+            }
+        }
+
+        async function loadDevices() {
+            try {
+                const response = await fetchWithAuth('/api/v1/devices');
+                if (response.ok) {
+                    devices = await response.json();
+                }
+            } catch (error) {
+                console.error('Error loading devices:', error);
+            }
+        }
+
+        async function loadUserStats() {
+            try {
+                const response = await fetchWithAuth('/api/v1/admin/stats');
+                if (response.ok) {
+                    const stats = await response.json();
+                    document.getElementById('total-users').textContent = stats.total_users || 0;
+                    document.getElementById('active-users').textContent = stats.active_users || 0;
+                    document.getElementById('admin-users').textContent = stats.admin_users || 0;
+                    document.getElementById('recent-logins').textContent = stats.recent_logins || 0;
+                }
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+
+        async function loadActivity() {
+            try {
+                const response = await fetchWithAuth('/api/v1/admin/activity?limit=20');
+                if (response.ok) {
+                    const activities = await response.json();
+                    renderActivity(activities);
+                } else {
+                    document.getElementById('activity-loading').textContent = 'Failed to load activity';
+                }
+            } catch (error) {
+                console.error('Error loading activity:', error);
+                document.getElementById('activity-loading').textContent = 'Error loading activity';
+            }
+        }
+
+        function renderUsers() {
+            const tbody = document.getElementById('users-tbody');
+            
+            if (users.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="no-data">No users found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = users.map(user => {
+                const userDevices = devices.filter(d => d.owner_id === user.id);
+                const statusClass = user.is_active ? 'status-success' : 'status-error';
+                const lastLogin = user.last_login ? formatDateTime(user.last_login) : 'Never';
+                
+                return `
+                    <tr class="user-row" data-user-id="${user.id}">
+                        <td>
+                            <div class="user-info">
+                                <strong>${escapeHtml(user.username)}</strong>
+                                <div class="user-email">${escapeHtml(user.email)}</div>
+                            </div>
+                        </td>
+                        <td><span class="role-badge role-${user.role}">${user.role}</span></td>
+                        <td><span class="status-badge ${statusClass}">${user.is_active ? 'Active' : 'Inactive'}</span></td>
+                        <td>${userDevices.length} devices</td>
+                        <td>${lastLogin}</td>
+                        <td>${formatDateTime(user.created_at)}</td>
+                        <td class="actions">
+                            <button class="btn-small btn-info" onclick="viewUser(${user.id})">
+                                👁️ View
+                            </button>
+                            <button class="btn-small btn-warning" onclick="editUser(${user.id})">
+                                ✏️ Edit
+                            </button>
+                            ${user.is_active ? 
+                                `<button class="btn-small btn-error" onclick="deactivateUser(${user.id})">
+                                    🚫 Deactivate
+                                </button>` :
+                                `<button class="btn-small btn-success" onclick="activateUser(${user.id})">
+                                    ✅ Activate
+                                </button>`
+                            }
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function renderActivity(activities) {
+            const activityList = document.getElementById('activity-list');
+            const loadingDiv = document.getElementById('activity-loading');
+            
+            if (activities.length === 0) {
+                loadingDiv.textContent = 'No recent activity';
+                return;
+            }
+            
+            loadingDiv.style.display = 'none';
+            activityList.style.display = 'block';
+            
+            activityList.innerHTML = activities.map(activity => {
+                const iconMap = {
+                    'login': '🔑',
+                    'logout': '👋',
+                    'create': '➕',
+                    'update': '✏️',
+                    'delete': '🗑️',
+                    'approve': '✅',
+                    'suspend': '⏸️'
+                };
+                
+                const icon = iconMap[activity.action] || '📝';
+                const statusClass = activity.success ? 'activity-success' : 'activity-error';
+                
+                return `
+                    <div class="activity-item ${statusClass}">
+                        <div class="activity-icon">${icon}</div>
+                        <div class="activity-content">
+                            <div class="activity-main">
+                                <strong>${activity.user_username || 'System'}</strong>
+                                <span>${activity.action}</span>
+                                ${activity.resource ? `<code>${activity.resource}</code>` : ''}
+                            </div>
+                            <div class="activity-meta">
+                                ${formatDateTime(activity.created_at)} • 
+                                ${activity.ip_address} • 
+                                ${activity.success ? 'Success' : 'Failed'}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function createUser(event) {
+            event.preventDefault();
+            
+            const formData = new FormData(event.target);
+            const password = formData.get('password');
+            const passwordConfirm = formData.get('password_confirm');
+            
+            if (password !== passwordConfirm) {
+                showError('Passwords do not match');
+                return;
+            }
+            
+            const userData = {
+                username: formData.get('username'),
+                email: formData.get('email'),
+                password: password,
+                role: formData.get('role')
+            };
+
+            try {
+                const response = await fetchWithAuth('/api/v1/auth/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(userData),
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    showSuccess(`User "${userData.username}" created successfully!`);
+                    event.target.reset();
+                    loadUsers();
+                    loadUserStats();
+                } else {
+                    const error = await response.json();
+                    showError(error.detail || 'User creation failed');
+                }
+            } catch (error) {
+                console.error('User creation error:', error);
+                showError('Network error during user creation');
+            }
+        }
+
+        function validatePasswordConfirm() {
+            const password = document.getElementById('user-password').value;
+            const confirm = document.getElementById('user-password-confirm').value;
+            const confirmInput = document.getElementById('user-password-confirm');
+            
+            if (confirm && password !== confirm) {
+                confirmInput.setCustomValidity('Passwords do not match');
+            } else {
+                confirmInput.setCustomValidity('');
+            }
+        }
+
+        function viewUser(userId) {
+            const user = users.find(u => u.id === userId);
+            if (!user) return;
+
+            currentUser = user;
+            const userDevices = devices.filter(d => d.owner_id === userId);
+            
+            const modalBody = document.getElementById('modal-body');
+            modalBody.innerHTML = `
+                <div class="user-details">
+                    <div class="detail-group">
+                        <h4>Account Information</h4>
+                        <div class="detail-item">
+                            <label>Username:</label>
+                            <span>${escapeHtml(user.username)}</span>
+                        </div>
+                        <div class="detail-item">
+                            <label>Email:</label>
+                            <span>${escapeHtml(user.email)}</span>
+                        </div>
+                        <div class="detail-item">
+                            <label>Role:</label>
+                            <span class="role-badge role-${user.role}">${user.role}</span>
+                        </div>
+                        <div class="detail-item">
+                            <label>Status:</label>
+                            <span class="status-badge ${user.is_active ? 'status-success' : 'status-error'}">
+                                ${user.is_active ? 'Active' : 'Inactive'}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="detail-group">
+                        <h4>Activity</h4>
+                        <div class="detail-item">
+                            <label>Created:</label>
+                            <span>${formatDateTime(user.created_at)}</span>
+                        </div>
+                        <div class="detail-item">
+                            <label>Last Login:</label>
+                            <span>${user.last_login ? formatDateTime(user.last_login) : 'Never'}</span>
+                        </div>
+                    </div>
+
+                    <div class="detail-group">
+                        <h4>Devices (${userDevices.length})</h4>
+                        ${userDevices.length > 0 ? `
+                            <div class="device-list">
+                                ${userDevices.map(device => `
+                                    <div class="device-item">
+                                        <strong>${escapeHtml(device.device_id)}</strong>
+                                        <span class="status-badge ${getDeviceStatusClass(device.status)}">
+                                            ${device.status}
+                                        </span>
+                                        <div class="device-meta">
+                                            ${escapeHtml(device.hostname)} • 
+                                            ${device.last_seen ? formatDateTime(device.last_seen) : 'Never seen'}
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        ` : '<p class="text-muted">No devices registered</p>'}
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('modal-title').textContent = `User: ${user.username}`;
+            document.getElementById('user-modal').style.display = 'block';
+        }
+
+        async function deactivateUser(userId) {
+            const user = users.find(u => u.id === userId);
+            if (!user || !confirm(`Deactivate user "${user.username}"?`)) return;
+
+            try {
+                const response = await fetchWithAuth(`/api/v1/users/${userId}/deactivate`, {
+                    method: 'POST'
+                });
+
+                if (response.ok) {
+                    showSuccess('User deactivated successfully');
+                    loadUsers();
+                    loadUserStats();
+                } else {
+                    const error = await response.json();
+                    showError(error.detail || 'Deactivation failed');
+                }
+            } catch (error) {
+                console.error('Deactivation error:', error);
+                showError('Network error during deactivation');
+            }
+        }
+
+        function filterUsers() {
+            const roleFilter = document.getElementById('role-filter').value.toLowerCase();
+            const statusFilter = document.getElementById('status-filter').value.toLowerCase();
+            const searchFilter = document.getElementById('search-filter').value.toLowerCase();
+
+            const filtered = users.filter(user => {
+                const matchesRole = !roleFilter || user.role === roleFilter;
+                const matchesStatus = !statusFilter || 
+                    (statusFilter === 'active' && user.is_active) ||
+                    (statusFilter === 'inactive' && !user.is_active);
+                const matchesSearch = !searchFilter || 
+                    user.username.toLowerCase().includes(searchFilter) ||
+                    user.email.toLowerCase().includes(searchFilter);
+                
+                return matchesRole && matchesStatus && matchesSearch;
+            });
+
+            // Temporarily replace users array for rendering
+            const originalUsers = users;
+            users = filtered;
+            renderUsers();
+            users = originalUsers;
+        }
+
+        function refreshUsers() {
+            loadUsers();
+            loadUserStats();
+            loadActivity();
+        }
+
+        function closeUserModal() {
+            document.getElementById('user-modal').style.display = 'none';
+            currentUser = null;
+        }
+
+        function getDeviceStatusClass(status) {
+            const statusMap = {
+                'pending': 'status-warning',
+                'approved': 'status-info',
+                'active': 'status-success',
+                'suspended': 'status-error',
+                'revoked': 'status-error'
+            };
+            return statusMap[status] || 'status-default';
+        }
+
+        // Role descriptions for tooltips
+        const roleDescriptions = {
+            'admin': 'Full system access - can manage users, devices, and system settings',
+            'operator': 'Can manage devices and API keys, limited admin functions',
+            'viewer': 'Read-only access to dashboard and memory browser',
+            'agent': 'API access only - for automated systems and bots'
+        };
+    </script>
+</body>
+</html>

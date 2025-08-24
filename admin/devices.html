@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>hAIveMind Admin - Device Management</title>
+    <link rel="stylesheet" href="/admin/static/admin.css">
+</head>
+<body class="dashboard">
+    <nav class="nav-header">
+        <h1>🧠 hAIveMind Control</h1>
+        <div class="nav-links">
+            <a href="/admin/dashboard.html">Dashboard</a>
+            <a href="/admin/devices.html" class="active">Devices</a>
+            <a href="/admin/users.html">Users</a>
+            <a href="/admin/keys.html">API Keys</a>
+            <a href="/admin/memory.html">Memory</a>
+        </div>
+        <div class="user-info">
+            <span id="current-user">Loading...</span>
+            <button class="logout-btn" onclick="logout()">Logout</button>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <!-- Device Stats -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value" id="total-devices">-</div>
+                <div class="stat-label">Total Devices</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="active-devices">-</div>
+                <div class="stat-label">Active Devices</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="pending-devices">-</div>
+                <div class="stat-label">Pending Approval</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="online-devices">-</div>
+                <div class="stat-label">Online Now</div>
+            </div>
+        </div>
+
+        <!-- Device Registration -->
+        <div class="card">
+            <h2>📱 Register New Device</h2>
+            <form id="register-device-form" onsubmit="registerDevice(event)">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="device-id">Device ID</label>
+                        <input type="text" id="device-id" name="device_id" required 
+                               placeholder="e.g., laptop-001, server-prod-01">
+                    </div>
+                    <div class="form-group">
+                        <label for="machine-id">Machine ID</label>
+                        <input type="text" id="machine-id" name="machine_id" required 
+                               placeholder="Unique machine identifier">
+                    </div>
+                    <div class="form-group">
+                        <label for="hostname">Hostname</label>
+                        <input type="text" id="hostname" name="hostname" required 
+                               placeholder="device.domain.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="device-type">Device Type</label>
+                        <select id="device-type" name="device_type">
+                            <option value="laptop">Laptop</option>
+                            <option value="desktop">Desktop</option>
+                            <option value="server">Server</option>
+                            <option value="mobile">Mobile</option>
+                            <option value="vm">Virtual Machine</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="description">Description (optional)</label>
+                    <textarea id="description" name="description" rows="2" 
+                             placeholder="Brief description of the device..."></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary">🔧 Register Device</button>
+            </form>
+        </div>
+
+        <!-- Device List -->
+        <div class="card">
+            <div class="card-header">
+                <h2>🖥️ Device Management</h2>
+                <div class="filters">
+                    <select id="status-filter" onchange="filterDevices()">
+                        <option value="">All Status</option>
+                        <option value="pending">Pending</option>
+                        <option value="approved">Approved</option>
+                        <option value="active">Active</option>
+                        <option value="suspended">Suspended</option>
+                    </select>
+                    <input type="text" id="search-filter" placeholder="Search devices..." 
+                           onkeyup="filterDevices()">
+                    <button class="btn btn-secondary" onclick="refreshDevices()">🔄 Refresh</button>
+                </div>
+            </div>
+            
+            <div class="table-container">
+                <table id="devices-table">
+                    <thead>
+                        <tr>
+                            <th>Device ID</th>
+                            <th>Hostname</th>
+                            <th>Status</th>
+                            <th>Owner</th>
+                            <th>Last Seen</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="devices-tbody">
+                        <tr>
+                            <td colspan="6" class="loading">Loading devices...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Device Details Modal -->
+        <div id="device-modal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="modal-title">Device Details</h3>
+                    <button class="modal-close" onclick="closeModal()">&times;</button>
+                </div>
+                <div id="modal-body">
+                    <!-- Device details will be loaded here -->
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="closeModal()">Close</button>
+                    <button id="modal-action-btn" class="btn btn-primary" onclick="performDeviceAction()">Action</button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="/admin/static/admin.js"></script>
+    <script>
+        let devices = [];
+        let currentDevice = null;
+
+        // Load devices on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            checkAuth();
+            loadDeviceStats();
+            loadDevices();
+            
+            // Auto-fill machine info if available
+            if (navigator.userAgent) {
+                document.getElementById('machine-id').value = generateMachineId();
+                document.getElementById('hostname').value = window.location.hostname || 'localhost';
+            }
+        });
+
+        function generateMachineId() {
+            // Generate a semi-unique machine ID based on browser info
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            ctx.textBaseline = 'top';
+            ctx.font = '14px Arial';
+            ctx.fillText('Machine fingerprint', 2, 2);
+            const fingerprint = canvas.toDataURL();
+            
+            const hash = fingerprint.split('').reduce((a, b) => {
+                a = ((a << 5) - a) + b.charCodeAt(0);
+                return a & a;
+            }, 0);
+            
+            return `web-${Math.abs(hash).toString(16)}`;
+        }
+
+        async function loadDeviceStats() {
+            try {
+                const response = await fetchWithAuth('/api/v1/admin/stats');
+                if (response.ok) {
+                    const stats = await response.json();
+                    document.getElementById('total-devices').textContent = stats.total_devices || 0;
+                    document.getElementById('active-devices').textContent = stats.devices?.active || 0;
+                    document.getElementById('pending-devices').textContent = stats.devices?.pending || 0;
+                    document.getElementById('online-devices').textContent = stats.devices?.active || 0;
+                }
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+
+        async function loadDevices() {
+            try {
+                const response = await fetchWithAuth('/api/v1/devices');
+                if (response.ok) {
+                    devices = await response.json();
+                    renderDevices();
+                } else {
+                    showError('Failed to load devices');
+                }
+            } catch (error) {
+                console.error('Error loading devices:', error);
+                showError('Error loading devices');
+            }
+        }
+
+        function renderDevices() {
+            const tbody = document.getElementById('devices-tbody');
+            
+            if (devices.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="no-data">No devices found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = devices.map(device => {
+                const statusClass = getStatusClass(device.status);
+                const lastSeen = device.last_seen 
+                    ? formatDateTime(device.last_seen)
+                    : 'Never';
+                    
+                return `
+                    <tr class="device-row" data-device-id="${device.device_id}">
+                        <td>
+                            <strong>${escapeHtml(device.device_id)}</strong><br>
+                            <small class="text-muted">${escapeHtml(device.machine_id)}</small>
+                        </td>
+                        <td>${escapeHtml(device.hostname)}</td>
+                        <td><span class="status-badge ${statusClass}">${device.status}</span></td>
+                        <td>User #${device.owner_id}</td>
+                        <td>${lastSeen}</td>
+                        <td class="actions">
+                            <button class="btn-small btn-info" onclick="viewDevice('${device.device_id}')">
+                                👁️ View
+                            </button>
+                            ${device.status === 'pending' ? 
+                                `<button class="btn-small btn-success" onclick="approveDevice('${device.device_id}')">
+                                    ✅ Approve
+                                </button>` : ''
+                            }
+                            <button class="btn-small btn-warning" onclick="suspendDevice('${device.device_id}')">
+                                ⏸️ Suspend
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        async function registerDevice(event) {
+            event.preventDefault();
+            
+            const formData = new FormData(event.target);
+            const deviceData = {
+                device_id: formData.get('device_id'),
+                machine_id: formData.get('machine_id'),
+                hostname: formData.get('hostname'),
+                metadata: {
+                    device_type: formData.get('device_type'),
+                    description: formData.get('description'),
+                    user_agent: navigator.userAgent,
+                    registered_via: 'web_dashboard'
+                }
+            };
+
+            try {
+                const response = await fetchWithAuth('/api/v1/devices/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(deviceData),
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    showSuccess(`Device registered successfully! Status: ${result.status}`);
+                    event.target.reset();
+                    loadDevices();
+                    loadDeviceStats();
+                } else {
+                    const error = await response.json();
+                    showError(error.detail || 'Registration failed');
+                }
+            } catch (error) {
+                console.error('Registration error:', error);
+                showError('Network error during registration');
+            }
+        }
+
+        async function approveDevice(deviceId) {
+            if (!confirm(`Approve device "${deviceId}"?`)) return;
+
+            try {
+                const response = await fetchWithAuth(`/api/v1/devices/${deviceId}/approve`, {
+                    method: 'POST'
+                });
+
+                if (response.ok) {
+                    showSuccess('Device approved successfully');
+                    loadDevices();
+                    loadDeviceStats();
+                } else {
+                    const error = await response.json();
+                    showError(error.detail || 'Approval failed');
+                }
+            } catch (error) {
+                console.error('Approval error:', error);
+                showError('Network error during approval');
+            }
+        }
+
+        function viewDevice(deviceId) {
+            const device = devices.find(d => d.device_id === deviceId);
+            if (!device) return;
+
+            currentDevice = device;
+            
+            const modalBody = document.getElementById('modal-body');
+            modalBody.innerHTML = `
+                <div class="device-details">
+                    <div class="detail-group">
+                        <h4>Basic Information</h4>
+                        <div class="detail-item">
+                            <label>Device ID:</label>
+                            <span>${escapeHtml(device.device_id)}</span>
+                        </div>
+                        <div class="detail-item">
+                            <label>Machine ID:</label>
+                            <span>${escapeHtml(device.machine_id)}</span>
+                        </div>
+                        <div class="detail-item">
+                            <label>Hostname:</label>
+                            <span>${escapeHtml(device.hostname)}</span>
+                        </div>
+                        <div class="detail-item">
+                            <label>Status:</label>
+                            <span class="status-badge ${getStatusClass(device.status)}">${device.status}</span>
+                        </div>
+                    </div>
+
+                    <div class="detail-group">
+                        <h4>Timestamps</h4>
+                        <div class="detail-item">
+                            <label>Created:</label>
+                            <span>${formatDateTime(device.created_at)}</span>
+                        </div>
+                        <div class="detail-item">
+                            <label>Approved:</label>
+                            <span>${device.approved_at ? formatDateTime(device.approved_at) : 'Not approved'}</span>
+                        </div>
+                        <div class="detail-item">
+                            <label>Last Seen:</label>
+                            <span>${device.last_seen ? formatDateTime(device.last_seen) : 'Never'}</span>
+                        </div>
+                    </div>
+
+                    <div class="detail-group">
+                        <h4>Network</h4>
+                        <div class="detail-item">
+                            <label>IP Address:</label>
+                            <span>${device.ip_address || 'Unknown'}</span>
+                        </div>
+                        <div class="detail-item">
+                            <label>Fingerprint:</label>
+                            <span class="monospace">${device.fingerprint.substring(0, 16)}...</span>
+                        </div>
+                    </div>
+
+                    <div class="detail-group">
+                        <h4>Metadata</h4>
+                        <pre class="metadata-display">${JSON.stringify(device.metadata, null, 2)}</pre>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('modal-title').textContent = `Device: ${device.device_id}`;
+            document.getElementById('device-modal').style.display = 'block';
+        }
+
+        function filterDevices() {
+            const statusFilter = document.getElementById('status-filter').value.toLowerCase();
+            const searchFilter = document.getElementById('search-filter').value.toLowerCase();
+
+            const filtered = devices.filter(device => {
+                const matchesStatus = !statusFilter || device.status === statusFilter;
+                const matchesSearch = !searchFilter || 
+                    device.device_id.toLowerCase().includes(searchFilter) ||
+                    device.hostname.toLowerCase().includes(searchFilter) ||
+                    device.machine_id.toLowerCase().includes(searchFilter);
+                
+                return matchesStatus && matchesSearch;
+            });
+
+            // Temporarily replace devices array for rendering
+            const originalDevices = devices;
+            devices = filtered;
+            renderDevices();
+            devices = originalDevices;
+        }
+
+        function refreshDevices() {
+            loadDevices();
+            loadDeviceStats();
+        }
+
+        function closeModal() {
+            document.getElementById('device-modal').style.display = 'none';
+            currentDevice = null;
+        }
+
+        function getStatusClass(status) {
+            const statusMap = {
+                'pending': 'status-warning',
+                'approved': 'status-info', 
+                'active': 'status-success',
+                'suspended': 'status-error',
+                'revoked': 'status-error'
+            };
+            return statusMap[status] || 'status-default';
+        }
+    </script>
+</body>
+</html>
