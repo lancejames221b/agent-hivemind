@@ -101,6 +101,9 @@ class ServerConnection:
             'total_response_time': 0
         }
         self._last_connect_error: Optional[str] = None
+        # Track last-known tool set to detect capability changes
+        self._last_tools_snapshot: Set[str] = set()
+        self._pending_tool_changes: Optional[Tuple[Set[str], Set[str]]] = None
     
     async def connect(self) -> bool:
         """Establish connection to MCP server"""
@@ -150,6 +153,8 @@ class ServerConnection:
                     result = await response.json()
                     if 'result' in result and 'tools' in result['result']:
                         self.tools = {tool['name']: tool for tool in result['result']['tools']}
+                        # Initialize snapshot on first fetch
+                        self._last_tools_snapshot = set(self.tools.keys())
             
             # Get resources
             try:
@@ -301,7 +306,7 @@ class ServerConnection:
             
             start_time = time.time()
             
-            # Try a simple ping or capabilities fetch
+            # Try a simple ping and simultaneously monitor tool availability
             async with self.session.post(f"{self.endpoint.rstrip('/sse')}/message",
                                        json={"method": "tools/list", "params": {}}) as response:
                 
@@ -310,6 +315,30 @@ class ServerConnection:
                 self.health.last_check = datetime.now()
                 
                 if response.status == 200:
+                    # Detect tool availability changes
+                    try:
+                        result = await response.json()
+                        tools_list = result.get('result', {}).get('tools', [])
+                        new_tools: Dict[str, Dict[str, Any]] = {t.get('name'): t for t in tools_list if t.get('name')}
+                        new_set: Set[str] = set(new_tools.keys())
+                        if not self._last_tools_snapshot:
+                            self._last_tools_snapshot = set(self.tools.keys()) if self.tools else set()
+                        added = new_set - self._last_tools_snapshot
+                        removed = self._last_tools_snapshot - new_set
+                        if added or removed:
+                            # Update live tools and queue change record for registry to apply
+                            self.tools = new_tools
+                            self._pending_tool_changes = (added, removed)
+                            self._last_tools_snapshot = new_set
+                        # Update capability counts
+                        self.health.capabilities = {
+                            'tools': len(new_set),
+                            'resources': self.health.capabilities.get('resources', 0),
+                            'prompts': self.health.capabilities.get('prompts', 0),
+                        }
+                    except Exception:
+                        # If parsing fails, continue with health-only
+                        pass
                     self.health.status = 'healthy'
                     self.health.consecutive_failures = 0
                     # Update rolling metrics window every minute
@@ -335,6 +364,12 @@ class ServerConnection:
             logger.warning(f"Health check failed for {self.server_id}: {e}")
             return False
     
+    def pop_tool_changes(self) -> Optional[Tuple[Set[str], Set[str]]]:
+        """Return and clear any pending (added, removed) tool-name sets detected in last health check."""
+        changes = self._pending_tool_changes
+        self._pending_tool_changes = None
+        return changes
+
     async def disconnect(self):
         """Close connection to server"""
         if self.session:
@@ -682,6 +717,12 @@ class MCPRegistry:
             # Take routing actions on status changes
             await self._handle_health_actions(server_id, prev_status, connection.health.status)
 
+            # If tool availability changed, update registry routing and metadata
+            changes = connection.pop_tool_changes()
+            if changes:
+                added, removed = changes
+                await self._apply_tool_changes(server_id, added, removed, connection)
+
             health_results[server_id] = {
                 'healthy': is_healthy,
                 'status': connection.health.status,
@@ -740,6 +781,108 @@ class MCPRegistry:
         if new_status in ('unhealthy', 'unreachable') and connection._last_connect_error:
             # Schedule a background reconnect attempt with backoff
             asyncio.create_task(self._attempt_reconnect(server_id))
+
+    async def _apply_tool_changes(self, server_id: str, added: Set[str], removed: Set[str], connection: ServerConnection) -> None:
+        """Update routing and capability cache when a server's tool list changes."""
+        try:
+            prefix = self.namespace_prefixes.get(server_id, '')
+            # Handle removed tools: drop unprefixed mapping if pointing here, and prefixed mapping
+            for tool_name in removed:
+                prefixed = f"{prefix}{tool_name}"
+                # Remove prefixed entry
+                if self.tool_routing.get(prefixed) == server_id:
+                    self.tool_routing.pop(prefixed, None)
+                # If unprefixed maps to this server, try reroute to another provider
+                if self.tool_routing.get(tool_name) == server_id:
+                    rerouted = False
+                    for alt_sid in self.tool_providers.get(tool_name, []):
+                        if alt_sid != server_id and self.servers[alt_sid].health.status == 'healthy' and tool_name in self.servers[alt_sid].tools:
+                            self.tool_routing[tool_name] = alt_sid
+                            rerouted = True
+                            break
+                    if not rerouted:
+                        self.tool_routing.pop(tool_name, None)
+
+                # Remove provider listing
+                if tool_name in self.tool_providers:
+                    self.tool_providers[tool_name] = [sid for sid in self.tool_providers[tool_name] if sid != server_id]
+                    if not self.tool_providers[tool_name]:
+                        self.tool_providers.pop(tool_name, None)
+
+                # Update Redis cache
+                if self.redis_client:
+                    self.redis_client.delete(f"tool:routing:{prefixed}")
+                    if self.redis_client.hget(f"tool:routing:{tool_name}", 'server_id') == server_id:
+                        self.redis_client.delete(f"tool:routing:{tool_name}")
+
+            # Handle added tools: register prefixed and optionally unprefixed routes
+            for tool_name in added:
+                prefixed = f"{prefix}{tool_name}"
+                self.tool_routing[prefixed] = server_id
+                providers = self.tool_providers.setdefault(tool_name, [])
+                if server_id not in providers:
+                    providers.append(server_id)
+                if tool_name not in self.tool_routing:
+                    self.tool_routing[tool_name] = server_id
+                if self.redis_client:
+                    self.redis_client.hset(f"tool:routing:{prefixed}", mapping={"server_id": server_id, "original_name": tool_name})
+                    if tool_name not in [k for k in self.tool_routing.keys() if not k.startswith(prefix)]:
+                        self.redis_client.hset(f"tool:routing:{tool_name}", mapping={"server_id": server_id, "original_name": tool_name})
+
+            # Update capabilities table in SQLite
+            now = int(time.time())
+            with sqlite3.connect(self.db_path) as conn:
+                for tool_name in added:
+                    tool_def = connection.tools.get(tool_name, {})
+                    conn.execute(
+                        '''
+                        INSERT OR REPLACE INTO server_capabilities
+                        (server_id, capability_type, name, original_name, namespace_prefix, description, parameters_json, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        ''',
+                        (
+                            server_id,
+                            'tool',
+                            f"{prefix}{tool_name}",
+                            tool_name,
+                            prefix,
+                            tool_def.get('description', ''),
+                            json.dumps(tool_def.get('inputSchema', {})),
+                            now,
+                        ),
+                    )
+                for tool_name in removed:
+                    conn.execute(
+                        'DELETE FROM server_capabilities WHERE server_id = ? AND capability_type = ? AND original_name = ?',
+                        (server_id, 'tool', tool_name),
+                    )
+
+            # Store memory about capability changes
+            if (added or removed) and self.memory_storage:
+                try:
+                    await self.memory_storage.store_memory(
+                        content=f"MCP server {server_id} tool catalog changed",
+                        category='infrastructure',
+                        metadata={
+                            'event_type': 'mcp_server_capabilities_update',
+                            'server_id': server_id,
+                            'added_tools': list(added),
+                            'removed_tools': list(removed),
+                            'timestamp': datetime.now().isoformat(),
+                        },
+                        tags=['mcp', 'capabilities', 'discovery'],
+                        scope='hive-shared',
+                    )
+                    await self.memory_storage.broadcast_discovery(
+                        message=f"{server_id} tools updated (+{len(added)}/-{len(removed)})",
+                        category='mcp_discovery',
+                        severity='info',
+                    )
+                except Exception:
+                    pass
+        except Exception as e:
+            logger.warning(f"Failed to apply tool changes for {server_id}: {e}")
+
 
     async def _attempt_reconnect(self, server_id: str) -> None:
         """Attempt to reconnect to a server with exponential backoff."""
