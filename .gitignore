@@ -88,3 +88,6 @@ config/local_config.json
 
 # Credential files with sensitive information  
 *CREDENTIALS*
+
+# Pip installation logs (prevent accidental redirects)
+=*
