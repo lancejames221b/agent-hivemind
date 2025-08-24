@@ -19,7 +19,8 @@
       "password": null,
       "enable_cache": true
     },
-    "registry_db": "data/registry.db"
+    "registry_db": "data/registry.db",
+    "auth_db": "data/auth.db"
   },
   "sync": {
     "enable_remote_sync": true,
@@ -259,6 +260,7 @@
   "security": {
     "enable_auth": true,
     "jwt_secret": "${HAIVEMIND_JWT_SECRET:-change-this-secret-key}",
+    "session_timeout_hours": 24,
     "api_tokens": {
       "enabled": true,
       "admin_token": "${HAIVEMIND_ADMIN_TOKEN}",
@@ -272,10 +274,39 @@
       "requests_per_minute": 120,
       "burst_limit": 10
     },
+    "audit": {
+      "enabled": true,
+      "retention_days": 90,
+      "log_sensitive_data": false,
+      "high_risk_events": ["delete_memory", "bulk_delete_memories", "gdpr_delete_user_data", "create_user_account", "create_api_key"]
+    },
+    "password_policy": {
+      "min_length": 8,
+      "require_uppercase": true,
+      "require_lowercase": true,
+      "require_numbers": true,
+      "require_special_chars": false
+    },
     "tls": {
       "enabled": false,
       "cert_file": "/etc/ssl/certs/haivemind.crt",
       "key_file": "/etc/ssl/private/haivemind.key"
     }
+  },
+  "storage": {
+    "chromadb": {
+      "path": "/home/lj/memory-mcp/data/chroma",
+      "embedding_model": "all-MiniLM-L6-v2",
+      "anonymized_telemetry": false
+    },
+    "redis": {
+      "host": "localhost",
+      "port": 6379,
+      "db": 0,
+      "password": null,
+      "enable_cache": true
+    },
+    "registry_db": "data/registry.db",
+    "auth_db": "data/auth.db"
   }
 }

@@ -46,6 +46,9 @@ except ImportError:
 
 from memory_server import MemoryStorage
 from auth import AuthManager
+from mcp_auth_manager import MCPAuthManager
+from mcp_auth_middleware import MCPAuthMiddleware, MCPToolAuthWrapper
+from mcp_auth_tools import MCPAuthTools
 
 # Setup logging
 logging.basicConfig(
@@ -943,6 +946,9 @@ class MCPAggregatorService:
         # Initialize components
         self.memory_storage = MemoryStorage(self.config)
         self.auth = AuthManager(self.config)
+        self.mcp_auth = MCPAuthManager(self.config, self.memory_storage)
+        self.auth_tools = MCPAuthTools(self.config, self.memory_storage)
+        self.tool_auth_wrapper = MCPToolAuthWrapper(self.mcp_auth)
         self.registry = MCPRegistry(self.config, self.memory_storage)
         
         # Get aggregator config
@@ -996,17 +1002,121 @@ class MCPAggregatorService:
                 'endpoint': endpoint
             }
         
+        # Authentication management tools
+        @self.mcp.tool()
+        async def create_user_account(username: str, password: str, role: str = 'user', permissions: List[str] = None) -> str:
+            """Create a new user account for MCP Hub access"""
+            return await self.auth_tools.create_user_account(username, password, role, permissions)
+        
+        @self.mcp.tool()
+        async def create_api_key(user_id: str, key_name: str, role: str = None, permissions: List[str] = None, 
+                                server_access: Dict[str, List[str]] = None, expires_days: int = None) -> str:
+            """Create a new API key for MCP Hub access"""
+            return await self.auth_tools.create_api_key(user_id, key_name, role, permissions, server_access, expires_days)
+        
+        @self.mcp.tool()
+        async def configure_server_auth(server_id: str, auth_required: bool = True, allowed_roles: List[str] = None,
+                                      allowed_users: List[str] = None, tool_permissions: Dict[str, List[str]] = None,
+                                      rate_limits: Dict[str, int] = None, audit_level: str = "standard") -> str:
+            """Configure authentication settings for a specific MCP server"""
+            return await self.auth_tools.configure_server_authentication(
+                server_id, auth_required, allowed_roles, allowed_users, tool_permissions, rate_limits, audit_level
+            )
+        
+        @self.mcp.tool()
+        async def list_users(active_only: bool = True) -> str:
+            """List all user accounts with their roles and status"""
+            return await self.auth_tools.list_users(active_only)
+        
+        @self.mcp.tool()
+        async def list_api_keys(user_id: str = None, active_only: bool = True) -> str:
+            """List API keys, optionally filtered by user"""
+            return await self.auth_tools.list_api_keys(user_id, active_only)
+        
+        @self.mcp.tool()
+        async def revoke_api_key(key_id: str) -> str:
+            """Revoke an API key"""
+            return await self.auth_tools.revoke_api_key(key_id)
+        
+        @self.mcp.tool()
+        async def get_security_analytics(days: int = 7) -> str:
+            """Get security analytics and insights for the specified period"""
+            return await self.auth_tools.get_security_analytics(days)
+        
+        @self.mcp.tool()
+        async def audit_security_events(event_type: str = None, user_id: str = None, hours: int = 24, risk_level: str = None) -> str:
+            """Get detailed audit log of security events"""
+            return await self.auth_tools.audit_security_events(event_type, user_id, hours, risk_level)
+        
         # Proxy all registered tools through the aggregator
         async def proxy_tool_call(call_request):
-            """Proxy tool calls to appropriate backend servers"""
+            """Proxy tool calls to appropriate backend servers with authentication"""
             tool_name = call_request.params.name
             arguments = call_request.params.arguments or {}
             
             try:
+                # Get auth context from request (this would be set by middleware in HTTP context)
+                auth_context = getattr(call_request, 'auth_context', None)
+                
+                # If no auth context and auth is enabled, create a system context for internal calls
+                if not auth_context and self.mcp_auth.enable_auth:
+                    # For MCP stdio calls, we might not have HTTP context
+                    # Create a system auth context for internal operations
+                    from mcp_auth_manager import AuthContext
+                    from datetime import datetime, timedelta
+                    auth_context = AuthContext(
+                        user_id='mcp_system',
+                        username='mcp_system',
+                        role='admin',
+                        permissions={'*'},
+                        server_access={},
+                        client_ip='127.0.0.1',
+                        session_id='mcp_stdio',
+                        expires_at=datetime.now() + timedelta(hours=24),
+                        metadata={'auth_method': 'stdio_system'}
+                    )
+                
+                # Determine target server for the tool
+                server_id = self.registry.tool_routing.get(tool_name)
+                if not server_id:
+                    raise Exception(f"Tool {tool_name} not found")
+                
+                # Authenticate and authorize the tool call
+                if auth_context:
+                    auth_result = await self.tool_auth_wrapper.authenticate_tool_call(
+                        server_id, tool_name, arguments, auth_context
+                    )
+                    
+                    if not auth_result[0]:
+                        return CallToolResult(
+                            content=[TextContent(type="text", text=f"Authorization failed: {auth_result[1]}")],
+                            isError=True
+                        )
+                
+                # Execute the tool call
+                start_time = time.time()
                 result = await self.registry.route_tool_call(tool_name, arguments)
+                execution_time = time.time() - start_time
+                
+                # Audit the tool call
+                if auth_context:
+                    await self.tool_auth_wrapper.audit_tool_call(
+                        server_id, tool_name, arguments, auth_context, True, execution_time
+                    )
+                
                 return CallToolResult(content=[TextContent(type="text", text=json.dumps(result))])
+                
             except Exception as e:
                 logger.error(f"Tool call failed for {tool_name}: {e}")
+                
+                # Audit the failed call
+                if auth_context:
+                    execution_time = time.time() - start_time if 'start_time' in locals() else 0
+                    await self.tool_auth_wrapper.audit_tool_call(
+                        server_id if 'server_id' in locals() else 'unknown', 
+                        tool_name, arguments, auth_context, False, execution_time, str(e)
+                    )
+                
                 return CallToolResult(
                     content=[TextContent(type="text", text=f"Error: {str(e)}")],
                     isError=True

@@ -22,6 +22,7 @@ from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 
 from mcp_server_host import MCPServerHost
+from mcp_auth_dashboard import MCPAuthDashboard
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,9 @@ class MCPHostingDashboard:
             Middleware(CORSMiddleware, allow_origins=['*'], allow_methods=['*'], allow_headers=['*'])
         ]
         
+        # Initialize auth dashboard
+        self.auth_dashboard = MCPAuthDashboard(config, storage)
+        
         routes = [
             Route('/', self.dashboard_home, methods=['GET']),
             Route('/api/servers', self.api_list_servers, methods=['GET']),
@@ -60,6 +64,33 @@ class MCPHostingDashboard:
             Route('/api/optimize', self.api_optimize_servers, methods=['GET']),
             Mount('/static', StaticFiles(directory=str(Path(__file__).parent.parent / 'admin' / 'static')), name='static')
         ]
+        
+        # Add auth dashboard routes
+        auth_routes = [
+            # Authentication routes
+            Route('/auth/login', self.auth_dashboard.auth_login, methods=['GET', 'POST']),
+            Route('/auth/logout', self.auth_dashboard.auth_logout, methods=['POST']),
+            Route('/auth/status', self.auth_dashboard.auth_status, methods=['GET']),
+            
+            # Dashboard routes
+            Route('/auth', self.auth_dashboard.auth_dashboard, methods=['GET']),
+            Route('/auth/users', self.auth_dashboard.users_page, methods=['GET']),
+            Route('/auth/api-keys', self.auth_dashboard.api_keys_page, methods=['GET']),
+            Route('/auth/servers', self.auth_dashboard.servers_auth_page, methods=['GET']),
+            Route('/auth/security', self.auth_dashboard.security_page, methods=['GET']),
+            
+            # API routes
+            Route('/api/auth/users', self.auth_dashboard.api_list_users, methods=['GET']),
+            Route('/api/auth/users', self.auth_dashboard.api_create_user, methods=['POST']),
+            Route('/api/auth/api-keys', self.auth_dashboard.api_list_api_keys, methods=['GET']),
+            Route('/api/auth/api-keys', self.auth_dashboard.api_create_api_key, methods=['POST']),
+            Route('/api/auth/api-keys/{key_id}', self.auth_dashboard.api_revoke_api_key, methods=['DELETE']),
+            Route('/api/auth/servers/{server_id}/config', self.auth_dashboard.api_configure_server_auth, methods=['POST']),
+            Route('/api/auth/security/analytics', self.auth_dashboard.api_security_analytics, methods=['GET']),
+            Route('/api/auth/security/events', self.auth_dashboard.api_audit_events, methods=['GET']),
+        ]
+        
+        routes.extend(auth_routes)
         
         self.app = Starlette(debug=self.debug, routes=routes, middleware=middleware)
         
@@ -307,6 +338,11 @@ class MCPHostingDashboard:
         <div class="header">
             <h1>🧠 hAIveMind MCP Server Hosting</h1>
             <p>Deploy, manage, and monitor custom MCP servers with intelligent resource optimization</p>
+            <div style="margin-top: 20px;">
+                <a href="/auth" style="display: inline-block; padding: 12px 24px; background: linear-gradient(45deg, #667eea, #764ba2); color: white; text-decoration: none; border-radius: 8px; font-weight: bold;">
+                    🔐 Authentication Dashboard
+                </a>
+            </div>
         </div>
         
         <div class="alert alert-success" id="successAlert"></div>
@@ -488,6 +524,7 @@ class MCPHostingDashboard:
                         <button class="btn btn-primary" onclick="restartServer('${server.server_id}')">🔄 Restart</button>
                         <button class="btn btn-secondary" onclick="showLogs('${server.server_id}', '${server.name}')">📝 Logs</button>
                         <button class="btn btn-danger" onclick="deleteServer('${server.server_id}', '${server.name}')">🗑️ Delete</button>
+                        <a href="/auth" class="btn btn-secondary" style="text-decoration: none; display: inline-block; text-align: center;">🔐 Auth</a>
                     </div>
                 </div>
             `;
