@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>hAIveMind Admin - Agents</title>
+    <link rel="stylesheet" href="/admin/static/admin.css">
+</head>
+<body class="dashboard">
+    <nav class="nav-header">
+        <h1>🧠 hAIveMind Admin</h1>
+        <div class="nav-links">
+            <a href="/admin/dashboard.html">Dashboard</a>
+            <a href="/admin/agents.html" class="active">Agents</a>
+            <a href="/admin/config.html">Config</a>
+            <a href="/admin/memory.html">Memory</a>
+        </div>
+        <button class="logout-btn" onclick="logout()">Logout</button>
+    </nav>
+
+    <main class="main-content">
+        <div class="card">
+            <h2>🤖 Active Agents</h2>
+            <div class="table-container">
+                <table id="agents-table">
+                    <thead>
+                        <tr>
+                            <th>Agent ID</th>
+                            <th>Role</th>
+                            <th>Capabilities</th>
+                            <th>Machine</th>
+                            <th>Last Seen</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="agents-body">
+                        <tr>
+                            <td colspan="7" style="text-align: center; color: #666;">Loading agents...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>📋 Task Delegation</h2>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div>
+                    <h3>Create New Task</h3>
+                    <div class="form-group">
+                        <label for="task-description">Task Description</label>
+                        <textarea id="task-description" rows="3" style="width: 100%; padding: 10px;" placeholder="Describe the task to delegate..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="required-capabilities">Required Capabilities</label>
+                        <input type="text" id="required-capabilities" placeholder="e.g. elasticsearch_ops, monitoring" style="width: 100%; padding: 10px;">
+                    </div>
+                    <div class="form-group">
+                        <label for="target-agent">Target Agent (optional)</label>
+                        <select id="target-agent" style="width: 100%; padding: 10px;">
+                            <option value="">Auto-select best agent</option>
+                        </select>
+                    </div>
+                    <button class="btn" onclick="delegateTask()">🎯 Delegate Task</button>
+                </div>
+                
+                <div>
+                    <h3>Recent Tasks</h3>
+                    <div id="recent-tasks" style="max-height: 300px; overflow-y: auto;">
+                        <p style="color: #666;">Loading recent tasks...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>💬 Agent Communication</h2>
+            <div class="form-group">
+                <label for="broadcast-message">Broadcast Message</label>
+                <textarea id="broadcast-message" rows="3" style="width: 100%; padding: 10px;" placeholder="Send a message to all agents..."></textarea>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+                <div class="form-group">
+                    <label for="broadcast-category">Category</label>
+                    <select id="broadcast-category" style="width: 100%; padding: 10px;">
+                        <option value="infrastructure">Infrastructure</option>
+                        <option value="incidents">Incidents</option>
+                        <option value="monitoring">Monitoring</option>
+                        <option value="security">Security</option>
+                        <option value="general">General</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="broadcast-severity">Severity</label>
+                    <select id="broadcast-severity" style="width: 100%; padding: 10px;">
+                        <option value="info">Info</option>
+                        <option value="warning">Warning</option>
+                        <option value="critical">Critical</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>&nbsp;</label>
+                    <button class="btn" onclick="broadcastMessage()" style="width: 100%;">📢 Broadcast</button>
+                </div>
+            </div>
+            
+            <div id="broadcast-history" style="margin-top: 20px;">
+                <h3>Recent Broadcasts</h3>
+                <div id="broadcasts-list">
+                    <p style="color: #666;">Loading broadcast history...</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="/admin/static/admin.js"></script>
+    <script>
+        let agents = [];
+        let recentTasks = [];
+
+        async function loadAgents() {
+            try {
+                const response = await authenticatedFetch('/admin/api/agents');
+                if (response.ok) {
+                    agents = await response.json();
+                    updateAgentsTable();
+                    updateTargetAgentSelect();
+                }
+            } catch (error) {
+                console.error('Error loading agents:', error);
+            }
+        }
+
+        function updateAgentsTable() {
+            const tbody = document.getElementById('agents-body');
+            if (!agents || agents.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #666;">No active agents</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = agents.map(agent => `
+                <tr>
+                    <td title="${agent.id}">${agent.id.substring(0, 20)}...</td>
+                    <td>${agent.role}</td>
+                    <td>${(agent.capabilities || []).join(', ')}</td>
+                    <td>${agent.machine_id}</td>
+                    <td>${formatTime(agent.last_seen)}</td>
+                    <td><span class="status ${agent.status}">${agent.status}</span></td>
+                    <td>
+                        <button class="btn" onclick="queryAgent('${agent.id}')">Query</button>
+                        <button class="btn btn-danger" onclick="removeAgent('${agent.id}')">Remove</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function updateTargetAgentSelect() {
+            const select = document.getElementById('target-agent');
+            select.innerHTML = '<option value="">Auto-select best agent</option>';
+            
+            agents.forEach(agent => {
+                const option = document.createElement('option');
+                option.value = agent.id;
+                option.textContent = `${agent.role} (${agent.machine_id})`;
+                select.appendChild(option);
+            });
+        }
+
+        async function delegateTask() {
+            const description = document.getElementById('task-description').value;
+            const capabilities = document.getElementById('required-capabilities').value
+                .split(',').map(c => c.trim()).filter(c => c);
+            const targetAgent = document.getElementById('target-agent').value;
+
+            if (!description) {
+                showToast('Please enter a task description', 'error');
+                return;
+            }
+
+            try {
+                const response = await authenticatedFetch('/admin/api/delegate-task', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        task_description: description,
+                        required_capabilities: capabilities.length > 0 ? capabilities : null,
+                        target_agent: targetAgent || null
+                    })
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    showToast('Task delegated successfully', 'success');
+                    document.getElementById('task-description').value = '';
+                    document.getElementById('required-capabilities').value = '';
+                    document.getElementById('target-agent').value = '';
+                    loadRecentTasks();
+                } else {
+                    showToast('Failed to delegate task', 'error');
+                }
+            } catch (error) {
+                showToast('Error delegating task', 'error');
+            }
+        }
+
+        async function queryAgent(agentId) {
+            const query = prompt('What would you like to ask this agent?');
+            if (!query) return;
+
+            try {
+                const response = await authenticatedFetch('/admin/api/query-agent', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        agent_id: agentId,
+                        query: query
+                    })
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    alert(`Agent Response:\n\n${JSON.stringify(result, null, 2)}`);
+                } else {
+                    showToast('Failed to query agent', 'error');
+                }
+            } catch (error) {
+                showToast('Error querying agent', 'error');
+            }
+        }
+
+        async function removeAgent(agentId) {
+            if (!confirm('Remove this agent from the hive?')) return;
+
+            try {
+                const response = await authenticatedFetch(`/admin/api/agents/${agentId}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    showToast('Agent removed', 'success');
+                    loadAgents();
+                } else {
+                    showToast('Failed to remove agent', 'error');
+                }
+            } catch (error) {
+                showToast('Error removing agent', 'error');
+            }
+        }
+
+        async function broadcastMessage() {
+            const message = document.getElementById('broadcast-message').value;
+            const category = document.getElementById('broadcast-category').value;
+            const severity = document.getElementById('broadcast-severity').value;
+
+            if (!message) {
+                showToast('Please enter a message', 'error');
+                return;
+            }
+
+            try {
+                const response = await authenticatedFetch('/admin/api/broadcast', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message: message,
+                        category: category,
+                        severity: severity
+                    })
+                });
+
+                if (response.ok) {
+                    showToast('Message broadcasted', 'success');
+                    document.getElementById('broadcast-message').value = '';
+                    loadBroadcastHistory();
+                } else {
+                    showToast('Failed to broadcast message', 'error');
+                }
+            } catch (error) {
+                showToast('Error broadcasting message', 'error');
+            }
+        }
+
+        async function loadRecentTasks() {
+            try {
+                const response = await authenticatedFetch('/admin/api/tasks/recent');
+                if (response.ok) {
+                    const tasks = await response.json();
+                    const container = document.getElementById('recent-tasks');
+                    
+                    if (tasks.length === 0) {
+                        container.innerHTML = '<p style="color: #666;">No recent tasks</p>';
+                        return;
+                    }
+
+                    container.innerHTML = tasks.map(task => `
+                        <div style="border: 1px solid #e1e5e9; border-radius: 6px; padding: 10px; margin-bottom: 10px;">
+                            <strong>${task.description}</strong><br>
+                            <small>To: ${task.assigned_agent || 'Auto-select'} | ${formatTime(task.created_at)}</small>
+                        </div>
+                    `).join('');
+                }
+            } catch (error) {
+                console.error('Error loading recent tasks:', error);
+            }
+        }
+
+        async function loadBroadcastHistory() {
+            try {
+                const response = await authenticatedFetch('/admin/api/broadcasts/recent');
+                if (response.ok) {
+                    const broadcasts = await response.json();
+                    const container = document.getElementById('broadcasts-list');
+                    
+                    if (broadcasts.length === 0) {
+                        container.innerHTML = '<p style="color: #666;">No recent broadcasts</p>';
+                        return;
+                    }
+
+                    container.innerHTML = broadcasts.map(broadcast => `
+                        <div style="border: 1px solid #e1e5e9; border-radius: 6px; padding: 10px; margin-bottom: 10px;">
+                            <span class="status ${broadcast.severity}">${broadcast.severity.toUpperCase()}</span>
+                            <strong>${broadcast.category}</strong><br>
+                            ${broadcast.message}<br>
+                            <small>${formatTime(broadcast.timestamp)}</small>
+                        </div>
+                    `).join('');
+                }
+            } catch (error) {
+                console.error('Error loading broadcast history:', error);
+            }
+        }
+
+        // Auto-refresh every 30 seconds
+        setInterval(() => {
+            loadAgents();
+            loadRecentTasks();
+            loadBroadcastHistory();
+        }, 30000);
+
+        // Load initial data
+        loadAgents();
+        loadRecentTasks();
+        loadBroadcastHistory();
+    </script>
+</body>
+</html>

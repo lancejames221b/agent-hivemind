@@ -119,7 +119,24 @@
   },
   "security": {
     "enable_auth": true,
-    "jwt_secret": "your-jwt-secret-here",
-    "api_key_file": "/home/lj/Credentials/keys.txt.enc"
+    "jwt_secret": "${HAIVEMIND_JWT_SECRET:-change-this-secret-key}",
+    "api_tokens": {
+      "enabled": true,
+      "admin_token": "${HAIVEMIND_ADMIN_TOKEN}",
+      "read_only_token": "${HAIVEMIND_READONLY_TOKEN}",
+      "agent_token": "${HAIVEMIND_AGENT_TOKEN}"
+    },
+    "allowed_origins": ["localhost", "127.0.0.1", "lance-dev", "ljs-macbook-pro", "m2", "max"],
+    "ip_whitelist": ["127.0.0.1", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"],
+    "rate_limiting": {
+      "enabled": true,
+      "requests_per_minute": 120,
+      "burst_limit": 10
+    },
+    "tls": {
+      "enabled": false,
+      "cert_file": "/etc/ssl/certs/haivemind.crt",
+      "key_file": "/etc/ssl/private/haivemind.key"
+    }
   }
 }

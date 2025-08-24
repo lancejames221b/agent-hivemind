@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import sys
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -22,6 +23,7 @@ except ImportError:
     sys.exit(1)
 
 from memory_server import MemoryStorage
+from auth import AuthManager
 
 # Setup logging
 logging.basicConfig(
@@ -41,8 +43,9 @@ class RemoteMemoryMCPServer:
         with open(config_path) as f:
             self.config = json.load(f)
         
-        # Initialize memory storage
+        # Initialize memory storage and auth
         self.storage = MemoryStorage(self.config)
+        self.auth = AuthManager(self.config)
         
         # Get remote server config
         remote_config = self.config.get('remote_server', {})
@@ -61,6 +64,9 @@ class RemoteMemoryMCPServer:
         
         # Register all tools
         self._register_tools()
+        
+        # Add admin interface routes
+        self._add_admin_routes()
         
         logger.info(f"🌐 hAIveMind network portal initialized on {self.host}:{self.port} - remote access enabled")
     
@@ -597,7 +603,197 @@ NETWORK TOPOLOGY:
                 logger.error(f"Error syncing external knowledge: {e}")
                 return f"Error syncing external knowledge: {str(e)}"
         
+        @self.mcp.tool()
+        async def upload_file(
+            filename: str,
+            content: str,
+            file_type: str = "config",
+            description: Optional[str] = None
+        ) -> str:
+            """Upload and store any file content in hAIveMind"""
+            try:
+                # Determine category based on file type
+                category_map = {
+                    "config": "infrastructure",
+                    "script": "runbooks", 
+                    "documentation": "global",
+                    "mcp": "infrastructure",
+                    "claude": "infrastructure"
+                }
+                category = category_map.get(file_type, "global")
+                
+                # Store the file content
+                memory_id = await self.storage.store_memory(
+                    content=content,
+                    category=category,
+                    context=f"File: {filename} ({file_type})",
+                    metadata={
+                        'filename': filename,
+                        'file_type': file_type,
+                        'description': description,
+                        'uploaded_by': self.storage.agent_id,
+                        'upload_time': time.time()
+                    },
+                    tags=[file_type, "upload", filename.lower().replace('.', '_')]
+                )
+                
+                return f"✅ File '{filename}' uploaded successfully to hAIveMind. Memory ID: {memory_id}"
+            except Exception as e:
+                logger.error(f"Error uploading file: {e}")
+                return f"❌ Error uploading file: {str(e)}"
+        
         logger.info("🤝 All hive mind tools synchronized with network portal - collective intelligence ready")
+    
+    def _add_admin_routes(self):
+        """Add admin web interface routes"""
+        from starlette.responses import HTMLResponse, JSONResponse, FileResponse
+        from starlette.staticfiles import StaticFiles
+        import os
+        
+        admin_dir = str(Path(__file__).parent.parent / "admin")
+        
+        # Serve static files
+        @self.mcp.custom_route("/admin/static/{path:path}", methods=["GET"])
+        async def admin_static(request):
+            static_path = os.path.join(admin_dir, "static", request.path_params["path"])
+            if os.path.exists(static_path):
+                return FileResponse(static_path)
+            return JSONResponse({"error": "File not found"}, status_code=404)
+        
+        # Serve admin HTML pages
+        @self.mcp.custom_route("/admin/{page}", methods=["GET"])
+        async def admin_pages(request):
+            page = request.path_params["page"]
+            if not page.endswith('.html'):
+                page += '.html'
+            
+            page_path = os.path.join(admin_dir, page)
+            if os.path.exists(page_path):
+                return FileResponse(page_path)
+            return JSONResponse({"error": "Page not found"}, status_code=404)
+        
+        # Admin login endpoint
+        @self.mcp.custom_route("/admin/api/login", methods=["POST"])
+        async def admin_login(request):
+            try:
+                data = await request.json()
+                username = data.get('username')
+                password = data.get('password')
+                
+                if self.auth.validate_admin_login(username, password):
+                    token = self.auth.generate_jwt_token({
+                        'username': username,
+                        'role': 'admin'
+                    })
+                    return JSONResponse({"token": token, "status": "success"})
+                else:
+                    return JSONResponse({"error": "Invalid credentials"}, status_code=401)
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # Token verification
+        @self.mcp.custom_route("/admin/api/verify", methods=["GET"])
+        async def verify_token(request):
+            auth_header = request.headers.get('Authorization')
+            if not auth_header or not auth_header.startswith('Bearer '):
+                return JSONResponse({"error": "No token provided"}, status_code=401)
+            
+            token = auth_header.split(' ')[1]
+            valid, payload = self.auth.validate_jwt_token(token)
+            
+            if valid:
+                return JSONResponse({"status": "valid", "user": payload})
+            else:
+                return JSONResponse({"error": "Invalid token"}, status_code=401)
+        
+        # System stats
+        @self.mcp.custom_route("/admin/api/stats", methods=["GET"])
+        async def admin_stats(request):
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            
+            try:
+                # Get agent roster
+                agents = await self.storage.get_agent_roster()
+                active_agents = len(agents.get('agents', []))
+                
+                # Get memory stats
+                memory_stats = self.storage.get_collection_info()
+                total_memories = sum(collection.get('count', 0) for collection in memory_stats.values())
+                
+                return JSONResponse({
+                    "active_agents": active_agents,
+                    "total_memories": total_memories,
+                    "uptime": "Running",
+                    "network_status": "Connected"
+                })
+            except Exception as e:
+                logger.error(f"Error getting stats: {e}")
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # Agent management
+        @self.mcp.custom_route("/admin/api/agents", methods=["GET"])
+        async def get_agents(request):
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            
+            try:
+                roster = await self.storage.get_agent_roster()
+                return JSONResponse(roster.get('agents', []))
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # Memory search
+        @self.mcp.custom_route("/admin/api/memory/search", methods=["GET"])
+        async def memory_search(request):
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            
+            try:
+                query = request.query_params.get('query', '')
+                category = request.query_params.get('category')
+                limit = int(request.query_params.get('limit', 20))
+                semantic = request.query_params.get('semantic', 'true').lower() == 'true'
+                
+                memories = await self.storage.search_memories(
+                    query=query,
+                    category=category,
+                    limit=limit,
+                    semantic=semantic
+                )
+                return JSONResponse(memories)
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # Add memory
+        @self.mcp.custom_route("/admin/api/memory", methods=["POST"])
+        async def add_memory(request):
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            
+            try:
+                data = await request.json()
+                memory_id = await self.storage.store_memory(
+                    content=data['content'],
+                    category=data.get('category', 'global'),
+                    context=data.get('context'),
+                    tags=data.get('tags')
+                )
+                return JSONResponse({"memory_id": memory_id, "status": "success"})
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        logger.info("🔧 Admin web interface routes registered")
+    
+    async def _check_admin_auth(self, request):
+        """Check if request has valid admin authentication"""
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return False
+        
+        token = auth_header.split(' ')[1]
+        valid, payload = self.auth.validate_jwt_token(token)
+        return valid and payload.get('role') == 'admin'
     
     def run(self):
         """Run the remote MCP server"""

@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>hAIveMind Admin - Configuration</title>
+    <link rel="stylesheet" href="/admin/static/admin.css">
+</head>
+<body class="dashboard">
+    <nav class="nav-header">
+        <h1>🧠 hAIveMind Admin</h1>
+        <div class="nav-links">
+            <a href="/admin/dashboard.html">Dashboard</a>
+            <a href="/admin/agents.html">Agents</a>
+            <a href="/admin/config.html" class="active">Config</a>
+            <a href="/admin/memory.html">Memory</a>
+        </div>
+        <button class="logout-btn" onclick="logout()">Logout</button>
+    </nav>
+
+    <main class="main-content">
+        <div class="card">
+            <h2>⚙️ System Configuration</h2>
+            <p>Edit the hAIveMind system configuration. Changes will be applied immediately after saving.</p>
+            
+            <div class="config-actions">
+                <button class="btn" onclick="loadConfig()">🔄 Reload</button>
+                <button class="btn btn-success" onclick="saveConfig()">💾 Save Changes</button>
+                <button class="btn" onclick="validateConfig()">✅ Validate</button>
+                <button class="btn btn-danger" onclick="resetConfig()">🔄 Reset to Default</button>
+            </div>
+            
+            <div class="config-editor">
+                <textarea 
+                    id="config-editor" 
+                    class="config-textarea" 
+                    placeholder="Loading configuration..."
+                ></textarea>
+            </div>
+            
+            <div id="config-status" style="margin-top: 15px;"></div>
+        </div>
+
+        <div class="card">
+            <h2>🔐 Security Settings</h2>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="enable-auth"> Enable Authentication
+                </label>
+            </div>
+            <div class="form-group">
+                <label for="admin-password">Admin Password</label>
+                <input type="password" id="admin-password" placeholder="Current: Unit221B">
+            </div>
+            <div class="form-group">
+                <button class="btn" onclick="generateTokens()">🔑 Generate New API Tokens</button>
+            </div>
+            <div id="security-status"></div>
+        </div>
+
+        <div class="card">
+            <h2>🌐 Network Configuration</h2>
+            <div class="form-group">
+                <label for="allowed-machines">Allowed Machines (one per line)</label>
+                <textarea id="allowed-machines" rows="5" style="width: 100%; padding: 10px;">lance-dev
+ljs-macbook-pro
+m2
+max</textarea>
+            </div>
+            <div class="form-group">
+                <label for="ip-whitelist">IP Whitelist (CIDR format, one per line)</label>
+                <textarea id="ip-whitelist" rows="5" style="width: 100%; padding: 10px;">127.0.0.1
+10.0.0.0/8
+172.16.0.0/12
+192.168.0.0/16</textarea>
+            </div>
+            <button class="btn" onclick="updateNetworkConfig()">💾 Update Network Settings</button>
+        </div>
+
+        <div class="card">
+            <h2>📊 External Connectors</h2>
+            <div class="connector-section">
+                <h3>Confluence</h3>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="confluence-enabled"> Enable Confluence Connector
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label for="confluence-url">Confluence URL</label>
+                    <input type="url" id="confluence-url" placeholder="https://your-domain.atlassian.net">
+                </div>
+                <div class="form-group">
+                    <label for="confluence-token">API Token</label>
+                    <input type="password" id="confluence-token" placeholder="Your Confluence API token">
+                </div>
+            </div>
+
+            <div class="connector-section">
+                <h3>Jira</h3>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="jira-enabled"> Enable Jira Connector
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label for="jira-url">Jira URL</label>
+                    <input type="url" id="jira-url" placeholder="https://your-domain.atlassian.net">
+                </div>
+                <div class="form-group">
+                    <label for="jira-token">API Token</label>
+                    <input type="password" id="jira-token" placeholder="Your Jira API token">
+                </div>
+            </div>
+
+            <button class="btn" onclick="updateConnectors()">💾 Update Connectors</button>
+        </div>
+    </main>
+
+    <script src="/admin/static/admin.js"></script>
+    <script>
+        let currentConfig = {};
+
+        async function loadConfig() {
+            try {
+                const response = await authenticatedFetch('/admin/api/config');
+                if (response.ok) {
+                    currentConfig = await response.json();
+                    document.getElementById('config-editor').value = JSON.stringify(currentConfig, null, 2);
+                    loadSecuritySettings();
+                    loadNetworkSettings();
+                    loadConnectorSettings();
+                    showStatus('config-status', 'Configuration loaded successfully', 'success');
+                } else {
+                    showStatus('config-status', 'Failed to load configuration', 'error');
+                }
+            } catch (error) {
+                console.error('Error loading config:', error);
+                showStatus('config-status', 'Error loading configuration', 'error');
+            }
+        }
+
+        async function saveConfig() {
+            try {
+                const configText = document.getElementById('config-editor').value;
+                const config = JSON.parse(configText);
+                
+                const response = await authenticatedFetch('/admin/api/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+
+                if (response.ok) {
+                    currentConfig = config;
+                    showStatus('config-status', 'Configuration saved successfully', 'success');
+                } else {
+                    const error = await response.text();
+                    showStatus('config-status', `Failed to save: ${error}`, 'error');
+                }
+            } catch (error) {
+                showStatus('config-status', `Invalid JSON: ${error.message}`, 'error');
+            }
+        }
+
+        function validateConfig() {
+            try {
+                const configText = document.getElementById('config-editor').value;
+                JSON.parse(configText);
+                showStatus('config-status', 'Configuration is valid JSON', 'success');
+            } catch (error) {
+                showStatus('config-status', `Invalid JSON: ${error.message}`, 'error');
+            }
+        }
+
+        async function resetConfig() {
+            if (confirm('Are you sure you want to reset to default configuration? This cannot be undone.')) {
+                try {
+                    const response = await authenticatedFetch('/admin/api/config/reset', {
+                        method: 'POST'
+                    });
+
+                    if (response.ok) {
+                        await loadConfig();
+                        showStatus('config-status', 'Configuration reset to defaults', 'success');
+                    } else {
+                        showStatus('config-status', 'Failed to reset configuration', 'error');
+                    }
+                } catch (error) {
+                    showStatus('config-status', 'Error resetting configuration', 'error');
+                }
+            }
+        }
+
+        async function generateTokens() {
+            if (confirm('Generate new API tokens? This will invalidate existing tokens.')) {
+                try {
+                    const response = await authenticatedFetch('/admin/api/security/generate-tokens', {
+                        method: 'POST'
+                    });
+
+                    if (response.ok) {
+                        const tokens = await response.json();
+                        showStatus('security-status', 'New tokens generated. Check server logs for details.', 'success');
+                    } else {
+                        showStatus('security-status', 'Failed to generate tokens', 'error');
+                    }
+                } catch (error) {
+                    showStatus('security-status', 'Error generating tokens', 'error');
+                }
+            }
+        }
+
+        function loadSecuritySettings() {
+            if (currentConfig.security) {
+                document.getElementById('enable-auth').checked = currentConfig.security.enable_auth;
+            }
+        }
+
+        function loadNetworkSettings() {
+            if (currentConfig.sync && currentConfig.sync.discovery) {
+                document.getElementById('allowed-machines').value = 
+                    currentConfig.sync.discovery.machines.join('\n');
+            }
+            if (currentConfig.security && currentConfig.security.ip_whitelist) {
+                document.getElementById('ip-whitelist').value = 
+                    currentConfig.security.ip_whitelist.join('\n');
+            }
+        }
+
+        function loadConnectorSettings() {
+            if (currentConfig.connectors) {
+                const confluence = currentConfig.connectors.confluence || {};
+                const jira = currentConfig.connectors.jira || {};
+                
+                document.getElementById('confluence-enabled').checked = confluence.enabled;
+                document.getElementById('confluence-url').value = confluence.url || '';
+                
+                document.getElementById('jira-enabled').checked = jira.enabled;
+                document.getElementById('jira-url').value = jira.url || '';
+            }
+        }
+
+        async function updateNetworkConfig() {
+            const machines = document.getElementById('allowed-machines').value
+                .split('\n').filter(m => m.trim()).map(m => m.trim());
+            const ipWhitelist = document.getElementById('ip-whitelist').value
+                .split('\n').filter(ip => ip.trim()).map(ip => ip.trim());
+
+            try {
+                const response = await authenticatedFetch('/admin/api/config/network', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ machines, ip_whitelist: ipWhitelist })
+                });
+
+                if (response.ok) {
+                    showStatus('config-status', 'Network settings updated', 'success');
+                    await loadConfig();
+                } else {
+                    showStatus('config-status', 'Failed to update network settings', 'error');
+                }
+            } catch (error) {
+                showStatus('config-status', 'Error updating network settings', 'error');
+            }
+        }
+
+        async function updateConnectors() {
+            const connectors = {
+                confluence: {
+                    enabled: document.getElementById('confluence-enabled').checked,
+                    url: document.getElementById('confluence-url').value,
+                    token: document.getElementById('confluence-token').value
+                },
+                jira: {
+                    enabled: document.getElementById('jira-enabled').checked,
+                    url: document.getElementById('jira-url').value,
+                    token: document.getElementById('jira-token').value
+                }
+            };
+
+            try {
+                const response = await authenticatedFetch('/admin/api/config/connectors', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(connectors)
+                });
+
+                if (response.ok) {
+                    showStatus('config-status', 'Connector settings updated', 'success');
+                    await loadConfig();
+                } else {
+                    showStatus('config-status', 'Failed to update connectors', 'error');
+                }
+            } catch (error) {
+                showStatus('config-status', 'Error updating connectors', 'error');
+            }
+        }
+
+        function showStatus(elementId, message, type) {
+            const element = document.getElementById(elementId);
+            element.className = type === 'success' ? 'status online' : 'status offline';
+            element.textContent = message;
+            setTimeout(() => element.textContent = '', 5000);
+        }
+
+        // Load initial configuration
+        loadConfig();
+    </script>
+</body>
+</html>

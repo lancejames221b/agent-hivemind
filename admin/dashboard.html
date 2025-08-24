@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>hAIveMind Admin - Dashboard</title>
+    <link rel="stylesheet" href="/admin/static/admin.css">
+</head>
+<body class="dashboard">
+    <nav class="nav-header">
+        <h1>🧠 hAIveMind Admin</h1>
+        <div class="nav-links">
+            <a href="/admin/dashboard.html" class="active">Dashboard</a>
+            <a href="/admin/memory.html">Memory Browser</a>
+        </div>
+        <button class="logout-btn" onclick="logout()">Logout</button>
+    </nav>
+
+    <main class="main-content">
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value" id="active-agents">-</div>
+                <div class="stat-label">Active Agents</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="total-memories">-</div>
+                <div class="stat-label">Total Memories</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="system-uptime">-</div>
+                <div class="stat-label">System Uptime</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="network-status">-</div>
+                <div class="stat-label">Network Status</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>🔍 Memory Search</h2>
+            <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+                <div class="form-group">
+                    <label for="search-query">Search Query</label>
+                    <input type="text" id="search-query" placeholder="Search memories..." style="width: 100%; padding: 10px;">
+                </div>
+                <div class="form-group">
+                    <label for="search-category">Category</label>
+                    <select id="search-category" style="width: 100%; padding: 10px;">
+                        <option value="">All Categories</option>
+                        <option value="global">Global</option>
+                        <option value="project">Project</option>
+                        <option value="infrastructure">Infrastructure</option>
+                        <option value="incidents">Incidents</option>
+                        <option value="security">Security</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>&nbsp;</label>
+                    <button class="btn" onclick="searchMemories()" style="width: 100%;">🔍 Search</button>
+                </div>
+            </div>
+            
+            <div id="search-results">
+                <p style="color: #666; text-align: center;">Enter a search query above to find memories</p>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>📝 Add New Memory</h2>
+            <div class="form-group">
+                <label for="memory-content">Content</label>
+                <textarea id="memory-content" rows="4" style="width: 100%; padding: 10px;" placeholder="Enter memory content..."></textarea>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
+                <div class="form-group">
+                    <label for="memory-category">Category</label>
+                    <select id="memory-category" style="width: 100%; padding: 10px;">
+                        <option value="global">Global</option>
+                        <option value="infrastructure">Infrastructure</option>
+                        <option value="incidents">Incidents</option>
+                        <option value="security">Security</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="memory-context">Context (optional)</label>
+                    <input type="text" id="memory-context" placeholder="Additional context..." style="width: 100%; padding: 10px;">
+                </div>
+                <div class="form-group">
+                    <label for="memory-tags">Tags (comma-separated)</label>
+                    <input type="text" id="memory-tags" placeholder="tag1, tag2, tag3" style="width: 100%; padding: 10px;">
+                </div>
+            </div>
+            <button class="btn btn-success" onclick="addMemory()">💾 Add Memory</button>
+        </div>
+
+        <div class="card">
+            <h2>🔧 System Status</h2>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div>
+                    <p>🟢 <strong>hAIveMind Server:</strong> Running</p>
+                    <p>🟢 <strong>Authentication:</strong> Active</p>
+                </div>
+                <div>
+                    <p>🟢 <strong>Memory Storage:</strong> ChromaDB</p>
+                    <p>🟢 <strong>MCP Protocol:</strong> SSE Transport</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="/admin/static/admin.js"></script>
+    <script>
+        // Dashboard-specific functionality
+        async function loadDashboardData() {
+            try {
+                // Load system stats
+                const statsResponse = await authenticatedFetch('/admin/api/stats');
+                if (statsResponse.ok) {
+                    const stats = await statsResponse.json();
+                    updateStats(stats);
+                }
+            } catch (error) {
+                console.error('Error loading dashboard data:', error);
+            }
+        }
+
+        function updateStats(stats) {
+            document.getElementById('active-agents').textContent = stats.active_agents || 0;
+            document.getElementById('total-memories').textContent = stats.total_memories || 0;
+            document.getElementById('system-uptime').textContent = stats.uptime || 'Unknown';
+            document.getElementById('network-status').textContent = stats.network_status || 'Unknown';
+        }
+
+        async function searchMemories() {
+            const query = document.getElementById('search-query').value;
+            const category = document.getElementById('search-category').value;
+
+            if (!query.trim()) {
+                showToast('Please enter a search query', 'error');
+                return;
+            }
+
+            const resultsDiv = document.getElementById('search-results');
+            resultsDiv.innerHTML = '<p style="color: #666; text-align: center;">Searching...</p>';
+
+            try {
+                const params = new URLSearchParams({
+                    query: query,
+                    limit: 10,
+                    semantic: true
+                });
+
+                if (category) params.append('category', category);
+
+                const response = await authenticatedFetch(`/admin/api/memory/search?${params}`);
+                
+                if (response.ok) {
+                    const memories = await response.json();
+                    displaySearchResults(memories);
+                } else {
+                    resultsDiv.innerHTML = '<p style="color: #d63384;">Search failed</p>';
+                }
+            } catch (error) {
+                console.error('Search error:', error);
+                resultsDiv.innerHTML = '<p style="color: #d63384;">Search error</p>';
+            }
+        }
+
+        function displaySearchResults(memories) {
+            const resultsDiv = document.getElementById('search-results');
+            
+            if (!memories || memories.length === 0) {
+                resultsDiv.innerHTML = '<p style="color: #666; text-align: center;">No memories found</p>';
+                return;
+            }
+
+            resultsDiv.innerHTML = memories.map(memory => `
+                <div style="border: 1px solid #e1e5e9; border-radius: 6px; padding: 15px; margin-bottom: 15px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <span class="status online">${memory.category}</span>
+                        <small style="color: #666;">${formatTime(memory.created_at)}</small>
+                    </div>
+                    <div style="margin-bottom: 10px;">
+                        <strong>Content:</strong><br>
+                        ${memory.content}
+                    </div>
+                    ${memory.context ? `<div style="margin-bottom: 10px;"><strong>Context:</strong> ${memory.context}</div>` : ''}
+                    <div style="font-size: 12px; color: #666;">
+                        ID: ${memory.id} | Machine: ${memory.metadata?.machine_id || 'unknown'}
+                        ${memory.score ? ` | Similarity: ${(Math.abs(memory.score) * 100).toFixed(1)}%` : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function addMemory() {
+            const content = document.getElementById('memory-content').value;
+            const category = document.getElementById('memory-category').value;
+            const context = document.getElementById('memory-context').value;
+            const tagsInput = document.getElementById('memory-tags').value;
+            const tags = tagsInput ? tagsInput.split(',').map(t => t.trim()).filter(t => t) : [];
+
+            if (!content.trim()) {
+                showToast('Please enter memory content', 'error');
+                return;
+            }
+
+            try {
+                const response = await authenticatedFetch('/admin/api/memory', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        content: content,
+                        category: category,
+                        context: context || null,
+                        tags: tags.length > 0 ? tags : null
+                    })
+                });
+
+                if (response.ok) {
+                    showToast('Memory added successfully', 'success');
+                    document.getElementById('memory-content').value = '';
+                    document.getElementById('memory-context').value = '';
+                    document.getElementById('memory-tags').value = '';
+                    loadDashboardData(); // Refresh stats
+                } else {
+                    showToast('Failed to add memory', 'error');
+                }
+            } catch (error) {
+                showToast('Error adding memory', 'error');
+            }
+        }
+
+        function formatTime(timestamp) {
+            if (!timestamp) return 'Unknown';
+            return new Date(timestamp).toLocaleString();
+        }
+
+        // Allow search on Enter key
+        document.getElementById('search-query').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                searchMemories();
+            }
+        });
+
+        // Auto-refresh dashboard every 60 seconds
+        setInterval(loadDashboardData, 60000);
+
+        // Load initial data
+        loadDashboardData();
+    </script>
+</body>
+</html>
