@@ -1,0 +1,137 @@
+{
+  "host": "0.0.0.0",
+  "port": 8920,
+  "marketplace": {
+    "database_path": "data/marketplace.db",
+    "storage_path": "data/marketplace_storage",
+    "redis": {
+      "host": "localhost",
+      "port": 6379,
+      "db": 2,
+      "password": null
+    },
+    "security": {
+      "max_package_size_mb": 100,
+      "scan_uploads": true,
+      "allowed_extensions": [".zip", ".tar.gz"],
+      "quarantine_suspicious": true,
+      "virus_scanning": false,
+      "code_analysis": true,
+      "dependency_scanning": true,
+      "vulnerability_database": "data/vulnerabilities.db",
+      "security_policies": {
+        "require_verification": false,
+        "auto_approve_verified_authors": true,
+        "security_scan_timeout": 300,
+        "max_security_issues": 5
+      }
+    },
+    "categories": [
+      "ai-tools",
+      "data-processing", 
+      "web-scraping",
+      "databases",
+      "monitoring",
+      "security",
+      "development",
+      "automation",
+      "general"
+    ],
+    "haivemind_integration": true
+  },
+  "api": {
+    "allowed_origins": ["*"],
+    "trusted_hosts": ["localhost", "127.0.0.1", "*.haivemind.ai"],
+    "rate_limits": {
+      "search": 100,
+      "register": 10,
+      "install": 50,
+      "review": 20
+    },
+    "authentication": {
+      "enabled": true,
+      "jwt_secret": "${MARKETPLACE_JWT_SECRET}",
+      "token_ttl": 3600,
+      "refresh_enabled": true
+    }
+  },
+  "installer": {
+    "install_directory": "data/marketplace_installs",
+    "use_mcp_hosting": true,
+    "auto_generate_config": true,
+    "supported_methods": ["one_click", "manual", "cli", "hosted", "docker"],
+    "security": {
+      "sandbox_installations": true,
+      "verify_signatures": true,
+      "scan_before_install": true
+    }
+  },
+  "templates": {
+    "templates_directory": "templates/marketplace",
+    "builtin_templates": ["python_basic", "data_processing", "web_scraping"],
+    "allow_custom_templates": true,
+    "template_validation": true
+  },
+  "compatibility": {
+    "database_path": "data/compatibility.db",
+    "test_cache_dir": "data/compatibility_tests",
+    "auto_test": true,
+    "test_timeout": 60,
+    "claude_versions": [
+      "claude-3-5-sonnet-20241022",
+      "claude-3-5-haiku-20241022",
+      "claude-3-opus-20240229",
+      "claude-3-sonnet-20240229",
+      "claude-3-haiku-20240307"
+    ],
+    "platforms": ["linux", "macos", "windows"],
+    "python_versions": ["3.8", "3.9", "3.10", "3.11", "3.12"]
+  },
+  "import_export": {
+    "export_directory": "data/marketplace_exports",
+    "import_directory": "data/marketplace_imports", 
+    "backup_directory": "data/marketplace_backups",
+    "supported_formats": ["json", "yaml", "csv", "xml", "zip", "toml"],
+    "encryption": {
+      "enabled": false,
+      "algorithm": "AES-256-GCM",
+      "key_file": "config/export_key.pem"
+    },
+    "compression": {
+      "enabled": true,
+      "level": 6
+    }
+  },
+  "haivemind_integration": true,
+  "auto_start_services": true,
+  "collect_analytics": true,
+  "auto_compatibility_testing": true,
+  "haivemind_sync": true,
+  "background_tasks": {
+    "analytics_interval": 3600,
+    "compatibility_test_interval": 86400,
+    "haivemind_sync_interval": 1800,
+    "cleanup_interval": 604800
+  },
+  "logging": {
+    "level": "INFO",
+    "file": "logs/marketplace.log",
+    "max_size": "10MB",
+    "backup_count": 5,
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  },
+  "monitoring": {
+    "metrics_enabled": true,
+    "metrics_port": 8921,
+    "health_check_endpoint": "/health",
+    "prometheus_metrics": true
+  },
+  "enterprise": {
+    "audit_logging": true,
+    "compliance_mode": false,
+    "data_retention_days": 365,
+    "backup_encryption": true,
+    "sso_integration": false,
+    "ldap_integration": false
+  }
+}
