@@ -212,6 +212,28 @@
       "remove_generated_with": true
     }
   },
+  "mcp_hosting": {
+    "enabled": true,
+    "servers_dir": "data/mcp_servers",
+    "uploads_dir": "data/mcp_uploads", 
+    "logs_dir": "data/mcp_logs",
+    "max_servers": 10,
+    "health_check_interval": 30,
+    "auto_cleanup": true,
+    "cleanup_interval": 3600,
+    "dashboard": {
+      "enabled": true,
+      "host": "0.0.0.0",
+      "port": 8910,
+      "debug": false
+    },
+    "security": {
+      "allowed_languages": ["python", "node", "bash"],
+      "sandbox_by_default": true,
+      "max_upload_size_mb": 100,
+      "scan_uploads": true
+    }
+  },
   "security": {
     "enable_auth": true,
     "jwt_secret": "${HAIVEMIND_JWT_SECRET:-change-this-secret-key}",
