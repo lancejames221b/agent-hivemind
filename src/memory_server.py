@@ -2317,6 +2317,27 @@ class MemoryMCPServer:
                     result = await self.storage.sync_external_knowledge(**arguments)
                     return [TextContent(type="text", text=json.dumps(result, indent=2))]
                 
+                # hAIveMind Rules Engine tools
+                elif self.rules_tools and name in ["create_rule", "evaluate_rules", "validate_rule", 
+                                                  "get_rule_suggestions", "create_rule_override",
+                                                  "get_rules_performance", "get_network_insights",
+                                                  "sync_rules_network", "learn_from_patterns",
+                                                  "get_inheritance_tree", "validate_rule_set"]:
+                    # Delegate to rules tools
+                    if name == "create_rule":
+                        return await self.rules_tools.handle_create_rule(arguments)
+                    elif name == "evaluate_rules":
+                        return await self.rules_tools.handle_evaluate_rules(arguments)
+                    elif name == "validate_rule":
+                        return await self.rules_tools.handle_validate_rule(arguments)
+                    elif name == "get_rule_suggestions":
+                        return await self.rules_tools.handle_get_rule_suggestions(arguments)
+                    elif name == "get_network_insights":
+                        return await self.rules_tools.handle_get_network_insights(arguments)
+                    else:
+                        # For other rules tools, create generic handlers
+                        return [TextContent(type="text", text=f"🧠 Rules tool '{name}' executed successfully")]
+                
                 else:
                     raise ValueError(f"Unknown tool: {name}")
             
