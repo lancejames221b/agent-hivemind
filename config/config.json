@@ -48,7 +48,7 @@
     }
   },
   "memory": {
-    "categories": ["project", "conversation", "agent", "global", "infrastructure", "incidents", "deployments", "monitoring", "runbooks", "security", "rules"],
+    "categories": ["project", "conversation", "agent", "global", "infrastructure", "incidents", "deployments", "monitoring", "runbooks", "security", "rules", "patterns", "playbook_suggestions"],
     "max_age_days": 365,
     "auto_consolidate": true,
     "consolidate_interval": 86400,
@@ -112,7 +112,29 @@
       "incident_management": true,
       "deployment_tracking": true,
       "runbook_generation": true,
-      "monitoring_integration": true
+      "monitoring_integration": true,
+      "playbook_auto_generation": true
+    }
+  },
+  "playbook_auto_generation": {
+    "enabled": true,
+    "continuous_monitoring": true,
+    "monitoring_interval_hours": 24,
+    "auto_generation": {
+      "min_pattern_frequency": 3,
+      "min_success_rate": 0.8,
+      "similarity_threshold": 0.7,
+      "confidence_threshold": 0.75
+    },
+    "recommendations": {
+      "min_relevance_score": 0.6,
+      "max_recommendations": 5,
+      "context_window_hours": 24
+    },
+    "human_review": {
+      "required_for_approval": true,
+      "auto_approve_high_confidence": false,
+      "high_confidence_threshold": 0.9
     }
   },
   "connectors": {

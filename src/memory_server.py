@@ -39,6 +39,14 @@ except ImportError:
     CONFLUENCE_AVAILABLE = False
     logger.warning("Confluence integration not available - missing dependencies")
 
+# Import Playbook Auto-Generation
+try:
+    from playbook_auto_generation_mcp_tools import PlaybookAutoGenerationMCPTools
+    PLAYBOOK_AUTO_GEN_AVAILABLE = True
+except ImportError:
+    PLAYBOOK_AUTO_GEN_AVAILABLE = False
+    logger.warning("Playbook auto-generation not available - missing dependencies")
+
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -2805,6 +2813,18 @@ class MemoryMCPServer:
                 logger.error(f"Failed to initialize Confluence integration: {e}")
                 self.confluence_tools = None
         
+        # Initialize Playbook Auto-Generation tools if available
+        self.playbook_auto_gen_tools = None
+        if PLAYBOOK_AUTO_GEN_AVAILABLE:
+            try:
+                self.playbook_auto_gen_tools = PlaybookAutoGenerationMCPTools(
+                    self.storage, self.config
+                )
+                logger.info("🤖 Playbook auto-generation system initialized - AI-powered playbook creation active")
+            except Exception as e:
+                logger.error(f"Failed to initialize Playbook auto-generation: {e}")
+                self.playbook_auto_gen_tools = None
+        
         # Register tools
         self._register_tools()
     
@@ -3364,6 +3384,120 @@ class MemoryMCPServer:
                         description=tool_def["description"],
                         inputSchema=tool_def["inputSchema"]
                     ))
+            
+            # Add Playbook Auto-Generation tools
+            playbook_tools = [
+                Tool(
+                    name="analyze_incident_patterns",
+                    description="Analyze incident patterns and auto-generate playbook suggestions from successful resolutions",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "lookback_days": {"type": "integer", "description": "Number of days to analyze", "default": 30},
+                            "min_incidents": {"type": "integer", "description": "Minimum incidents needed for pattern detection", "default": 5},
+                            "force_analysis": {"type": "boolean", "description": "Force analysis even if recent analysis exists", "default": False}
+                        }
+                    }
+                ),
+                Tool(
+                    name="get_pending_playbook_suggestions",
+                    description="Get pending auto-generated playbook suggestions for human review",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "limit": {"type": "integer", "description": "Maximum number of suggestions to return", "default": 20}
+                        }
+                    }
+                ),
+                Tool(
+                    name="review_playbook_suggestion",
+                    description="Review an auto-generated playbook suggestion (approve, reject, or request revision)",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "suggestion_id": {"type": "string", "description": "ID of the suggestion to review"},
+                            "action": {"type": "string", "enum": ["approve", "reject", "needs_revision"], "description": "Review action"},
+                            "reviewer_notes": {"type": "string", "description": "Optional notes from reviewer"}
+                        },
+                        "required": ["suggestion_id", "action"]
+                    }
+                ),
+                Tool(
+                    name="recommend_playbooks_for_incident",
+                    description="Get intelligent playbook recommendations for a specific incident based on AI analysis",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "incident_title": {"type": "string", "description": "Title of the incident"},
+                            "incident_description": {"type": "string", "description": "Detailed description of the incident"},
+                            "affected_systems": {"type": "array", "items": {"type": "string"}, "description": "List of affected systems"},
+                            "severity": {"type": "string", "enum": ["low", "medium", "high", "critical"], "description": "Incident severity", "default": "medium"},
+                            "symptoms": {"type": "array", "items": {"type": "string"}, "description": "List of observed symptoms"},
+                            "include_auto_generated": {"type": "boolean", "description": "Include auto-generated playbooks", "default": True}
+                        },
+                        "required": ["incident_title", "incident_description"]
+                    }
+                ),
+                Tool(
+                    name="recommend_playbooks_for_context",
+                    description="Get contextual playbook recommendations for current operational needs",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "query": {"type": "string", "description": "Description of current situation or operational need"},
+                            "systems": {"type": "array", "items": {"type": "string"}, "description": "Relevant systems"},
+                            "severity": {"type": "string", "enum": ["low", "medium", "high", "critical"], "description": "Context severity level", "default": "medium"}
+                        },
+                        "required": ["query"]
+                    }
+                ),
+                Tool(
+                    name="get_pattern_statistics",
+                    description="Get statistics about detected incident patterns and auto-generation performance",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {}
+                    }
+                ),
+                Tool(
+                    name="record_recommendation_feedback",
+                    description="Record feedback on playbook recommendation effectiveness for continuous learning",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "recommendation_id": {"type": "string", "description": "ID of the recommendation"},
+                            "executed": {"type": "boolean", "description": "Whether the recommendation was executed"},
+                            "successful": {"type": "boolean", "description": "Whether execution was successful (if executed)"},
+                            "feedback_notes": {"type": "string", "description": "Additional feedback notes"}
+                        },
+                        "required": ["recommendation_id", "executed", "successful"]
+                    }
+                ),
+                Tool(
+                    name="trigger_pattern_learning",
+                    description="Manually trigger pattern learning from recent incidents",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "incident_memories": {"type": "array", "items": {"type": "string"}, "description": "Specific incident memory IDs to analyze"},
+                            "force_reanalysis": {"type": "boolean", "description": "Force reanalysis of already processed incidents", "default": False}
+                        }
+                    }
+                ),
+                Tool(
+                    name="export_generated_playbooks",
+                    description="Export auto-generated playbooks for backup or external use",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "format": {"type": "string", "enum": ["json", "yaml"], "description": "Export format", "default": "json"},
+                            "include_pending": {"type": "boolean", "description": "Include pending suggestions", "default": False}
+                        }
+                    }
+                )
+            ]
+            
+            tools.extend(playbook_tools)
                     
             return tools
         
@@ -3636,6 +3770,36 @@ class MemoryMCPServer:
                         result = await self.confluence_tools.preview_confluence_playbook(**arguments)
                     
                     return [TextContent(type="text", text=result)]
+                
+                # ============ Playbook Auto-Generation Handlers ============
+                elif name in [
+                    "analyze_incident_patterns", "get_pending_playbook_suggestions", 
+                    "review_playbook_suggestion", "recommend_playbooks_for_incident",
+                    "recommend_playbooks_for_context", "get_pattern_statistics",
+                    "record_recommendation_feedback", "trigger_pattern_learning",
+                    "export_generated_playbooks"
+                ] and self.playbook_auto_gen_tools:
+                    # Handle Playbook Auto-Generation tools
+                    if name == "analyze_incident_patterns":
+                        result = await self.playbook_auto_gen_tools.analyze_incident_patterns(**arguments)
+                    elif name == "get_pending_playbook_suggestions":
+                        result = await self.playbook_auto_gen_tools.get_pending_playbook_suggestions(**arguments)
+                    elif name == "review_playbook_suggestion":
+                        result = await self.playbook_auto_gen_tools.review_playbook_suggestion(**arguments)
+                    elif name == "recommend_playbooks_for_incident":
+                        result = await self.playbook_auto_gen_tools.recommend_playbooks_for_incident(**arguments)
+                    elif name == "recommend_playbooks_for_context":
+                        result = await self.playbook_auto_gen_tools.recommend_playbooks_for_context(**arguments)
+                    elif name == "get_pattern_statistics":
+                        result = await self.playbook_auto_gen_tools.get_pattern_statistics(**arguments)
+                    elif name == "record_recommendation_feedback":
+                        result = await self.playbook_auto_gen_tools.record_recommendation_feedback(**arguments)
+                    elif name == "trigger_pattern_learning":
+                        result = await self.playbook_auto_gen_tools.trigger_pattern_learning(**arguments)
+                    elif name == "export_generated_playbooks":
+                        result = await self.playbook_auto_gen_tools.export_generated_playbooks(**arguments)
+                    
+                    return [TextContent(type="text", text=json.dumps(result, indent=2))]
                 
                 else:
                     raise ValueError(f"Unknown tool: {name}")
