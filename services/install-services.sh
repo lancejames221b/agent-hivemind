@@ -12,14 +12,16 @@ fi
 
 # Copy service files to systemd directory
 echo "📁 Copying service files..."
-cp /home/lj/memory-mcp/services/memory-mcp-server.service /etc/systemd/system/
-cp /home/lj/memory-mcp/services/memory-sync-service.service /etc/systemd/system/
-cp /home/lj/memory-mcp/services/memory-remote-mcp.service /etc/systemd/system/
+cp memory-mcp-server.service /etc/systemd/system/
+cp memory-sync-service.service /etc/systemd/system/
+cp memory-remote-mcp.service /etc/systemd/system/
+cp mcp-aggregator.service /etc/systemd/system/
 
 # Set correct permissions
 chmod 644 /etc/systemd/system/memory-mcp-server.service
 chmod 644 /etc/systemd/system/memory-sync-service.service
 chmod 644 /etc/systemd/system/memory-remote-mcp.service
+chmod 644 /etc/systemd/system/mcp-aggregator.service
 
 # Reload systemd daemon
 echo "🔄 Reloading systemd daemon..."
@@ -30,12 +32,14 @@ echo "🚀 Enabling services..."
 systemctl enable memory-mcp-server.service
 systemctl enable memory-sync-service.service
 systemctl enable memory-remote-mcp.service
+systemctl enable mcp-aggregator.service
 
 # Start services
 echo "▶️  Starting services..."
 systemctl start memory-mcp-server.service
 systemctl start memory-sync-service.service
 systemctl start memory-remote-mcp.service
+systemctl start mcp-aggregator.service
 
 # Check status
 echo "📊 Service Status:"
@@ -44,6 +48,8 @@ echo ""
 systemctl status memory-sync-service.service --no-pager -l
 echo ""
 systemctl status memory-remote-mcp.service --no-pager -l
+echo ""
+systemctl status mcp-aggregator.service --no-pager -l
 
 echo ""
 echo "✅ Memory MCP Services installed and started!"
@@ -69,7 +75,16 @@ echo "  sudo journalctl -u memory-mcp-server -f"
 echo "  sudo journalctl -u memory-sync-service -f"
 echo "  sudo journalctl -u memory-remote-mcp -f"
 echo ""
-echo "🌐 Remote MCP endpoints:"
-echo "  SSE: http://lance-dev:8900/sse"
-echo "  Streamable HTTP: http://lance-dev:8900/mcp"
-echo "  Health: http://lance-dev:8900/health"
+echo "🌐 Service endpoints:"
+echo "  Memory Server SSE: http://lance-dev:8900/sse"
+echo "  Memory Server HTTP: http://lance-dev:8900/mcp"
+echo "  Memory Server Health: http://lance-dev:8900/health"
+echo "  MCP Aggregator SSE: http://lance-dev:8950/sse"
+echo "  MCP Aggregator Health: http://lance-dev:8950/health"
+echo ""
+echo "🔧 Aggregator management commands:"
+echo "  sudo systemctl start mcp-aggregator"
+echo "  sudo systemctl stop mcp-aggregator"
+echo "  sudo systemctl restart mcp-aggregator"
+echo "  sudo systemctl status mcp-aggregator"
+echo "  sudo journalctl -u mcp-aggregator -f"

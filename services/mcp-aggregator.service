@@ -1,0 +1,42 @@
+[Unit]
+Description=MCP SSE Aggregator Service - ClaudeOps hAIveMind Core Infrastructure
+After=network.target redis-server.service
+Wants=redis-server.service
+Documentation=file:///var/tmp/vibe-kanban/worktrees/vk-6ba9-story-1c-c/docs/MCP_REGISTRY_ARCHITECTURE.md
+
+[Service]
+Type=simple
+User=lj
+Group=lj
+WorkingDirectory=/var/tmp/vibe-kanban/worktrees/vk-6ba9-story-1c-c
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=PYTHONPATH=/var/tmp/vibe-kanban/worktrees/vk-6ba9-story-1c-c/src
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 src/mcp_aggregator.py
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=mixed
+KillSignal=SIGTERM
+Restart=always
+RestartSec=10
+TimeoutStartSec=30
+TimeoutStopSec=10
+
+# Resource limits
+MemoryLimit=512M
+TasksMax=256
+
+# Security settings
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/tmp/vibe-kanban/worktrees/vk-6ba9-story-1c-c/data
+ReadWritePaths=/tmp
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mcp-aggregator
+
+[Install]
+WantedBy=multi-user.target
