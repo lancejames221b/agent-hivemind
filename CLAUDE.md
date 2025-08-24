@@ -231,3 +231,5 @@ sync_external_knowledge sources=["confluence", "jira"]
 - hAIveMind agent registration requires Redis for coordination features to work
 - ClaudeOps hAIveMind features require the updated config.json with claudeops section
 - if you get an mcp failure for haivemind, we need to stop and fix it.
+- also for each ticket can you add haivemind awareness so it can learn across the system when necessary fro this project:
+- then also put these in sequence with storyname -> ticket, and maybe order they should be done in. if they can be done in parallel add 1a, 1b to them or some kind of lettering .
