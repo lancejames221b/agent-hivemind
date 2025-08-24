@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Server Documentation Viewer - hAIveMind</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .sidebar {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-right: 1px solid rgba(0, 0, 0, 0.1);
+        }
+        .content-area {
+            background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: blur(10px);
+        }
+        .nav-item {
+            transition: all 0.3s ease;
+        }
+        .nav-item:hover {
+            background: rgba(59, 130, 246, 0.1);
+            border-left: 4px solid #3b82f6;
+        }
+        .nav-item.active {
+            background: rgba(59, 130, 246, 0.15);
+            border-left: 4px solid #3b82f6;
+            font-weight: 600;
+        }
+        .doc-content {
+            line-height: 1.7;
+        }
+        .doc-content h1, .doc-content h2, .doc-content h3 {
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+            font-weight: 600;
+        }
+        .doc-content h1 {
+            font-size: 2rem;
+            color: #1f2937;
+            border-bottom: 2px solid #e5e7eb;
+            padding-bottom: 0.5rem;
+        }
+        .doc-content h2 {
+            font-size: 1.5rem;
+            color: #374151;
+        }
+        .doc-content h3 {
+            font-size: 1.25rem;
+            color: #4b5563;
+        }
+        .doc-content p {
+            margin-bottom: 1rem;
+        }
+        .doc-content ul, .doc-content ol {
+            margin-bottom: 1rem;
+            padding-left: 1.5rem;
+        }
+        .doc-content li {
+            margin-bottom: 0.5rem;
+        }
+        .doc-content code {
+            background: #f3f4f6;
+            padding: 0.2rem 0.4rem;
+            border-radius: 0.25rem;
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 0.875rem;
+        }
+        .doc-content pre {
+            background: #1a1a1a;
+            color: #f8f8f2;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            overflow-x: auto;
+            margin: 1rem 0;
+        }
+        .doc-content pre code {
+            background: transparent;
+            padding: 0;
+        }
+        .doc-content blockquote {
+            border-left: 4px solid #3b82f6;
+            background: #f8fafc;
+            padding: 1rem;
+            margin: 1rem 0;
+            font-style: italic;
+        }
+        .doc-content table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+        }
+        .doc-content th, .doc-content td {
+            border: 1px solid #e5e7eb;
+            padding: 0.75rem;
+            text-align: left;
+        }
+        .doc-content th {
+            background: #f9fafb;
+            font-weight: 600;
+        }
+        .search-highlight {
+            background: #fef3c7;
+            padding: 0.1rem 0.2rem;
+            border-radius: 0.25rem;
+        }
+        .loading-spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .tool-card {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin: 0.5rem 0;
+        }
+        .tool-card h4 {
+            color: #2563eb;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        .parameter-list {
+            background: #ffffff;
+            border-radius: 0.25rem;
+            padding: 0.75rem;
+            margin-top: 0.5rem;
+        }
+        .breadcrumb {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            font-size: 0.875rem;
+            color: #6b7280;
+        }
+        .breadcrumb-separator {
+            color: #d1d5db;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div id="documentation-root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // API Configuration
+        const API_BASE = window.location.origin;
+        const API_TOKEN = localStorage.getItem('auth_token');
+
+        // Documentation structure for a server
+        const DocumentationViewer = ({ serverId, serverName, onClose }) => {
+            const [documentation, setDocumentation] = useState(null);
+            const [loading, setLoading] = useState(true);
+            const [activeSection, setActiveSection] = useState('overview');
+            const [searchQuery, setSearchQuery] = useState('');
+            const [searchResults, setSearchResults] = useState([]);
+            const contentRef = useRef(null);
+
+            useEffect(() => {
+                if (serverId) {
+                    loadDocumentation();
+                }
+            }, [serverId]);
+
+            useEffect(() => {
+                if (searchQuery.length > 2) {
+                    performSearch();
+                } else {
+                    setSearchResults([]);
+                }
+            }, [searchQuery, documentation]);
+
+            const loadDocumentation = async () => {
+                setLoading(true);
+                try {
+                    // Load server details and documentation
+                    const response = await fetch(`${API_BASE}/api/v1/servers/${serverId}`, {
+                        headers: { 'Authorization': `Bearer ${API_TOKEN}` }
+                    });
+                    
+                    if (response.ok) {
+                        const serverData = await response.json();
+                        
+                        // Structure documentation from server data
+                        const docs = {
+                            overview: {
+                                title: 'Overview',
+                                content: generateOverviewContent(serverData)
+                            },
+                            installation: {
+                                title: 'Installation',
+                                content: generateInstallationContent(serverData)
+                            },
+                            tools: {
+                                title: 'Tools',
+                                content: generateToolsContent(serverData.tools || [])
+                            },
+                            resources: {
+                                title: 'Resources',
+                                content: generateResourcesContent(serverData.resources || [])
+                            },
+                            configuration: {
+                                title: 'Configuration',
+                                content: generateConfigurationContent(serverData)
+                            },
+                            examples: {
+                                title: 'Examples',
+                                content: generateExamplesContent(serverData)
+                            },
+                            changelog: {
+                                title: 'Changelog',
+                                content: generateChangelogContent(serverData)
+                            }
+                        };
+                        
+                        setDocumentation(docs);
+                    } else {
+                        throw new Error('Failed to load server documentation');
+                    }
+                } catch (error) {
+                    console.error('Failed to load documentation:', error);
+                    setDocumentation({
+                        error: {
+                            title: 'Error',
+                            content: `Failed to load documentation: ${error.message}`
+                        }
+                    });
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const generateOverviewContent = (serverData) => {
+                return `# ${serverData.name}
+
+${serverData.description}
+
+## Server Information
+
+- **Version**: ${serverData.version}
+- **Author**: ${serverData.author}
+- **Language**: ${serverData.language}
+- **Category**: ${serverData.category}
+- **License**: ${serverData.license || 'Not specified'}
+
+## Features
+
+${serverData.tools && serverData.tools.length > 0 ? `- **${serverData.tools.length} Tools**: ${serverData.tools.map(t => t.name).join(', ')}` : ''}
+${serverData.resources && serverData.resources.length > 0 ? `- **${serverData.resources.length} Resources**: ${serverData.resources.map(r => r.name).join(', ')}` : ''}
+${serverData.prompts && serverData.prompts.length > 0 ? `- **${serverData.prompts.length} Prompts**: Available for enhanced interactions` : ''}
+
+## Compatibility
+
+${serverData.platform_compatibility ? `**Platforms**: ${serverData.platform_compatibility.join(', ')}` : ''}
+${serverData.min_claude_version ? `**Minimum Claude Version**: ${serverData.min_claude_version}` : ''}
+
+## Ratings & Reviews
+
+⭐ **${serverData.rating.toFixed(1)}/5.0** (${serverData.rating_count} reviews)
+📥 **${serverData.downloads.toLocaleString()} downloads**
+
+${serverData.verified ? '✅ **Verified Server** - This server has been verified by the marketplace team.' : ''}
+${serverData.featured ? '⭐ **Featured Server** - This server is featured in the marketplace.' : ''}
+`;
+            };
+
+            const generateInstallationContent = (serverData) => {
+                return `# Installation Guide
+
+## Quick Install
+
+The easiest way to install this server is through the marketplace one-click installation:
+
+\`\`\`bash
+# Via MCP Marketplace
+install_marketplace_server("${serverId}")
+\`\`\`
+
+## Manual Installation
+
+### Prerequisites
+
+${serverData.dependencies && serverData.dependencies.length > 0 ? `
+**Dependencies:**
+${serverData.dependencies.map(dep => `- ${dep}`).join('\n')}
+
+Install dependencies:
+\`\`\`bash
+pip install ${serverData.dependencies.join(' ')}
+\`\`\`
+` : 'No external dependencies required.'}
+
+### Installation Steps
+
+1. **Download the server package**
+   \`\`\`bash
+   curl -O ${API_BASE}/api/v1/servers/${serverId}/download
+   \`\`\`
+
+2. **Extract the package**
+   \`\`\`bash
+   unzip ${serverData.name.toLowerCase().replace(/\s+/g, '-')}-${serverData.version}.zip
+   cd ${serverData.name.toLowerCase().replace(/\s+/g, '-')}-${serverData.version}
+   \`\`\`
+
+3. **Install dependencies** (if any)
+   \`\`\`bash
+   ${serverData.language === 'python' ? 'pip install -r requirements.txt' : 
+     serverData.language === 'javascript' ? 'npm install' : 
+     'Follow language-specific dependency installation'}
+   \`\`\`
+
+4. **Start the server**
+   \`\`\`bash
+   ${serverData.language === 'python' ? 'python server.py' : 
+     serverData.language === 'javascript' ? 'node server.js' : 
+     'Follow language-specific startup instructions'}
+   \`\`\`
+
+## Client Configuration
+
+Add the server to your MCP client configuration:
+
+### Claude Desktop
+\`\`\`json
+{
+  "mcpServers": {
+    "${serverId}": {
+      "command": "${serverData.language === 'python' ? 'python' : 'node'}",
+      "args": ["${serverData.language === 'python' ? 'server.py' : 'server.js'}"],
+      "env": {}
+    }
+  }
+}
+\`\`\`
+
+### Claude Code CLI
+\`\`\`bash
+claude mcp add ${serverId} --command "${serverData.language === 'python' ? 'python' : 'node'}" --args "server.py"
+\`\`\`
+
+## Verification
+
+Test that the server is working correctly:
+
+\`\`\`bash
+# Check server status
+curl http://localhost:8900/health
+
+# List available tools
+curl http://localhost:8900/tools
+\`\`\`
+`;
+            };
+
+            const generateToolsContent = (tools) => {
+                if (!tools || tools.length === 0) {
+                    return '# Tools\n\nThis server does not provide any tools.';
+                }
+
+                let content = `# Tools Reference
+
+This server provides ${tools.length} tool${tools.length !== 1 ? 's' : ''}:
+
+`;
+
+                tools.forEach((tool, index) => {
+                    content += `## ${tool.name}
+
+${tool.description || 'No description available.'}
+
+`;
+
+                    if (tool.parameters && Object.keys(tool.parameters).length > 0) {
+                        content += `### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+`;
+                        Object.entries(tool.parameters).forEach(([name, param]) => {
+                            content += `| \`${name}\` | ${param.type || 'string'} | ${param.required ? 'Yes' : 'No'} | ${param.description || 'No description'} |\n`;
+                        });
+                        content += '\n';
+                    }
+
+                    if (tool.examples && tool.examples.length > 0) {
+                        content += `### Examples
+
+`;
+                        tool.examples.forEach((example, i) => {
+                            content += `**Example ${i + 1}:**
+\`\`\`json
+${JSON.stringify(example, null, 2)}
+\`\`\`
+
+`;
+                        });
+                    }
+
+                    content += '---\n\n';
+                });
+
+                return content;
+            };
+
+            const generateResourcesContent = (resources) => {
+                if (!resources || resources.length === 0) {
+                    return '# Resources\n\nThis server does not provide any resources.';
+                }
+
+                let content = `# Resources Reference
+
+This server provides ${resources.length} resource${resources.length !== 1 ? 's' : ''}:
+
+`;
+
+                resources.forEach((resource, index) => {
+                    content += `## ${resource.name}
+
+${resource.description || 'No description available.'}
+
+**URI**: \`${resource.uri || resource.name}\`
+**Type**: ${resource.type || 'text/plain'}
+
+`;
+
+                    if (resource.examples && resource.examples.length > 0) {
+                        content += `### Examples
+
+`;
+                        resource.examples.forEach((example, i) => {
+                            content += `**Example ${i + 1}:**
+\`\`\`
+${example}
+\`\`\`
+
+`;
+                        });
+                    }
+
+                    content += '---\n\n';
+                });
+
+                return content;
+            };
+
+            const generateConfigurationContent = (serverData) => {
+                return `# Configuration
+
+## Server Configuration
+
+The server can be configured using a \`config.json\` file:
+
+\`\`\`json
+{
+  "server": {
+    "name": "${serverData.name}",
+    "version": "${serverData.version}",
+    "port": 8900,
+    "host": "localhost"
+  },
+  "logging": {
+    "level": "INFO",
+    "file": "server.log"
+  }
+}
+\`\`\`
+
+## Environment Variables
+
+The following environment variables can be used to configure the server:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| \`MCP_PORT\` | Server port | 8900 |
+| \`MCP_HOST\` | Server host | localhost |
+| \`MCP_LOG_LEVEL\` | Logging level | INFO |
+
+## Runtime Requirements
+
+${serverData.runtime_requirements ? Object.entries(serverData.runtime_requirements).map(([key, value]) => `- **${key}**: ${value}`).join('\n') : 'No specific runtime requirements.'}
+
+## Advanced Configuration
+
+For advanced configuration options, refer to the server's configuration schema or contact the author.
+`;
+            };
+
+            const generateExamplesContent = (serverData) => {
+                return `# Usage Examples
+
+## Basic Usage
+
+Here are some common usage patterns for ${serverData.name}:
+
+${serverData.tools && serverData.tools.length > 0 ? `
+### Using Tools
+
+${serverData.tools.slice(0, 3).map(tool => `
+**${tool.name}**
+\`\`\`bash
+# Example usage
+${tool.name}(${tool.parameters ? Object.keys(tool.parameters).map(p => `${p}="example_value"`).join(', ') : ''})
+\`\`\`
+`).join('\n')}
+` : ''}
+
+${serverData.resources && serverData.resources.length > 0 ? `
+### Accessing Resources
+
+${serverData.resources.slice(0, 3).map(resource => `
+**${resource.name}**
+\`\`\`bash
+# Access resource
+GET ${resource.uri || resource.name}
+\`\`\`
+`).join('\n')}
+` : ''}
+
+## Integration Examples
+
+### With Claude Desktop
+
+\`\`\`json
+{
+  "mcpServers": {
+    "${serverId}": {
+      "command": "python",
+      "args": ["server.py"],
+      "env": {
+        "API_KEY": "your-api-key"
+      }
+    }
+  }
+}
+\`\`\`
+
+### With Custom Applications
+
+\`\`\`python
+import requests
+
+# Connect to the server
+response = requests.get('http://localhost:8900/tools')
+tools = response.json()
+
+# Use a tool
+result = requests.post('http://localhost:8900/call', json={
+    'tool': 'example_tool',
+    'parameters': {'param1': 'value1'}
+})
+\`\`\`
+
+## Best Practices
+
+- Always validate input parameters
+- Handle errors gracefully
+- Use appropriate timeouts for long-running operations
+- Monitor server logs for debugging
+`;
+            };
+
+            const generateChangelogContent = (serverData) => {
+                return `# Changelog
+
+## Version ${serverData.version}
+
+**Released**: ${new Date(serverData.updated_at).toLocaleDateString()}
+
+### Features
+- Current version of ${serverData.name}
+- ${serverData.tools ? serverData.tools.length : 0} tools available
+- ${serverData.resources ? serverData.resources.length : 0} resources available
+
+### Compatibility
+- Compatible with Claude versions: ${serverData.claude_compatibility ? Object.keys(serverData.claude_compatibility).join(', ') : 'Not specified'}
+- Platform support: ${serverData.platform_compatibility ? serverData.platform_compatibility.join(', ') : 'Not specified'}
+
+---
+
+*For detailed version history, please check the server's repository or contact the author.*
+
+## Upgrade Notes
+
+When upgrading to newer versions:
+
+1. Check compatibility requirements
+2. Backup your configuration
+3. Review breaking changes
+4. Test in a development environment first
+5. Update client configurations if needed
+
+## Support
+
+For support and questions:
+- **Author**: ${serverData.author}
+- **Repository**: ${serverData.repository || 'Not specified'}
+- **Homepage**: ${serverData.homepage || 'Not specified'}
+`;
+            };
+
+            const performSearch = () => {
+                if (!documentation) return;
+
+                const results = [];
+                const query = searchQuery.toLowerCase();
+
+                Object.entries(documentation).forEach(([sectionKey, section]) => {
+                    if (section.content && section.content.toLowerCase().includes(query)) {
+                        const lines = section.content.split('\n');
+                        const matchingLines = lines.filter(line => 
+                            line.toLowerCase().includes(query)
+                        );
+
+                        matchingLines.forEach((line, index) => {
+                            results.push({
+                                section: sectionKey,
+                                sectionTitle: section.title,
+                                line: line.trim(),
+                                lineNumber: lines.indexOf(line) + 1
+                            });
+                        });
+                    }
+                });
+
+                setSearchResults(results.slice(0, 10)); // Limit results
+            };
+
+            const highlightSearchTerm = (text, query) => {
+                if (!query) return text;
+                const regex = new RegExp(`(${query})`, 'gi');
+                return text.replace(regex, '<span class="search-highlight">$1</span>');
+            };
+
+            const renderMarkdown = (content) => {
+                if (!content) return '';
+                
+                // Use marked.js to convert markdown to HTML
+                const html = marked.parse(content);
+                
+                // Highlight search terms if searching
+                if (searchQuery.length > 2) {
+                    return highlightSearchTerm(html, searchQuery);
+                }
+                
+                return html;
+            };
+
+            const scrollToSection = (sectionKey) => {
+                setActiveSection(sectionKey);
+                setSearchQuery('');
+                setSearchResults([]);
+            };
+
+            if (loading) {
+                return (
+                    <div className="flex items-center justify-center h-64">
+                        <div className="loading-spinner"></div>
+                        <span className="ml-3 text-gray-600">Loading documentation...</span>
+                    </div>
+                );
+            }
+
+            if (!documentation) {
+                return (
+                    <div className="text-center py-12">
+                        <i className="fas fa-exclamation-triangle text-4xl text-yellow-500 mb-4"></i>
+                        <h3 className="text-xl font-semibold text-gray-700 mb-2">Documentation Not Available</h3>
+                        <p className="text-gray-600">Unable to load documentation for this server.</p>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="flex h-screen bg-gray-100">
+                    {/* Sidebar */}
+                    <div className="sidebar w-64 h-full overflow-y-auto">
+                        <div className="p-4 border-b">
+                            <div className="flex items-center justify-between mb-4">
+                                <h2 className="text-lg font-semibold text-gray-800">Documentation</h2>
+                                <button
+                                    onClick={onClose}
+                                    className="text-gray-400 hover:text-gray-600"
+                                >
+                                    <i className="fas fa-times"></i>
+                                </button>
+                            </div>
+                            
+                            <div className="relative">
+                                <input
+                                    type="text"
+                                    placeholder="Search documentation..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                                <i className="fas fa-search absolute right-3 top-2.5 text-gray-400"></i>
+                            </div>
+                        </div>
+
+                        {/* Search Results */}
+                        {searchResults.length > 0 && (
+                            <div className="p-4 border-b bg-yellow-50">
+                                <h3 className="text-sm font-semibold text-gray-700 mb-2">Search Results</h3>
+                                <div className="space-y-2">
+                                    {searchResults.map((result, index) => (
+                                        <div
+                                            key={index}
+                                            onClick={() => scrollToSection(result.section)}
+                                            className="cursor-pointer p-2 bg-white rounded border hover:bg-blue-50"
+                                        >
+                                            <div className="text-xs text-blue-600 font-medium">
+                                                {result.sectionTitle}
+                                            </div>
+                                            <div className="text-xs text-gray-600 truncate">
+                                                {result.line}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Navigation */}
+                        <nav className="p-4">
+                            {Object.entries(documentation).map(([sectionKey, section]) => (
+                                <div
+                                    key={sectionKey}
+                                    onClick={() => scrollToSection(sectionKey)}
+                                    className={`nav-item cursor-pointer px-3 py-2 rounded-lg mb-1 ${
+                                        activeSection === sectionKey ? 'active' : ''
+                                    }`}
+                                >
+                                    <i className={`fas ${getSectionIcon(sectionKey)} mr-2`}></i>
+                                    {section.title}
+                                </div>
+                            ))}
+                        </nav>
+                    </div>
+
+                    {/* Main Content */}
+                    <div className="flex-1 h-full overflow-y-auto">
+                        <div className="content-area h-full">
+                            <div className="p-6">
+                                {/* Breadcrumb */}
+                                <div className="breadcrumb">
+                                    <span>Marketplace</span>
+                                    <i className="fas fa-chevron-right breadcrumb-separator"></i>
+                                    <span>{serverName}</span>
+                                    <i className="fas fa-chevron-right breadcrumb-separator"></i>
+                                    <span>{documentation[activeSection]?.title}</span>
+                                </div>
+
+                                {/* Content */}
+                                <div 
+                                    className="doc-content"
+                                    ref={contentRef}
+                                    dangerouslySetInnerHTML={{
+                                        __html: renderMarkdown(documentation[activeSection]?.content || '')
+                                    }}
+                                />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const getSectionIcon = (sectionKey) => {
+            const icons = {
+                overview: 'fa-info-circle',
+                installation: 'fa-download',
+                tools: 'fa-tools',
+                resources: 'fa-database',
+                configuration: 'fa-cog',
+                examples: 'fa-code',
+                changelog: 'fa-history'
+            };
+            return icons[sectionKey] || 'fa-file-text';
+        };
+
+        // Main App Component
+        const DocumentationApp = () => {
+            const [selectedServer, setSelectedServer] = useState(null);
+            const [servers, setServers] = useState([]);
+            const [loading, setLoading] = useState(true);
+
+            useEffect(() => {
+                loadServers();
+            }, []);
+
+            const loadServers = async () => {
+                try {
+                    const response = await fetch(`${API_BASE}/api/v1/servers?limit=50`, {
+                        headers: { 'Authorization': `Bearer ${API_TOKEN}` }
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        setServers(data.servers || []);
+                    }
+                } catch (error) {
+                    console.error('Failed to load servers:', error);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const openDocumentation = (server) => {
+                setSelectedServer(server);
+            };
+
+            const closeDocumentation = () => {
+                setSelectedServer(null);
+            };
+
+            if (selectedServer) {
+                return (
+                    <DocumentationViewer
+                        serverId={selectedServer.id}
+                        serverName={selectedServer.name}
+                        onClose={closeDocumentation}
+                    />
+                );
+            }
+
+            return (
+                <div className="min-h-screen bg-gray-100">
+                    {/* Header */}
+                    <div className="gradient-bg text-white">
+                        <div className="container mx-auto px-4 py-8">
+                            <h1 className="text-3xl font-bold mb-2">
+                                <i className="fas fa-book mr-3"></i>
+                                MCP Server Documentation
+                            </h1>
+                            <p className="text-blue-100">
+                                Browse comprehensive documentation for all marketplace servers
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Server List */}
+                    <div className="container mx-auto px-4 py-8">
+                        {loading ? (
+                            <div className="flex justify-center py-12">
+                                <div className="loading-spinner"></div>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {servers.map((server) => (
+                                    <div
+                                        key={server.id}
+                                        onClick={() => openDocumentation(server)}
+                                        className="bg-white rounded-lg shadow-md p-6 cursor-pointer hover:shadow-lg transition-shadow"
+                                    >
+                                        <div className="flex justify-between items-start mb-3">
+                                            <h3 className="text-lg font-semibold text-gray-900">
+                                                {server.name}
+                                            </h3>
+                                            <div className="flex space-x-1">
+                                                {server.verified && (
+                                                    <span className="text-blue-500" title="Verified">
+                                                        <i className="fas fa-check-circle"></i>
+                                                    </span>
+                                                )}
+                                                {server.featured && (
+                                                    <span className="text-yellow-500" title="Featured">
+                                                        <i className="fas fa-star"></i>
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        
+                                        <p className="text-gray-600 text-sm mb-3 line-clamp-2">
+                                            {server.description}
+                                        </p>
+                                        
+                                        <div className="flex items-center justify-between text-sm text-gray-500">
+                                            <span>
+                                                <i className="fas fa-user mr-1"></i>
+                                                {server.author}
+                                            </span>
+                                            <span>
+                                                <i className="fas fa-code mr-1"></i>
+                                                {server.language}
+                                            </span>
+                                        </div>
+                                        
+                                        <div className="mt-3 pt-3 border-t flex items-center justify-between">
+                                            <div className="flex items-center space-x-3">
+                                                <span className="text-yellow-500">
+                                                    <i className="fas fa-star mr-1"></i>
+                                                    {server.rating.toFixed(1)}
+                                                </span>
+                                                <span className="text-gray-500">
+                                                    <i className="fas fa-download mr-1"></i>
+                                                    {server.downloads.toLocaleString()}
+                                                </span>
+                                            </div>
+                                            <button className="text-blue-600 hover:text-blue-800 font-medium">
+                                                View Docs <i className="fas fa-arrow-right ml-1"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        // Render the app
+        ReactDOM.render(<DocumentationApp />, document.getElementById('documentation-root'));
+    </script>
+</body>
+</html>
