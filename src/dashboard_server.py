@@ -1101,6 +1101,8 @@ class DashboardServer:
         """Mount static file directories"""
         if Path("admin/static").exists():
             self.app.mount("/admin/static", StaticFiles(directory="admin/static"), name="static")
+        if Path(".vibe-images").exists():
+            self.app.mount("/.vibe-images", StaticFiles(directory=".vibe-images"), name="vibe-images")
     
     async def get_current_user(self, credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer(auto_error=False))) -> dict:
         """Get current authenticated user"""

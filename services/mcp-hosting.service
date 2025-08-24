@@ -9,7 +9,7 @@ User=lj
 Group=lj
 WorkingDirectory=/home/lj/memory-mcp
 Environment=PYTHONPATH=/home/lj/memory-mcp/src
-ExecStart=/usr/bin/python3 /home/lj/memory-mcp/src/mcp_hosting_server.py
+ExecStart=/home/lj/memory-mcp/venv/bin/python /home/lj/memory-mcp/src/mcp_hosting_server.py
 Restart=always
 RestartSec=10
 StandardOutput=journal
