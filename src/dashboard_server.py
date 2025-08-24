@@ -24,6 +24,13 @@ from playbook_engine import PlaybookEngine, load_playbook_content, PlaybookValid
 from pathlib import Path
 import uuid
 
+# Import Confluence dashboard if available
+try:
+    from confluence_dashboard import ConfluenceDashboard
+    CONFLUENCE_DASHBOARD_AVAILABLE = True
+except ImportError:
+    CONFLUENCE_DASHBOARD_AVAILABLE = False
+
 # Request/Response Models
 class LoginRequest(BaseModel):
     username: str
@@ -67,6 +74,22 @@ class DashboardServer:
             else jinja2.DictLoader(self._get_default_templates())
         )
         
+        # Initialize Confluence dashboard if available
+        self.confluence_dashboard = None
+        if CONFLUENCE_DASHBOARD_AVAILABLE:
+            try:
+                # Load config for Confluence integration
+                config_path = Path("config/config.json")
+                if config_path.exists():
+                    with open(config_path, 'r') as f:
+                        config = json.load(f)
+                    
+                    self.confluence_dashboard = ConfluenceDashboard(
+                        config, self.db, None  # haivemind_storage will be set later
+                    )
+            except Exception as e:
+                print(f"Failed to initialize Confluence dashboard: {e}")
+        
         self.setup_routes()
         self.mount_static_files()
         # Lazy-init playbook engine (shell disabled by default)
@@ -95,6 +118,10 @@ class DashboardServer:
     
     def setup_routes(self):
         """Setup all dashboard routes"""
+        
+        # Include Confluence dashboard routes if available
+        if self.confluence_dashboard:
+            self.app.include_router(self.confluence_dashboard.get_router())
         
         # Static file serving
         @self.app.get("/", response_class=HTMLResponse)

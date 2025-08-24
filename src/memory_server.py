@@ -31,6 +31,14 @@ from mcp.types import (
     EmbeddedResource,
 )
 
+# Import Confluence integration
+try:
+    from confluence_mcp_tools import ConfluenceMCPTools
+    CONFLUENCE_AVAILABLE = True
+except ImportError:
+    CONFLUENCE_AVAILABLE = False
+    logger.warning("Confluence integration not available - missing dependencies")
+
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -2779,6 +2787,24 @@ class MemoryMCPServer:
         self.storage = MemoryStorage(self.config)
         self.server = Server("memory-server")
         
+        # Initialize Confluence tools if available
+        self.confluence_tools = None
+        if CONFLUENCE_AVAILABLE:
+            try:
+                from database import ControlDatabase
+                # Initialize database for playbook storage
+                db_path = self.config.get('database', {}).get('path', 'database/haivemind.db')
+                self.database = ControlDatabase(db_path)
+                
+                # Initialize Confluence tools
+                self.confluence_tools = ConfluenceMCPTools(
+                    self.config, self.database, self.storage
+                )
+                logger.info("Confluence integration initialized")
+            except Exception as e:
+                logger.error(f"Failed to initialize Confluence integration: {e}")
+                self.confluence_tools = None
+        
         # Register tools
         self._register_tools()
     
@@ -2787,7 +2813,7 @@ class MemoryMCPServer:
         
         @self.server.list_tools()
         async def handle_list_tools() -> List[Tool]:
-            return [
+            tools = [
                 Tool(
                     name="store_memory",
                     description="Store a memory with comprehensive machine tracking and sharing control",
@@ -3232,6 +3258,18 @@ class MemoryMCPServer:
                     }
                 )
             ]
+            
+            # Add Confluence tools if available
+            if self.confluence_tools:
+                confluence_tools = self.confluence_tools.get_mcp_tools()
+                for tool_def in confluence_tools:
+                    tools.append(Tool(
+                        name=tool_def["name"],
+                        description=tool_def["description"],
+                        inputSchema=tool_def["inputSchema"]
+                    ))
+                    
+            return tools
         
         @self.server.call_tool()
         async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
@@ -3394,6 +3432,33 @@ class MemoryMCPServer:
                 elif name == "gdpr_export_user_data":
                     result = await self.storage.gdpr_export_user_data(**arguments)
                     return [TextContent(type="text", text=json.dumps(result, indent=2))]
+                
+                # ============ Confluence Integration Tools ============
+                elif self.confluence_tools and name in [
+                    "discover_confluence_playbooks", "import_confluence_playbook", 
+                    "bulk_import_confluence_space", "sync_confluence_playbooks",
+                    "get_confluence_status", "configure_confluence_integration",
+                    "list_confluence_playbooks", "preview_confluence_playbook"
+                ]:
+                    # Handle Confluence tools
+                    if name == "discover_confluence_playbooks":
+                        result = await self.confluence_tools.discover_confluence_playbooks(**arguments)
+                    elif name == "import_confluence_playbook":
+                        result = await self.confluence_tools.import_confluence_playbook(**arguments)
+                    elif name == "bulk_import_confluence_space":
+                        result = await self.confluence_tools.bulk_import_confluence_space(**arguments)
+                    elif name == "sync_confluence_playbooks":
+                        result = await self.confluence_tools.sync_confluence_playbooks(**arguments)
+                    elif name == "get_confluence_status":
+                        result = await self.confluence_tools.get_confluence_status(**arguments)
+                    elif name == "configure_confluence_integration":
+                        result = await self.confluence_tools.configure_confluence_integration(**arguments)
+                    elif name == "list_confluence_playbooks":
+                        result = await self.confluence_tools.list_confluence_playbooks(**arguments)
+                    elif name == "preview_confluence_playbook":
+                        result = await self.confluence_tools.preview_confluence_playbook(**arguments)
+                    
+                    return [TextContent(type="text", text=result)]
                 
                 else:
                     raise ValueError(f"Unknown tool: {name}")

@@ -13,3 +13,4 @@ aiohttp>=3.9.1
 mcp>=1.13.0
 PyJWT>=2.8.0
 bcrypt>=4.1.2
+beautifulsoup4>=4.12.0
