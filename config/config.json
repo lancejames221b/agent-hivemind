@@ -117,6 +117,15 @@
       "enabled": false
     }
   },
+  "authorship": {
+    "default_author": "Lance James",
+    "organization": "Unit 221B, Inc",
+    "disable_ai_attribution": true,
+    "commit_templates": {
+      "remove_co_author": true,
+      "remove_generated_with": true
+    }
+  },
   "security": {
     "enable_auth": true,
     "jwt_secret": "${HAIVEMIND_JWT_SECRET:-change-this-secret-key}",
