@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "haivemind": {
+      "command": "/home/lj/.local/bin/haivemind-mcp-client",
+      "args": [],
+      "env": {}
+    }
+  }
+}
