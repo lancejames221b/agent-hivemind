@@ -2803,7 +2803,7 @@ class MemoryMCPServer:
                             "scope": {"type": "string", "description": "Memory sharing scope", "enum": ["machine-local", "project-local", "project-shared", "user-global", "team-global", "private"], "default": "project-shared"},
                             "share_with": {"type": "array", "items": {"type": "string"}, "description": "Machine groups to share with"},
                             "exclude_from": {"type": "array", "items": {"type": "string"}, "description": "Machines to exclude from sharing"},
-                            "sensitive": {"type": "boolean", "description": "Mark as sensitive (private to this machine)", "default": false}
+                            "sensitive": {"type": "boolean", "description": "Mark as sensitive (private to this machine)", "default": False}
                         },
                         "required": ["content"]
                     }

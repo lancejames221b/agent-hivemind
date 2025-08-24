@@ -1,0 +1,123 @@
+#!/usr/bin/env python3
+"""
+hAIveMind MCP Bridge Client
+Converts stdio MCP protocol to HTTP requests for hAIveMind remote server
+"""
+
+import json
+import sys
+import requests
+import logging
+from typing import Dict, Any, Optional
+
+# Configure logging
+logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+class HAIveMindMCPClient:
+    def __init__(self, base_url: str = "http://localhost:8900"):
+        self.base_url = base_url
+        self.session = requests.Session()
+        self.session.timeout = 30
+        
+    def send_request(self, method: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Send JSON-RPC request to hAIveMind server"""
+        try:
+            payload = {
+                "jsonrpc": "2.0",
+                "method": method,
+                "params": params or {},
+                "id": 1
+            }
+            
+            response = self.session.post(
+                f"{self.base_url}/mcp",
+                json=payload,
+                headers={"Content-Type": "application/json"}
+            )
+            
+            if response.status_code == 200:
+                return response.json()
+            else:
+                return {
+                    "jsonrpc": "2.0",
+                    "error": {
+                        "code": -32000,
+                        "message": f"HTTP {response.status_code}: {response.text}"
+                    },
+                    "id": 1
+                }
+                
+        except Exception as e:
+            logger.error(f"Request failed: {e}")
+            return {
+                "jsonrpc": "2.0",
+                "error": {
+                    "code": -32000,
+                    "message": f"Connection error: {str(e)}"
+                },
+                "id": 1
+            }
+    
+    def handle_initialize(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle MCP initialize request"""
+        return self.send_request("initialize", params)
+    
+    def handle_list_tools(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle tools/list request"""
+        return self.send_request("tools/list", params)
+    
+    def handle_call_tool(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle tools/call request"""
+        return self.send_request("tools/call", params)
+    
+    def run(self):
+        """Main stdio loop"""
+        try:
+            for line in sys.stdin:
+                line = line.strip()
+                if not line:
+                    continue
+                    
+                try:
+                    request = json.loads(line)
+                    method = request.get("method", "")
+                    params = request.get("params", {})
+                    
+                    if method == "initialize":
+                        response = self.handle_initialize(params)
+                    elif method == "tools/list":
+                        response = self.handle_list_tools(params)
+                    elif method == "tools/call":
+                        response = self.handle_call_tool(params)
+                    else:
+                        response = {
+                            "jsonrpc": "2.0",
+                            "error": {
+                                "code": -32601,
+                                "message": f"Method not found: {method}"
+                            },
+                            "id": request.get("id", 1)
+                        }
+                    
+                    print(json.dumps(response), flush=True)
+                    
+                except json.JSONDecodeError as e:
+                    error_response = {
+                        "jsonrpc": "2.0",
+                        "error": {
+                            "code": -32700,
+                            "message": f"Parse error: {str(e)}"
+                        },
+                        "id": None
+                    }
+                    print(json.dumps(error_response), flush=True)
+                    
+        except KeyboardInterrupt:
+            pass
+        except Exception as e:
+            logger.error(f"Unexpected error: {e}")
+
+if __name__ == "__main__":
+    client = HAIveMindMCPClient()
+    client.run()
