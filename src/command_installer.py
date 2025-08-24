@@ -105,8 +105,8 @@ class CommandInstaller:
             limit=1
         )
         
-        if existing_config.get('memories'):
-            config_content = existing_config['memories'][0]['content']
+        if existing_config and len(existing_config) > 0:
+            config_content = existing_config[0]['content']
             action = "Retrieved existing"
         else:
             # Generate new config
@@ -231,7 +231,7 @@ Always consider the collective context when making decisions and share relevant 
         specific_capabilities = role_capabilities.get(role, [])
         return base_capabilities + specific_capabilities
 
-    async def sync_agent_installation(self, agent_id: str = None, target_location: str = "auto", force: bool = False) -> Dict[str, Any]:
+    async def sync_agent_installation(self, agent_id: str = None, target_location: str = "auto", force: bool = False, verbose: bool = False) -> Dict[str, Any]:
         """Complete agent installation and sync workflow"""
         if not agent_id:
             agent_id = self.storage.agent_id
@@ -241,63 +241,113 @@ Always consider the collective context when making decisions and share relevant 
             'agent_id': agent_id,
             'machine_id': machine_id, 
             'sync_time': time.time(),
-            'operations': []
+            'status': 'in_progress',
+            'operations': [],
+            'verbose_output': [] if verbose else None
         }
         
+        def log_verbose(message: str):
+            if verbose:
+                result['verbose_output'].append(message)
+                logger.info(f"VERBOSE: {message}")
+        
         try:
+            log_verbose("Starting hAIveMind agent synchronization...")
+            
             # 1. Detect Claude paths
+            log_verbose("Detecting Claude command installation paths...")
             claude_paths = await self.detect_claude_paths()
             result['available_paths'] = claude_paths
+            log_verbose(f"Found paths: {list(claude_paths.keys())}")
             
             # 2. Determine target location
+            log_verbose("Determining target installation location...")
             if target_location == "auto":
                 if "project" in claude_paths:
                     target_location = "project"
+                    log_verbose("Using project-level commands (.claude/commands)")
                 elif "personal" in claude_paths:
                     target_location = "personal"
+                    log_verbose("Using personal commands (~/.claude/commands)")
                 else:
                     # Create personal path as fallback
                     personal_path = Path.home() / ".claude" / "commands"
                     personal_path.mkdir(parents=True, exist_ok=True)
                     claude_paths["personal"] = str(personal_path)
                     target_location = "personal"
+                    log_verbose("Created personal commands directory")
+            else:
+                log_verbose(f"Using specified location: {target_location}")
             
             result['target_location'] = target_location
             target_path = claude_paths[target_location]
+            log_verbose(f"Target path: {target_path}")
             
             # 3. Load command templates
+            log_verbose("Loading hv-* command templates from collective...")
             templates = await self.get_command_templates()
             result['available_commands'] = list(templates.keys())
+            log_verbose(f"Found {len(templates)} command templates: {list(templates.keys())}")
             
             # 4. Install commands
             if templates:
+                log_verbose("Installing/updating commands...")
                 installed_commands = await self.install_commands_to_path(target_path, templates, force)
                 result['installed_commands'] = installed_commands
-                result['operations'].append(f"Installed {len(installed_commands)} commands to {target_location}")
+                if installed_commands:
+                    log_verbose(f"Updated commands: {installed_commands}")
+                    result['operations'].append(f"Installed {len(installed_commands)} commands to {target_location}")
+                else:
+                    log_verbose("All commands are up to date")
+                    result['operations'].append("All commands already up to date")
+            else:
+                log_verbose("No command templates found")
             
             # 5. Sync CLAUDE.md config
+            log_verbose("Syncing CLAUDE.md configuration...")
             config_result = await self.sync_claude_md_config(agent_id, machine_id, target_location)
             result['operations'].append(config_result)
+            log_verbose(f"Config sync: {config_result}")
             
             # 6. Register/update agent in collective
+            log_verbose("Updating agent registration in collective...")
+            role = self._determine_agent_role(machine_id)
+            capabilities = self._determine_agent_capabilities(machine_id, role)
             await self.storage.register_agent(
-                role=self._determine_agent_role(machine_id),
+                role=role,
                 description=f"hAIveMind agent on {machine_id}",
-                capabilities=self._determine_agent_capabilities(machine_id, self._determine_agent_role(machine_id))
+                capabilities=capabilities
             )
             result['operations'].append("Updated agent registration")
+            log_verbose(f"Registered as {role} with capabilities: {capabilities}")
             
             # 7. Store sync record
+            log_verbose("Storing sync record in collective memory...")
+            # Create clean metadata with only primitive types
+            clean_metadata = {
+                'agent_id': result['agent_id'],
+                'machine_id': result['machine_id'],
+                'sync_time': result['sync_time'],
+                'status': result['status'],
+                'target_location': result.get('target_location', ''),
+                'operations_summary': ', '.join(result.get('operations', [])),
+                'installed_commands': ', '.join(result.get('installed_commands', [])),
+                'available_commands': ', '.join(result.get('available_commands', [])),
+                'available_paths': str(result.get('available_paths', {}))
+            }
+            
             await self.storage.store_memory(
                 content=f"Agent {agent_id} completed installation sync: {', '.join(result['operations'])}",
                 category="agent",
                 context=f"Installation sync for {machine_id}-{agent_id}",
-                metadata=result,
+                metadata=clean_metadata,
                 tags=["agent-sync", "installation", agent_id, machine_id]
             )
+            log_verbose("Sync record stored successfully")
             
             result['status'] = 'success'
             result['message'] = f"✅ hAIveMind sync completed for {agent_id}"
+            log_verbose("Synchronization completed successfully!")
             
         except Exception as e:
             result['status'] = 'error'
@@ -329,10 +379,15 @@ Always consider the collective context when making decisions and share relevant 
             'config_synced': False
         }
         
-        if recent_sync.get('memories'):
-            last_sync_memory = recent_sync['memories'][0]
+        if recent_sync and len(recent_sync) > 0:
+            last_sync_memory = recent_sync[0]
             status['last_sync'] = last_sync_memory.get('metadata', {}).get('sync_time')
-            status['commands_installed'] = last_sync_memory.get('metadata', {}).get('installed_commands', [])
+            # Handle both old list format and new string format
+            commands_str = last_sync_memory.get('metadata', {}).get('installed_commands', '')
+            if isinstance(commands_str, str) and commands_str:
+                status['commands_installed'] = [cmd.strip() for cmd in commands_str.split(',') if cmd.strip()]
+            else:
+                status['commands_installed'] = []
         
         # Check for config
         config_search = await self.storage.search_memories(
@@ -340,6 +395,6 @@ Always consider the collective context when making decisions and share relevant 
             category="agent",
             limit=1
         )
-        status['config_synced'] = bool(config_search.get('memories'))
+        status['config_synced'] = bool(config_search and len(config_search) > 0)
         
         return status
