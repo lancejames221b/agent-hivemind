@@ -80,22 +80,118 @@
 
 ## Installation
 
-1. Install dependencies:
+### Server Setup (Primary Node)
+
+1. **Clone and setup hAIveMind**:
 ```bash
-cd /path/to/agent-hivemind
+git clone https://github.com/lancejames221b/agent-hivemind.git
+cd agent-hivemind
 pip install -r requirements.txt
 ```
 
-2. Install Redis (if not already installed):
+2. **Install Redis**:
 ```bash
 sudo apt-get install redis-server
 sudo systemctl start redis-server
 ```
 
-3. Configure the system:
+3. **Configure the system**:
 ```bash
 # Edit config/config.json for your setup
-# Update machine IDs in discovery.machines
+# Update machine IDs in discovery.machines to match your network
+```
+
+4. **Start hAIveMind server**:
+```bash
+# Start the memory server
+python src/memory_server.py &
+
+# Start the remote MCP server (for network access)
+python src/remote_mcp_server.py --host 0.0.0.0 --port 8900 &
+```
+
+### Agent Setup (Claude Code Integration)
+
+#### Option 1: Local Connection (Same Machine)
+```bash
+# Add to your project's .mcp.json
+{
+  "mcpServers": {
+    "haivemind-local": {
+      "command": "python",
+      "args": ["/path/to/agent-hivemind/src/memory_server.py"],
+      "env": {}
+    }
+  }
+}
+```
+
+#### Option 2: Remote Connection (Network Access)
+```bash
+# Add hAIveMind to Claude Code
+claude mcp add --transport sse haivemind http://node-alpha:8900/sse
+
+# Or add to .mcp.json
+{
+  "mcpServers": {
+    "haivemind-remote": {
+      "command": "npx",
+      "args": ["-y", "mcp-proxy", "--target", "http://node-alpha:8900/sse"],
+      "env": {}
+    }
+  }
+}
+```
+
+### First-Time Agent Sync
+
+After connecting to hAIveMind, sync your agent:
+
+```bash
+# Option 1: Automatic installation (recommended)
+# The system will auto-detect first connection and trigger sync
+
+# Option 2: Manual installation
+# Use the MCP tool to install commands and config
+install_agent_commands target_location="auto" force=false
+
+# Option 3: Install via command (after commands are synced)
+/hv-install
+```
+
+**What gets installed:**
+- All `hv-*` commands in your Claude commands directory
+- Agent-specific CLAUDE.md configuration
+- Automatic registration in the collective
+- Sync preferences and machine identity
+
+### Multi-Agent Network Setup
+
+For distributed hAIveMind across multiple machines:
+
+1. **Configure each node** in `config/config.json`:
+```json
+{
+  "sync": {
+    "discovery": {
+      "machines": ["node-alpha", "node-beta", "node-gamma", "node-delta"]
+    }
+  }
+}
+```
+
+2. **Start sync services** on each machine:
+```bash
+python src/sync_service.py --port 8899
+```
+
+3. **Connect agents** on each machine:
+```bash
+# Each agent connects to its local node
+claude mcp add --transport sse haivemind http://localhost:8900/sse
+
+# Then run first-time sync
+install_agent_commands
 ```
 
 ## Configuration
@@ -134,15 +230,65 @@ cd /path/to/agent-hivemind
 python src/sync_service.py
 ```
 
-### Claude Code Integration
+### hAIveMind Commands
 
-The MCP server is automatically available to Claude Code via `.mcp.json` configuration.
+Once your agent is synced, you'll have access to these commands:
 
-Available tools:
+#### Essential Commands
+- `/hv-sync [force|status]` - Sync commands and configuration from collective
+- `/hv-status` - Check collective status and network health  
+- `/hv-install [personal|project|clean]` - Install/update hAIveMind system
+
+#### Communication Commands
+- `/hv-broadcast <message>` - Broadcast message to all collective agents
+- `/hv-query <question>` - Query collective knowledge and expertise
+- `/hv-delegate <task>` - Delegate task to most suitable agent
+
+#### Usage Examples
+
+**First-time setup:**
+```bash
+# After connecting to hAIveMind MCP server
+/hv-install
+
+# Check your agent status
+/hv-status
+
+# Sync latest commands  
+/hv-sync
+```
+
+**Daily operations:**
+```bash
+# Share a discovery with the collective
+/hv-broadcast "Found performance issue in database cluster - investigating"
+
+# Query collective knowledge
+/hv-query "How to optimize Elasticsearch memory usage?"
+
+# Delegate a task to specialists
+/hv-delegate "Investigate high CPU usage on web servers - requires monitoring expertise"
+
+# Check collective status
+/hv-status
+```
+
+### MCP Tools Integration  
+
+The following MCP tools are available for programmatic access:
+
+#### Core Memory Tools
 - `store_memory`: Store new memories with categories and context
 - `retrieve_memory`: Get specific memory by ID
 - `search_memories`: Full-text and semantic search
 - `get_recent_memories`: Get recent memories within time window
+
+#### Agent Sync Tools
+- `install_agent_commands`: Complete agent installation and setup
+- `sync_agent_commands`: Sync commands to agent's Claude installation
+- `sync_agent_config`: Sync agent-specific CLAUDE.md configuration
+- `check_agent_sync_status`: Check current sync status
+- `trigger_auto_sync`: Trigger automatic sync workflow
 
 ### Manual Sync
 

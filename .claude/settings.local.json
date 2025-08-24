@@ -19,6 +19,9 @@
       "WebFetch(domain:gofastmcp.com)"
     ],
     "deny": [],
-    "ask": []
+    "ask": [],
+    "additionalDirectories": [
+      "/home/lj/"
+    ]
   }
 }
