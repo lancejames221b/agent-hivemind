@@ -12,12 +12,14 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
 
-from fastapi import FastAPI, HTTPException, Depends, Request, Form, UploadFile, File
+from fastapi import FastAPI, HTTPException, Depends, Request, Form, UploadFile, File, WebSocket, WebSocketDisconnect
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import JSONResponse, HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import jinja2
+from urllib.parse import parse_qs
 
 from database import ControlDatabase, UserRole, DeviceStatus, KeyStatus
 from playbook_engine import PlaybookEngine, load_playbook_content, PlaybookValidationError
@@ -89,6 +91,15 @@ class DashboardServer:
         self.storage = storage
         self.config = config
         
+        # Add CORS middleware for WebSocket support
+        self.app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],  # In production, specify exact origins
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+        
         # JWT configuration
         self.jwt_secret = os.environ.get('HAIVEMIND_JWT_SECRET', 'change-this-secret-key')
         
@@ -135,6 +146,8 @@ class DashboardServer:
         self._memory_storage = storage
         # Configuration generator (initialized lazily when needed)
         self._config_generator = None
+        # WebSocket connections for real-time updates
+        self.websocket_connections: List[WebSocket] = []
 
     def _get_config(self) -> dict:
         try:
@@ -263,6 +276,124 @@ class DashboardServer:
                 return {"success": True, "user_id": user_id}
             except ValueError as e:
                 raise HTTPException(status_code=400, detail=str(e))
+        
+        # WebSocket endpoint for real-time admin dashboard updates
+        @self.app.websocket("/admin/ws")
+        async def admin_websocket_endpoint(websocket: WebSocket):
+            """WebSocket endpoint for admin dashboard real-time updates"""
+            client_ip = websocket.client.host if websocket.client else "unknown"
+            
+            # Extract token from query parameters
+            query_params = parse_qs(str(websocket.url.query))
+            token = query_params.get('token', [None])[0]
+            
+            if not token:
+                print(f"WebSocket connection rejected from {client_ip}: Missing authentication token")
+                self.db.log_access(
+                    None, None, None, "websocket_connect", None,
+                    client_ip, "", False, "Missing authentication token"
+                )
+                await websocket.close(code=1008, reason="Missing authentication token")
+                return
+            
+            # Validate JWT token
+            try:
+                payload = jwt.decode(token, self.jwt_secret, algorithms=['HS256'])
+                user_info = {
+                    'user_id': payload['user_id'],
+                    'username': payload['username'],
+                    'role': payload['role']
+                }
+                print(f"WebSocket authentication successful for user {user_info['username']} from {client_ip}")
+            except jwt.ExpiredSignatureError:
+                print(f"WebSocket connection rejected from {client_ip}: Token expired")
+                self.db.log_access(
+                    None, None, None, "websocket_connect", None,
+                    client_ip, "", False, "Token expired"
+                )
+                await websocket.close(code=1008, reason="Token expired")
+                return
+            except jwt.InvalidTokenError as e:
+                print(f"WebSocket connection rejected from {client_ip}: Invalid token - {str(e)}")
+                self.db.log_access(
+                    None, None, None, "websocket_connect", None,
+                    client_ip, "", False, f"Invalid token: {str(e)}"
+                )
+                await websocket.close(code=1008, reason="Invalid token")
+                return
+            except Exception as e:
+                print(f"WebSocket connection rejected from {client_ip}: JWT validation error - {str(e)}")
+                self.db.log_access(
+                    None, None, None, "websocket_connect", None,
+                    client_ip, "", False, f"JWT validation error: {str(e)}"
+                )
+                await websocket.close(code=1008, reason="Authentication failed")
+                return
+            
+            # Accept WebSocket connection
+            await websocket.accept()
+            self.websocket_connections.append(websocket)
+            
+            # Log successful WebSocket connection
+            self.db.log_access(
+                user_info['user_id'], None, None, "websocket_connect", None,
+                websocket.client.host if websocket.client else "unknown", 
+                "", True
+            )
+            
+            try:
+                # Send initial connection confirmation
+                await websocket.send_json({
+                    "type": "connection_established",
+                    "user": user_info,
+                    "timestamp": datetime.utcnow().isoformat()
+                })
+                
+                # Keep connection alive and handle client messages
+                while True:
+                    try:
+                        data = await websocket.receive_text()
+                        message = json.loads(data)
+                        
+                        # Handle different message types
+                        if message.get("type") == "ping":
+                            await websocket.send_json({"type": "pong", "timestamp": datetime.utcnow().isoformat()})
+                        elif message.get("type") == "subscribe":
+                            # Handle subscription to specific events
+                            await websocket.send_json({
+                                "type": "subscribed",
+                                "events": message.get("events", []),
+                                "timestamp": datetime.utcnow().isoformat()
+                            })
+                        elif message.get("type") == "get_stats":
+                            # Send current dashboard stats
+                            stats = self.db.get_dashboard_stats()
+                            await websocket.send_json({
+                                "type": "stats_update",
+                                "data": stats,
+                                "timestamp": datetime.utcnow().isoformat()
+                            })
+                    except json.JSONDecodeError:
+                        await websocket.send_json({
+                            "type": "error",
+                            "message": "Invalid JSON format",
+                            "timestamp": datetime.utcnow().isoformat()
+                        })
+                    except Exception as e:
+                        await websocket.send_json({
+                            "type": "error", 
+                            "message": str(e),
+                            "timestamp": datetime.utcnow().isoformat()
+                        })
+                        
+            except WebSocketDisconnect:
+                pass
+            except Exception as e:
+                print(f"WebSocket error: {e}")
+            finally:
+                # Remove from connections list
+                if websocket in self.websocket_connections:
+                    self.websocket_connections.remove(websocket)
         
         # Device Management Routes
         @self.app.post("/api/v1/devices/register")
@@ -1144,6 +1275,26 @@ class DashboardServer:
             raise HTTPException(status_code=401, detail="Token expired")
         except jwt.InvalidTokenError:
             raise HTTPException(status_code=401, detail="Invalid token")
+    
+    async def broadcast_websocket_message(self, message: dict):
+        """Broadcast message to all connected WebSocket clients"""
+        if not self.websocket_connections:
+            return
+        
+        message_str = json.dumps(message)
+        disconnected = []
+        
+        for websocket in self.websocket_connections:
+            try:
+                await websocket.send_text(message_str)
+            except Exception as e:
+                print(f"Failed to send WebSocket message: {e}")
+                disconnected.append(websocket)
+        
+        # Remove disconnected websockets
+        for websocket in disconnected:
+            if websocket in self.websocket_connections:
+                self.websocket_connections.remove(websocket)
     
     def _generate_claude_desktop_config(self, device, include_auth: bool) -> dict:
         """Generate Claude Desktop MCP configuration"""
