@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Authentication Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #6c757d; cursor: not-allowed; }
+        #log {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 10px;
+            height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .token-input {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔌 WebSocket Authentication Test</h1>
+        <p>This page tests the WebSocket authentication functionality for the admin dashboard.</p>
+        
+        <div class="test-section">
+            <h3>Authentication Token</h3>
+            <input type="text" id="tokenInput" class="token-input" placeholder="Enter JWT token (or use login to get one automatically)">
+            <button onclick="useStoredToken()">Use Stored Token</button>
+            <button onclick="clearToken()">Clear Token</button>
+        </div>
+        
+        <div class="test-section">
+            <h3>WebSocket Connection</h3>
+            <button id="connectBtn" onclick="connectWebSocket()">Connect</button>
+            <button id="disconnectBtn" onclick="disconnectWebSocket()" disabled>Disconnect</button>
+            <button id="pingBtn" onclick="sendPing()" disabled>Send Ping</button>
+            <button id="statsBtn" onclick="requestStats()" disabled>Request Stats</button>
+        </div>
+        
+        <div class="test-section">
+            <h3>Connection Status</h3>
+            <div id="status" class="info">Not connected</div>
+        </div>
+        
+        <div class="test-section">
+            <h3>Log</h3>
+            <div id="log"></div>
+            <button onclick="clearLog()">Clear Log</button>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.innerHTML = `<span style="color: #666;">[${timestamp}]</span> ${message}`;
+            if (type === 'error') logEntry.style.color = 'red';
+            if (type === 'success') logEntry.style.color = 'green';
+            if (type === 'warning') logEntry.style.color = 'orange';
+            logDiv.appendChild(logEntry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+        
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+        
+        function updateStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = type;
+        }
+        
+        function updateButtons(connected) {
+            document.getElementById('connectBtn').disabled = connected;
+            document.getElementById('disconnectBtn').disabled = !connected;
+            document.getElementById('pingBtn').disabled = !connected;
+            document.getElementById('statsBtn').disabled = !connected;
+        }
+        
+        function useStoredToken() {
+            const token = localStorage.getItem('haivemind_token');
+            if (token) {
+                document.getElementById('tokenInput').value = token;
+                log('Loaded token from localStorage', 'success');
+            } else {
+                log('No token found in localStorage', 'warning');
+            }
+        }
+        
+        function clearToken() {
+            document.getElementById('tokenInput').value = '';
+            log('Token cleared');
+        }
+        
+        function connectWebSocket() {
+            const token = document.getElementById('tokenInput').value.trim();
+            
+            if (!token) {
+                log('Please enter a JWT token', 'error');
+                return;
+            }
+            
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/admin/ws?token=${token}`;
+            
+            log(`Connecting to: ${wsUrl.replace(/token=[^&]+/, 'token=***')}`);
+            
+            try {
+                ws = new WebSocket(wsUrl);
+                
+                ws.onopen = () => {
+                    log('✅ WebSocket connected successfully', 'success');
+                    updateStatus('Connected', 'success');
+                    updateButtons(true);
+                };
+                
+                ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        log(`📥 Received: ${JSON.stringify(data, null, 2)}`, 'success');
+                    } catch (error) {
+                        log(`📥 Received (raw): ${event.data}`, 'success');
+                    }
+                };
+                
+                ws.onclose = (event) => {
+                    log(`❌ WebSocket closed: ${event.code} - ${event.reason}`, 'error');
+                    updateStatus(`Disconnected: ${event.reason}`, 'error');
+                    updateButtons(false);
+                    ws = null;
+                };
+                
+                ws.onerror = (error) => {
+                    log(`💥 WebSocket error: ${error}`, 'error');
+                    updateStatus('Error occurred', 'error');
+                };
+                
+            } catch (error) {
+                log(`Failed to create WebSocket: ${error}`, 'error');
+            }
+        }
+        
+        function disconnectWebSocket() {
+            if (ws) {
+                ws.close();
+                log('Disconnecting WebSocket...');
+            }
+        }
+        
+        function sendPing() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                const message = { type: 'ping' };
+                ws.send(JSON.stringify(message));
+                log(`📤 Sent: ${JSON.stringify(message)}`);
+            } else {
+                log('WebSocket not connected', 'warning');
+            }
+        }
+        
+        function requestStats() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                const message = { type: 'get_stats' };
+                ws.send(JSON.stringify(message));
+                log(`📤 Sent: ${JSON.stringify(message)}`);
+            } else {
+                log('WebSocket not connected', 'warning');
+            }
+        }
+        
+        // Auto-load stored token on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            useStoredToken();
+            log('WebSocket test page loaded');
+        });
+    </script>
+</body>
+</html>

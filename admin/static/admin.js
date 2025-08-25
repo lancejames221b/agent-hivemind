@@ -292,33 +292,51 @@ class AdminWebSocket {
     
     connect() {
         const token = localStorage.getItem('haivemind_token');
-        if (!token) return;
+        if (!token) {
+            console.log('No authentication token available for WebSocket connection');
+            return;
+        }
         
-        const wsUrl = `ws://${window.location.host}/admin/ws?token=${token}`;
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${window.location.host}/admin/ws?token=${token}`;
+        
+        console.log('Attempting WebSocket connection to:', wsUrl.replace(/token=[^&]+/, 'token=***'));
         this.ws = new WebSocket(wsUrl);
         
         this.ws.onopen = () => {
-            console.log('Admin WebSocket connected');
+            console.log('Admin WebSocket connected successfully');
             this.reconnectAttempts = 0;
             this.reconnectDelay = 1000;
+            showSuccess('Real-time updates connected');
         };
         
         this.ws.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);
+                console.log('WebSocket message received:', data.type);
                 this.handleMessage(data);
             } catch (error) {
                 console.error('WebSocket message parsing error:', error);
             }
         };
         
-        this.ws.onclose = () => {
-            console.log('Admin WebSocket disconnected');
+        this.ws.onclose = (event) => {
+            console.log('Admin WebSocket disconnected:', event.code, event.reason);
+            if (event.code === 1008) {
+                // Authentication failed
+                showError(`WebSocket authentication failed: ${event.reason}`);
+                localStorage.removeItem('haivemind_token');
+                localStorage.removeItem('haivemind_user');
+                window.location.href = '/admin/login.html';
+                return;
+            }
+            showInfo('Real-time updates disconnected. Attempting to reconnect...');
             this.scheduleReconnect();
         };
         
         this.ws.onerror = (error) => {
             console.error('WebSocket error:', error);
+            showError('WebSocket connection error occurred');
         };
     }
     
@@ -333,8 +351,59 @@ class AdminWebSocket {
     
     handleMessage(data) {
         const { type, payload } = data;
-        const listeners = this.listeners.get(type) || [];
-        listeners.forEach(callback => callback(payload));
+        
+        // Handle built-in message types
+        switch (type) {
+            case 'connection_established':
+                console.log('WebSocket connection established for user:', data.user?.username);
+                break;
+            case 'pong':
+                console.log('WebSocket pong received');
+                break;
+            case 'stats_update':
+                this.updateDashboardStats(data.data);
+                break;
+            case 'error':
+                console.error('WebSocket error:', data.message);
+                showError(`Server error: ${data.message}`);
+                break;
+            default:
+                // Handle custom message types via listeners
+                const listeners = this.listeners.get(type) || [];
+                listeners.forEach(callback => callback(payload || data));
+                break;
+        }
+    }
+    
+    updateDashboardStats(stats) {
+        // Update dashboard statistics if elements exist
+        if (stats) {
+            const elements = {
+                'total-users': stats.total_users,
+                'total-devices': stats.total_devices,
+                'active-devices': stats.active_devices,
+                'total-api-keys': stats.total_api_keys
+            };
+            
+            Object.entries(elements).forEach(([id, value]) => {
+                const element = document.getElementById(id);
+                if (element && value !== undefined) {
+                    element.textContent = value;
+                }
+            });
+        }
+    }
+    
+    sendPing() {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({ type: 'ping' }));
+        }
+    }
+    
+    requestStats() {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({ type: 'get_stats' }));
+        }
     }
     
     on(eventType, callback) {
@@ -359,4 +428,14 @@ const adminWS = new AdminWebSocket();
 // Auto-connect WebSocket if not on login page
 if (!window.location.pathname.includes('login.html')) {
     adminWS.connect();
+    
+    // Send periodic pings to keep connection alive
+    setInterval(() => {
+        adminWS.sendPing();
+    }, 30000); // Every 30 seconds
+    
+    // Request stats updates periodically
+    setInterval(() => {
+        adminWS.requestStats();
+    }, 60000); // Every minute
 }
