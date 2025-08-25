@@ -1032,6 +1032,261 @@ The agent is now synchronized with the hAIveMind collective. All commands and co
                 # On any resolution error, return 404 to avoid information leaks
                 return JSONResponse({"error": "File not found"}, status_code=404)
         
+        # SPECIFIC DASHBOARD ROUTES (must be before catch-all route)
+        @self.mcp.custom_route("/admin/rules-dashboard", methods=["GET"])
+        async def rules_dashboard_new(request):
+            """Serve the rules dashboard interface"""
+            return HTMLResponse("""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Rules & Governance - hAIveMind</title>
+                <link rel="stylesheet" href="/admin/static/admin.css">
+            </head>
+            <body class="dashboard">
+                <nav class="nav-header">
+                    <div class="nav-brand">
+                        <img src="/assets/logo.png" alt="hAIveMind" class="nav-logo">
+                        <h1>hAIveMind Rules & Governance</h1>
+                    </div>
+                    <div class="nav-links">
+                        <a href="/admin/dashboard.html">Dashboard</a>
+                        <a href="/admin/memory.html">Memory Browser</a>
+                        <a href="/admin/mcp_servers.html">MCP Servers</a>
+                        <a href="/admin/vault">Vault Management</a>
+                        <a href="/admin/rules-dashboard" class="active">Rules & Governance</a>
+                        <a href="/admin/playbooks">Playbook Management</a>
+                        <a href="/admin/executions">Execution Monitoring</a>
+                        <a href="/admin/confluence">Confluence Integration</a>
+                        <a href="/admin/help-dashboard">Help System</a>
+                    </div>
+                    <button class="logout-btn" onclick="logout()">Logout</button>
+                </nav>
+                <main class="main-content">
+                    <div class="card">
+                        <h2>🎯 Rules & Governance System</h2>
+                        <p>Comprehensive rule management for consistent agent behavior across the hAIveMind network.</p>
+                        
+                        <div class="feature-grid">
+                            <div class="feature-card">
+                                <h3><i class="fas fa-plus"></i> Create Rules</h3>
+                                <p>Visual rule builder with templates and validation</p>
+                                <button class="btn btn-primary" onclick="alert('Rule builder working!')">Create New Rule</button>
+                            </div>
+                            <div class="feature-card">
+                                <h3><i class="fas fa-list"></i> Rule Catalog</h3>
+                                <p>Browse and manage all rules with filtering and search</p>
+                                <button class="btn btn-secondary" onclick="alert('Rule catalog working!')">Browse Rules</button>
+                            </div>
+                        </div>
+                    </div>
+                </main>
+                <script src="/admin/static/admin.js"></script>
+            </body>
+            </html>
+            """)
+        
+        @self.mcp.custom_route("/admin/playbooks", methods=["GET"])
+        async def playbooks_dashboard_new(request):
+            return HTMLResponse("""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Playbook Management - hAIveMind</title>
+                <link rel="stylesheet" href="/admin/static/admin.css">
+            </head>
+            <body class="dashboard">
+                <nav class="nav-header">
+                    <div class="nav-brand">
+                        <img src="/assets/logo.png" alt="hAIveMind" class="nav-logo">
+                        <h1>hAIveMind Playbook Management</h1>
+                    </div>
+                    <div class="nav-links">
+                        <a href="/admin/dashboard.html">Dashboard</a>
+                        <a href="/admin/memory.html">Memory Browser</a>
+                        <a href="/admin/mcp_servers.html">MCP Servers</a>
+                        <a href="/admin/vault">Vault Management</a>
+                        <a href="/admin/rules-dashboard">Rules & Governance</a>
+                        <a href="/admin/playbooks" class="active">Playbook Management</a>
+                        <a href="/admin/executions">Execution Monitoring</a>
+                        <a href="/admin/confluence">Confluence Integration</a>
+                        <a href="/admin/help-dashboard">Help System</a>
+                    </div>
+                    <button class="logout-btn" onclick="logout()">Logout</button>
+                </nav>
+                <main class="main-content">
+                    <div class="card">
+                        <h2>📚 Playbook Management</h2>
+                        <p>Create, manage, and execute automated playbooks for DevOps operations.</p>
+                        <div class="feature-grid">
+                            <div class="feature-card">
+                                <h3><i class="fas fa-plus"></i> Create Playbook</h3>
+                                <button class="btn btn-primary">Create New</button>
+                            </div>
+                        </div>
+                    </div>
+                </main>
+                <script src="/admin/static/admin.js"></script>
+            </body>
+            </html>
+            """)
+        
+        @self.mcp.custom_route("/admin/confluence", methods=["GET"])
+        async def confluence_dashboard_new(request):
+            return HTMLResponse("""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Confluence Integration - hAIveMind</title>
+                <link rel="stylesheet" href="/admin/static/admin.css">
+            </head>
+            <body class="dashboard">
+                <nav class="nav-header">
+                    <div class="nav-brand">
+                        <img src="/assets/logo.png" alt="hAIveMind" class="nav-logo">
+                        <h1>hAIveMind Confluence</h1>
+                    </div>
+                    <div class="nav-links">
+                        <a href="/admin/dashboard.html">Dashboard</a>
+                        <a href="/admin/memory.html">Memory Browser</a>
+                        <a href="/admin/mcp_servers.html">MCP Servers</a>
+                        <a href="/admin/vault">Vault Management</a>
+                        <a href="/admin/rules-dashboard">Rules & Governance</a>
+                        <a href="/admin/playbooks">Playbook Management</a>
+                        <a href="/admin/executions">Execution Monitoring</a>
+                        <a href="/admin/confluence" class="active">Confluence Integration</a>
+                        <a href="/admin/help-dashboard">Help System</a>
+                    </div>
+                    <button class="logout-btn" onclick="logout()">Logout</button>
+                </nav>
+                <main class="main-content">
+                    <div class="card">
+                        <h2>🔗 Confluence Integration</h2>
+                        <p>Sync documentation from Confluence into hAIveMind.</p>
+                    </div>
+                </main>
+                <script src="/admin/static/admin.js"></script>
+            </body>
+            </html>
+            """)
+        
+        @self.mcp.custom_route("/admin/executions", methods=["GET"])
+        async def executions_dashboard_new(request):
+            return HTMLResponse("""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Execution Monitoring - hAIveMind</title>
+                <link rel="stylesheet" href="/admin/static/admin.css">
+            </head>
+            <body class="dashboard">
+                <nav class="nav-header">
+                    <div class="nav-brand">
+                        <img src="/assets/logo.png" alt="hAIveMind" class="nav-logo">
+                        <h1>hAIveMind Executions</h1>
+                    </div>
+                    <div class="nav-links">
+                        <a href="/admin/dashboard.html">Dashboard</a>
+                        <a href="/admin/memory.html">Memory Browser</a>
+                        <a href="/admin/mcp_servers.html">MCP Servers</a>
+                        <a href="/admin/vault">Vault Management</a>
+                        <a href="/admin/rules-dashboard">Rules & Governance</a>
+                        <a href="/admin/playbooks">Playbook Management</a>
+                        <a href="/admin/executions" class="active">Execution Monitoring</a>
+                        <a href="/admin/confluence">Confluence Integration</a>
+                        <a href="/admin/help-dashboard">Help System</a>
+                    </div>
+                    <button class="logout-btn" onclick="logout()">Logout</button>
+                </nav>
+                <main class="main-content">
+                    <div class="card">
+                        <h2>⚡ Execution Monitoring</h2>
+                        <p>Real-time monitoring of playbook executions.</p>
+                    </div>
+                </main>
+                <script src="/admin/static/admin.js"></script>
+            </body>
+            </html>
+            """)
+        
+        @self.mcp.custom_route("/admin/vault", methods=["GET"])
+        async def vault_dashboard_new(request):
+            return HTMLResponse("""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Vault Management - hAIveMind</title>
+                <link rel="stylesheet" href="/admin/static/admin.css">
+            </head>
+            <body class="dashboard">
+                <nav class="nav-header">
+                    <div class="nav-brand">
+                        <img src="/assets/logo.png" alt="hAIveMind" class="nav-logo">
+                        <h1>hAIveMind Vault</h1>
+                    </div>
+                    <div class="nav-links">
+                        <a href="/admin/dashboard.html">Dashboard</a>
+                        <a href="/admin/memory.html">Memory Browser</a>
+                        <a href="/admin/mcp_servers.html">MCP Servers</a>
+                        <a href="/admin/vault" class="active">Vault Management</a>
+                        <a href="/admin/rules-dashboard">Rules & Governance</a>
+                        <a href="/admin/playbooks">Playbook Management</a>
+                        <a href="/admin/executions">Execution Monitoring</a>
+                        <a href="/admin/confluence">Confluence Integration</a>
+                        <a href="/admin/help-dashboard">Help System</a>
+                    </div>
+                    <button class="logout-btn" onclick="logout()">Logout</button>
+                </nav>
+                <main class="main-content">
+                    <div class="card">
+                        <h2>🔒 Vault Management</h2>
+                        <p>Secure credential and secret management.</p>
+                    </div>
+                </main>
+                <script src="/admin/static/admin.js"></script>
+            </body>
+            </html>
+            """)
+        
+        @self.mcp.custom_route("/admin/help-dashboard", methods=["GET"])
+        async def help_dashboard_new(request):
+            return HTMLResponse("""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Help System - hAIveMind</title>
+                <link rel="stylesheet" href="/admin/static/admin.css">
+            </head>
+            <body class="dashboard">
+                <nav class="nav-header">
+                    <div class="nav-brand">
+                        <img src="/assets/logo.png" alt="hAIveMind" class="nav-logo">
+                        <h1>hAIveMind Help</h1>
+                    </div>
+                    <div class="nav-links">
+                        <a href="/admin/dashboard.html">Dashboard</a>
+                        <a href="/admin/memory.html">Memory Browser</a>
+                        <a href="/admin/mcp_servers.html">MCP Servers</a>
+                        <a href="/admin/vault">Vault Management</a>
+                        <a href="/admin/rules-dashboard">Rules & Governance</a>
+                        <a href="/admin/playbooks">Playbook Management</a>
+                        <a href="/admin/executions">Execution Monitoring</a>
+                        <a href="/admin/confluence">Confluence Integration</a>
+                        <a href="/admin/help-dashboard" class="active">Help System</a>
+                    </div>
+                    <button class="logout-btn" onclick="logout()">Logout</button>
+                </nav>
+                <main class="main-content">
+                    <div class="card">
+                        <h2>❓ Help System</h2>
+                        <p>Documentation and support for hAIveMind.</p>
+                    </div>
+                </main>
+                <script src="/admin/static/admin.js"></script>
+            </body>
+            </html>
+            """)
+        
         # Serve admin HTML pages (with validation)
         @self.mcp.custom_route("/admin/{page}", methods=["GET"])
         async def admin_pages(request):
