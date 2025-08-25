@@ -1003,6 +1003,29 @@ The agent is now synchronized with the hAIveMind collective. All commands and co
                 # On any resolution error, return 404 to avoid information leaks
                 return JSONResponse({"error": "File not found"}, status_code=404)
         
+        # Serve assets files (with path traversal protection)
+        @self.mcp.custom_route("/assets/{path:path}", methods=["GET"])
+        async def assets_static(request):
+            try:
+                # Base assets directory
+                base_dir = (Path(__file__).parent.parent / "assets").resolve()
+                # Requested path (may include nested paths)
+                requested = request.path_params.get("path", "")
+
+                # Normalize and resolve against base directory
+                candidate = (base_dir / requested).resolve()
+
+                # Ensure the resolved path is within the assets directory
+                if not str(candidate).startswith(str(base_dir) + os.sep) and candidate != base_dir:
+                    return JSONResponse({"error": "Invalid path"}, status_code=400)
+
+                if candidate.is_file():
+                    return FileResponse(str(candidate))
+                return JSONResponse({"error": "File not found"}, status_code=404)
+            except Exception:
+                # On any resolution error, return 404 to avoid information leaks
+                return JSONResponse({"error": "File not found"}, status_code=404)
+        
         # Serve admin HTML pages (with validation)
         @self.mcp.custom_route("/admin/{page}", methods=["GET"])
         async def admin_pages(request):

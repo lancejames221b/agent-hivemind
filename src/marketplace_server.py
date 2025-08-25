@@ -267,6 +267,11 @@ class MarketplaceServer:
         if admin_path.exists():
             self.app.mount("/admin", StaticFiles(directory="admin"), name="admin")
         
+        # Mount assets directory
+        assets_path = Path("assets")
+        if assets_path.exists():
+            self.app.mount("/assets", StaticFiles(directory="assets"), name="assets")
+        
         # Mount documentation assets
         docs_path = Path("docs")
         if docs_path.exists():
