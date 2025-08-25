@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "vibe-kanban": {
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-http", 
+        "http://localhost:8900/sse"
+      ],
+      "env": {
+        "HTTP_TIMEOUT": "30000"
+      }
+    }
+  }
+}

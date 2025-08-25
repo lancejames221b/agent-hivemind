@@ -80,6 +80,9 @@ class RemoteMemoryMCPServer:
         # Initialize dashboard functionality
         self._init_dashboard_functionality()
         
+        # Track server start time for uptime calculation
+        self._start_time = time.time()
+        
         logger.info(f"🌐 hAIveMind network portal initialized on {self.host}:{self.port} - remote access enabled")
     
     def _add_context_resources(self):
@@ -1085,6 +1088,25 @@ The agent is now synchronized with the hAIveMind collective. All commands and co
             except Exception as e:
                 return JSONResponse({"error": str(e)}, status_code=500)
         
+        # API v1 auth login endpoint (used by login.html)
+        @self.mcp.custom_route("/api/v1/auth/login", methods=["POST"])
+        async def api_v1_login(request):
+            try:
+                data = await request.json()
+                username = data.get('username')
+                password = data.get('password')
+                
+                if self.auth.validate_admin_login(username, password):
+                    token = self.auth.generate_jwt_token({
+                        'username': username,
+                        'role': 'admin'
+                    })
+                    return JSONResponse({"token": token, "status": "success"})
+                else:
+                    return JSONResponse({"error": "Invalid credentials"}, status_code=401)
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
         # Token verification
         @self.mcp.custom_route("/admin/api/verify", methods=["GET"])
         async def verify_token(request):
@@ -1238,6 +1260,486 @@ The agent is now synchronized with the hAIveMind collective. All commands and co
                 logger.error(f"Error getting dashboard stats: {e}")
                 return JSONResponse({"error": str(e)}, status_code=500)
         
+        # General stats endpoint (requested by dashboard)
+        @self.mcp.custom_route("/admin/api/stats", methods=["GET"])
+        async def general_stats(request):
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            
+            try:
+                # Get basic system stats
+                agent_roster = await self.storage.get_agent_roster()
+                memory_stats = self.storage.get_collection_info()
+                
+                stats = {
+                    "system_health": "healthy",
+                    "active_agents": len(agent_roster.get('agents', [])),
+                    "total_memories": sum(collection.get('count', 0) for collection in memory_stats.values()),
+                    "memory_collections": len(memory_stats),
+                    "server_port": self.port,
+                    "server_status": "running",
+                    "uptime": int(time.time() - getattr(self, '_start_time', time.time())),
+                }
+                
+                return JSONResponse(stats)
+            except Exception as e:
+                logger.error(f"Error getting general stats: {e}")
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # Memory-specific stats endpoint
+        @self.mcp.custom_route("/admin/api/memory/stats", methods=["GET"])
+        async def memory_stats(request):
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            
+            try:
+                # Get detailed memory statistics
+                memory_stats = self.storage.get_collection_info()
+                
+                # Calculate additional metrics
+                total_memories = sum(collection.get('count', 0) for collection in memory_stats.values())
+                
+                detailed_stats = {
+                    "total_memories": total_memories,
+                    "collections": memory_stats,
+                    "categories": {
+                        "project": memory_stats.get('project_memories', {}).get('count', 0),
+                        "conversation": memory_stats.get('conversation_memories', {}).get('count', 0),
+                        "agent": memory_stats.get('agent_memories', {}).get('count', 0),
+                        "global": memory_stats.get('global_memories', {}).get('count', 0),
+                        "infrastructure": memory_stats.get('infrastructure_memories', {}).get('count', 0),
+                        "security": memory_stats.get('security_memories', {}).get('count', 0),
+                    },
+                    "storage_health": "healthy",
+                    "last_updated": time.time()
+                }
+                
+                return JSONResponse(detailed_stats)
+            except Exception as e:
+                logger.error(f"Error getting memory stats: {e}")
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # Authentication verification endpoint
+        @self.mcp.custom_route("/admin/api/verify", methods=["GET"])
+        async def verify_auth(request):
+            """Verify current authentication status"""
+            auth_header = request.headers.get('Authorization')
+            if not auth_header or not auth_header.startswith('Bearer '):
+                return JSONResponse({"authenticated": False, "error": "No token"}, status_code=401)
+            
+            token = auth_header.split(' ')[1]
+            valid, payload = self.auth.validate_jwt_token(token)
+            if valid:
+                return JSONResponse({
+                    "authenticated": True,
+                    "user": payload.get('user'),
+                    "role": payload.get('role'),
+                    "expires": payload.get('exp')
+                })
+            else:
+                return JSONResponse({"authenticated": False, "error": "Invalid token"}, status_code=401)
+        
+        # Login redirect endpoint (for compatibility)
+        @self.mcp.custom_route("/login", methods=["GET"])
+        async def login_redirect(request):
+            """Redirect /login to proper admin login page"""
+            from starlette.responses import RedirectResponse
+            return RedirectResponse(url="/admin/login.html", status_code=302)
+        
+        # Rules dashboard endpoint
+        @self.mcp.custom_route("/admin/rules-dashboard", methods=["GET"])
+        async def rules_dashboard(request):
+            """Serve the rules dashboard interface"""
+            try:
+                rules_dashboard_path = Path(__file__).parent.parent / "templates" / "rules_dashboard.html"
+                if rules_dashboard_path.exists():
+                    return FileResponse(str(rules_dashboard_path), media_type="text/html")
+                else:
+                    # Fallback to basic rules interface
+                    return HTMLResponse("""
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <title>Rules & Governance - hAIveMind</title>
+                        <link rel="stylesheet" href="/admin/static/admin.css">
+                    </head>
+                    <body class="dashboard">
+                        <nav class="nav-header">
+                            <div class="nav-brand">
+                                <img src="/assets/logo.png" alt="hAIveMind" class="nav-logo">
+                                <h1>hAIveMind Rules & Governance</h1>
+                            </div>
+                            <div class="nav-links">
+                                <a href="/admin/dashboard.html">Dashboard</a>
+                                <a href="/admin/memory.html">Memory Browser</a>
+                                <a href="/admin/mcp_servers.html">MCP Servers</a>
+                                <a href="/admin/vault">Vault Management</a>
+                                <a href="/admin/rules-dashboard" class="active">Rules & Governance</a>
+                                <a href="/admin/playbooks">Playbook Management</a>
+                                <a href="/admin/executions">Execution Monitoring</a>
+                                <a href="/admin/confluence">Confluence Integration</a>
+                                <a href="/admin/help-dashboard">Help System</a>
+                            </div>
+                            <button class="logout-btn" onclick="logout()">Logout</button>
+                        </nav>
+                        <main class="main-content">
+                            <div class="card">
+                                <h2>🎯 Rules & Governance System</h2>
+                                <p>Comprehensive rule management for consistent agent behavior across the hAIveMind network.</p>
+                                
+                                <div class="feature-grid">
+                                    <div class="feature-card">
+                                        <h3><i class="fas fa-plus"></i> Create Rules</h3>
+                                        <p>Visual rule builder with templates and validation</p>
+                                        <button class="btn btn-primary" onclick="alert('Rule builder coming soon!')">Create New Rule</button>
+                                    </div>
+                                    <div class="feature-card">
+                                        <h3><i class="fas fa-list"></i> Rule Catalog</h3>
+                                        <p>Browse and manage all rules with filtering and search</p>
+                                        <button class="btn btn-secondary" onclick="alert('Rule catalog coming soon!')">Browse Rules</button>
+                                    </div>
+                                    <div class="feature-card">
+                                        <h3><i class="fas fa-sync"></i> Network Sync</h3>
+                                        <p>Synchronize rules across all agents in the network</p>
+                                        <button class="btn btn-info" onclick="alert('Network sync coming soon!')">Sync Rules</button>
+                                    </div>
+                                    <div class="feature-card">
+                                        <h3><i class="fas fa-chart-line"></i> Analytics</h3>
+                                        <p>Performance metrics and compliance reporting</p>
+                                        <button class="btn btn-warning" onclick="alert('Analytics coming soon!')">View Analytics</button>
+                                    </div>
+                                </div>
+
+                                <div class="system-status">
+                                    <h3>System Status</h3>
+                                    <div class="status-grid">
+                                        <div class="status-item">
+                                            <span class="status-label">Active Rules</span>
+                                            <span class="status-value">0</span>
+                                        </div>
+                                        <div class="status-item">
+                                            <span class="status-label">Rule Templates</span>
+                                            <span class="status-value">5</span>
+                                        </div>
+                                        <div class="status-item">
+                                            <span class="status-label">Network Agents</span>
+                                            <span class="status-value">1</span>
+                                        </div>
+                                        <div class="status-item">
+                                            <span class="status-label">Compliance</span>
+                                            <span class="status-value status-good">✓</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </main>
+                        <script src="/admin/static/admin.js"></script>
+                    </body>
+                    </html>
+                    """)
+            except Exception as e:
+                logger.error(f"Error serving rules dashboard: {e}")
+                return JSONResponse({"error": "Rules dashboard unavailable"}, status_code=500)
+        
+        # Confluence integration dashboard endpoint
+        @self.mcp.custom_route("/admin/confluence", methods=["GET"])
+        async def confluence_dashboard(request):
+            """Serve the Confluence integration dashboard interface"""
+            try:
+                return HTMLResponse("""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Confluence Integration - hAIveMind</title>
+                    <link rel="stylesheet" href="/admin/static/admin.css">
+                    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+                </head>
+                <body class="dashboard">
+                    <nav class="nav-header">
+                        <div class="nav-brand">
+                            <img src="/assets/logo.png" alt="hAIveMind" class="nav-logo">
+                            <h1>hAIveMind Confluence Integration</h1>
+                        </div>
+                        <div class="nav-links">
+                            <a href="/admin/dashboard.html">Dashboard</a>
+                            <a href="/admin/memory.html">Memory Browser</a>
+                            <a href="/admin/mcp_servers.html">MCP Servers</a>
+                            <a href="/admin/vault">Vault Management</a>
+                            <a href="/admin/rules-dashboard">Rules & Governance</a>
+                            <a href="/admin/playbooks">Playbook Management</a>
+                            <a href="/admin/executions">Execution Monitoring</a>
+                            <a href="/admin/confluence" class="active">Confluence Integration</a>
+                            <a href="/admin/help-dashboard">Help System</a>
+                        </div>
+                        <button class="logout-btn" onclick="logout()">Logout</button>
+                    </nav>
+                    <main class="main-content">
+                        <div class="card">
+                            <h2><i class="fab fa-confluence"></i> Confluence Integration</h2>
+                            <p>Sync documentation and runbooks from Confluence spaces into hAIveMind knowledge base.</p>
+                            
+                            <div class="feature-grid">
+                                <div class="feature-card">
+                                    <h3><i class="fas fa-cog"></i> Configuration</h3>
+                                    <p>Configure Confluence API connection and authentication</p>
+                                    <button class="btn btn-primary" onclick="showConfig()">Configure Connection</button>
+                                </div>
+                                <div class="feature-card">
+                                    <h3><i class="fas fa-sync"></i> Sync Management</h3>
+                                    <p>Manage automatic sync schedules and manual imports</p>
+                                    <button class="btn btn-secondary" onclick="showSyncManager()">Manage Sync</button>
+                                </div>
+                                <div class="feature-card">
+                                    <h3><i class="fas fa-sitemap"></i> Space Mapping</h3>
+                                    <p>Map Confluence spaces to hAIveMind categories</p>
+                                    <button class="btn btn-info" onclick="showSpaceMapping()">Configure Spaces</button>
+                                </div>
+                                <div class="feature-card">
+                                    <h3><i class="fas fa-history"></i> Import History</h3>
+                                    <p>View sync history and resolve conflicts</p>
+                                    <button class="btn btn-warning" onclick="showImportHistory()">View History</button>
+                                </div>
+                            </div>
+
+                            <div class="sync-status">
+                                <h3>Sync Status</h3>
+                                <div class="status-grid">
+                                    <div class="status-item">
+                                        <span class="status-label">Connection Status</span>
+                                        <span class="status-value status-warning">Not Configured</span>
+                                    </div>
+                                    <div class="status-item">
+                                        <span class="status-label">Last Sync</span>
+                                        <span class="status-value">Never</span>
+                                    </div>
+                                    <div class="status-item">
+                                        <span class="status-label">Monitored Spaces</span>
+                                        <span class="status-value">0</span>
+                                    </div>
+                                    <div class="status-item">
+                                        <span class="status-label">Synced Pages</span>
+                                        <span class="status-value">0</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="quick-actions">
+                                <h3>Quick Actions</h3>
+                                <button class="btn btn-success" onclick="triggerManualSync()">
+                                    <i class="fas fa-download"></i> Manual Sync Now
+                                </button>
+                                <button class="btn btn-info" onclick="testConnection()">
+                                    <i class="fas fa-plug"></i> Test Connection
+                                </button>
+                                <button class="btn btn-secondary" onclick="viewLogs()">
+                                    <i class="fas fa-file-text"></i> View Sync Logs
+                                </button>
+                            </div>
+                        </div>
+                    </main>
+                    <script src="/admin/static/admin.js"></script>
+                    <script>
+                        function showConfig() { alert('Confluence configuration coming soon!'); }
+                        function showSyncManager() { alert('Sync manager coming soon!'); }
+                        function showSpaceMapping() { alert('Space mapping coming soon!'); }
+                        function showImportHistory() { alert('Import history coming soon!'); }
+                        function triggerManualSync() { alert('Manual sync coming soon!'); }
+                        function testConnection() { alert('Connection test coming soon!'); }
+                        function viewLogs() { alert('Sync logs coming soon!'); }
+                    </script>
+                </body>
+                </html>
+                """)
+            except Exception as e:
+                logger.error(f"Error serving Confluence dashboard: {e}")
+                return JSONResponse({"error": "Confluence dashboard unavailable"}, status_code=500)
+        
+        # Playbook management dashboard endpoint
+        @self.mcp.custom_route("/admin/playbooks", methods=["GET"])
+        async def playbooks_dashboard(request):
+            """Serve the playbook management dashboard interface"""
+            try:
+                return HTMLResponse("""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Playbook Management - hAIveMind</title>
+                    <link rel="stylesheet" href="/admin/static/admin.css">
+                    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+                </head>
+                <body class="dashboard">
+                    <nav class="nav-header">
+                        <div class="nav-brand">
+                            <img src="/assets/logo.png" alt="hAIveMind" class="nav-logo">
+                            <h1>hAIveMind Playbook Management</h1>
+                        </div>
+                        <div class="nav-links">
+                            <a href="/admin/dashboard.html">Dashboard</a>
+                            <a href="/admin/memory.html">Memory Browser</a>
+                            <a href="/admin/mcp_servers.html">MCP Servers</a>
+                            <a href="/admin/vault">Vault Management</a>
+                            <a href="/admin/rules-dashboard">Rules & Governance</a>
+                            <a href="/admin/playbooks" class="active">Playbook Management</a>
+                            <a href="/admin/executions">Execution Monitoring</a>
+                            <a href="/admin/confluence">Confluence Integration</a>
+                            <a href="/admin/help-dashboard">Help System</a>
+                        </div>
+                        <button class="logout-btn" onclick="logout()">Logout</button>
+                    </nav>
+                    <main class="main-content">
+                        <div class="card">
+                            <h2><i class="fas fa-book"></i> Playbook Management</h2>
+                            <p>Create, manage, and execute automated playbooks for DevOps operations.</p>
+                            
+                            <div class="feature-grid">
+                                <div class="feature-card">
+                                    <h3><i class="fas fa-plus"></i> Create Playbook</h3>
+                                    <p>Visual playbook builder with templates</p>
+                                    <button class="btn btn-primary" onclick="createPlaybook()">New Playbook</button>
+                                </div>
+                                <div class="feature-card">
+                                    <h3><i class="fas fa-list"></i> Playbook Library</h3>
+                                    <p>Browse and manage all playbooks</p>
+                                    <button class="btn btn-secondary" onclick="browsePlaybooks()">Browse Library</button>
+                                </div>
+                                <div class="feature-card">
+                                    <h3><i class="fas fa-play"></i> Execute Playbook</h3>
+                                    <p>Run playbooks with monitoring</p>
+                                    <button class="btn btn-success" onclick="executePlaybook()">Execute Now</button>
+                                </div>
+                                <div class="feature-card">
+                                    <h3><i class="fas fa-templates"></i> Templates</h3>
+                                    <p>Pre-built playbook templates</p>
+                                    <button class="btn btn-info" onclick="browseTemplates()">View Templates</button>
+                                </div>
+                            </div>
+
+                            <div class="playbook-stats">
+                                <h3>Playbook Statistics</h3>
+                                <div class="status-grid">
+                                    <div class="status-item">
+                                        <span class="status-label">Total Playbooks</span>
+                                        <span class="status-value">0</span>
+                                    </div>
+                                    <div class="status-item">
+                                        <span class="status-label">Active Templates</span>
+                                        <span class="status-value">12</span>
+                                    </div>
+                                    <div class="status-item">
+                                        <span class="status-label">Executions Today</span>
+                                        <span class="status-value">0</span>
+                                    </div>
+                                    <div class="status-item">
+                                        <span class="status-label">Success Rate</span>
+                                        <span class="status-value status-good">100%</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </main>
+                    <script src="/admin/static/admin.js"></script>
+                    <script>
+                        function createPlaybook() { alert('Playbook builder coming soon!'); }
+                        function browsePlaybooks() { alert('Playbook library coming soon!'); }
+                        function executePlaybook() { alert('Playbook execution coming soon!'); }
+                        function browseTemplates() { alert('Template gallery coming soon!'); }
+                    </script>
+                </body>
+                </html>
+                """)
+            except Exception as e:
+                logger.error(f"Error serving playbook dashboard: {e}")
+                return JSONResponse({"error": "Playbook dashboard unavailable"}, status_code=500)
+        
+        # Execution monitoring dashboard endpoint  
+        @self.mcp.custom_route("/admin/executions", methods=["GET"])
+        async def executions_dashboard(request):
+            """Serve the execution monitoring dashboard interface"""
+            try:
+                return HTMLResponse("""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Execution Monitoring - hAIveMind</title>
+                    <link rel="stylesheet" href="/admin/static/admin.css">
+                    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+                </head>
+                <body class="dashboard">
+                    <nav class="nav-header">
+                        <div class="nav-brand">
+                            <img src="/assets/logo.png" alt="hAIveMind" class="nav-logo">
+                            <h1>hAIveMind Execution Monitoring</h1>
+                        </div>
+                        <div class="nav-links">
+                            <a href="/admin/dashboard.html">Dashboard</a>
+                            <a href="/admin/memory.html">Memory Browser</a>
+                            <a href="/admin/mcp_servers.html">MCP Servers</a>
+                            <a href="/admin/vault">Vault Management</a>
+                            <a href="/admin/rules-dashboard">Rules & Governance</a>
+                            <a href="/admin/playbooks">Playbook Management</a>
+                            <a href="/admin/executions" class="active">Execution Monitoring</a>
+                            <a href="/admin/confluence">Confluence Integration</a>
+                            <a href="/admin/help-dashboard">Help System</a>
+                        </div>
+                        <button class="logout-btn" onclick="logout()">Logout</button>
+                    </nav>
+                    <main class="main-content">
+                        <div class="card">
+                            <h2><i class="fas fa-tasks"></i> Execution Monitoring</h2>
+                            <p>Real-time monitoring of playbook executions with detailed logging and analytics.</p>
+                            
+                            <div class="execution-overview">
+                                <div class="status-grid">
+                                    <div class="status-item">
+                                        <span class="status-label">Active Executions</span>
+                                        <span class="status-value">0</span>
+                                    </div>
+                                    <div class="status-item">
+                                        <span class="status-label">Queued Tasks</span>
+                                        <span class="status-value">0</span>
+                                    </div>
+                                    <div class="status-item">
+                                        <span class="status-label">Failed Today</span>
+                                        <span class="status-value">0</span>
+                                    </div>
+                                    <div class="status-item">
+                                        <span class="status-label">System Load</span>
+                                        <span class="status-value status-good">Low</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="execution-controls">
+                                <h3>Execution Controls</h3>
+                                <button class="btn btn-primary" onclick="viewActiveExecutions()">
+                                    <i class="fas fa-eye"></i> Active Executions
+                                </button>
+                                <button class="btn btn-secondary" onclick="viewExecutionHistory()">
+                                    <i class="fas fa-history"></i> Execution History
+                                </button>
+                                <button class="btn btn-info" onclick="viewExecutionLogs()">
+                                    <i class="fas fa-file-text"></i> Execution Logs
+                                </button>
+                                <button class="btn btn-warning" onclick="viewFailedExecutions()">
+                                    <i class="fas fa-exclamation-triangle"></i> Failed Executions
+                                </button>
+                            </div>
+                        </div>
+                    </main>
+                    <script src="/admin/static/admin.js"></script>
+                    <script>
+                        function viewActiveExecutions() { alert('Active executions viewer coming soon!'); }
+                        function viewExecutionHistory() { alert('Execution history coming soon!'); }
+                        function viewExecutionLogs() { alert('Execution logs coming soon!'); }
+                        function viewFailedExecutions() { alert('Failed executions viewer coming soon!'); }
+                    </script>
+                </body>
+                </html>
+                """)
+            except Exception as e:
+                logger.error(f"Error serving execution monitoring dashboard: {e}")
+                return JSONResponse({"error": "Execution monitoring dashboard unavailable"}, status_code=500)
+
         # Device management endpoints
         @self.mcp.custom_route("/admin/api/devices", methods=["GET", "POST"])
         async def manage_devices(request):

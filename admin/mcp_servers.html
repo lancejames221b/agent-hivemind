@@ -44,11 +44,15 @@
                         <img src="/assets/logo.png" alt="hAIveMind" style="height: 24px; vertical-align: middle;">
                     </a>
                     <div class="hidden md:flex space-x-6">
-                        <a href="/" class="hover:text-blue-200">Dashboard</a>
-                        <a href="/devices" class="hover:text-blue-200">Devices</a>
-                        <a href="/mcp_servers" class="bg-blue-800 px-3 py-2 rounded">MCP Servers</a>
+                        <a href="/admin/dashboard.html" class="hover:text-blue-200">Dashboard</a>
+                        <a href="/admin/memory.html" class="hover:text-blue-200">Memory Browser</a>
+                        <a href="/admin/mcp_servers.html" class="bg-blue-800 px-3 py-2 rounded">MCP Servers</a>
+                        <a href="/admin/vault" class="hover:text-blue-200">Vault Management</a>
+                        <a href="/admin/rules-dashboard" class="hover:text-blue-200">Rules & Governance</a>
+                        <a href="/admin/playbooks" class="hover:text-blue-200">Playbook Management</a>
+                        <a href="/admin/executions" class="hover:text-blue-200">Execution Monitoring</a>
+                        <a href="/admin/confluence" class="hover:text-blue-200">Confluence Integration</a>
                         <a href="/admin/help-dashboard" class="hover:text-blue-200">Help System</a>
-                        <a href="/users" class="hover:text-blue-200">Users</a>
                     </div>
                 </div>
                 <div class="flex items-center">
@@ -196,14 +200,14 @@
         
         function logout() {
             localStorage.removeItem('auth_token');
-            window.location.href = '/login';
+            window.location.href = '/admin/login.html';
         }
         
         // API helper
         async function apiRequest(url, options = {}) {
             const token = getAuthToken();
             if (!token) {
-                window.location.href = '/login';
+                window.location.href = '/admin/login.html';
                 return;
             }
             
