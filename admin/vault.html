@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>hAIveMind Admin - Credential Vault</title>
+    <link rel="stylesheet" href="/admin/static/admin.css">
+    <link rel="stylesheet" href="/admin/static/vault.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="dashboard vault-dashboard">
+    <nav class="nav-header">
+        <div class="nav-brand">
+            <img src="/assets/logo.png" alt="hAIveMind" class="nav-logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';">
+            <span style="display:none;">hAIveMind</span>
+            <h1>hAIveMind Vault</h1>
+        </div>
+        <div class="nav-links">
+            <a href="/admin/dashboard.html">Dashboard</a>
+            <a href="/admin/vault.html" class="active">Credential Vault</a>
+            <a href="/admin/memory.html">Memory Browser</a>
+            <a href="/admin/mcp_servers.html">MCP Servers</a>
+        </div>
+        <div class="nav-actions">
+            <button class="vault-lock-btn" id="vaultLockBtn" onclick="lockVault()" title="Lock Vault">
+                <i class="fas fa-lock"></i>
+            </button>
+            <button class="dark-mode-toggle" onclick="toggleDarkMode()" title="Toggle Dark Mode">
+                <i class="fas fa-moon"></i>
+            </button>
+            <button class="logout-btn" onclick="logout()">Logout</button>
+        </div>
+    </nav>
+
+    <!-- Vault Unlock Modal -->
+    <div id="vaultUnlockModal" class="modal vault-unlock-modal">
+        <div class="modal-content">
+            <div class="vault-unlock-header">
+                <i class="fas fa-shield-alt"></i>
+                <h2>Unlock Credential Vault</h2>
+                <p>Enter your master password to access the vault</p>
+            </div>
+            <form id="vaultUnlockForm" onsubmit="unlockVault(event)">
+                <div class="form-group">
+                    <label for="masterPassword">Master Password</label>
+                    <div class="password-input-group">
+                        <input type="password" id="masterPassword" required autocomplete="current-password">
+                        <button type="button" class="password-toggle" onclick="togglePasswordVisibility('masterPassword')">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="rememberSession"> Remember for this session
+                    </label>
+                </div>
+                <div class="modal-actions">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-unlock"></i> Unlock Vault
+                    </button>
+                </div>
+            </form>
+            <div class="vault-security-info">
+                <p><i class="fas fa-info-circle"></i> Your vault is protected with enterprise-grade encryption</p>
+            </div>
+        </div>
+    </div>
+
+    <main class="main-content" id="vaultMainContent" style="display: none;">
+        <!-- Vault Status Bar -->
+        <div class="vault-status-bar">
+            <div class="vault-status-left">
+                <div class="vault-status-indicator unlocked">
+                    <i class="fas fa-unlock"></i>
+                    <span>Vault Unlocked</span>
+                </div>
+                <div class="session-timer">
+                    <i class="fas fa-clock"></i>
+                    <span id="sessionTimer">30:00</span>
+                </div>
+            </div>
+            <div class="vault-status-right">
+                <div class="vault-stats">
+                    <span class="stat-item">
+                        <i class="fas fa-key"></i>
+                        <span id="totalCredentials">0</span> Credentials
+                    </span>
+                    <span class="stat-item">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <span id="expiringCredentials">0</span> Expiring
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Actions Bar -->
+        <div class="quick-actions-bar">
+            <button class="btn btn-primary" onclick="showCreateCredentialModal()">
+                <i class="fas fa-plus"></i> New Credential
+            </button>
+            <button class="btn btn-secondary" onclick="showBulkImportModal()">
+                <i class="fas fa-upload"></i> Bulk Import
+            </button>
+            <button class="btn btn-secondary" onclick="exportCredentials()">
+                <i class="fas fa-download"></i> Export
+            </button>
+            <button class="btn btn-warning" onclick="showRotationManager()">
+                <i class="fas fa-sync"></i> Rotation Manager
+            </button>
+            <button class="btn btn-info" onclick="showAuditLog()">
+                <i class="fas fa-history"></i> Audit Log
+            </button>
+        </div>
+
+        <!-- Search and Filter Bar -->
+        <div class="search-filter-bar">
+            <div class="search-section">
+                <div class="search-input-group">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="credentialSearch" placeholder="Search credentials..." onkeyup="searchCredentials()">
+                    <button class="search-clear" onclick="clearSearch()" style="display: none;">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="filter-section">
+                <select id="environmentFilter" onchange="filterCredentials()">
+                    <option value="">All Environments</option>
+                    <option value="production">Production</option>
+                    <option value="staging">Staging</option>
+                    <option value="development">Development</option>
+                </select>
+                <select id="typeFilter" onchange="filterCredentials()">
+                    <option value="">All Types</option>
+                    <option value="password">Passwords</option>
+                    <option value="api_key">API Keys</option>
+                    <option value="certificate">Certificates</option>
+                    <option value="ssh_key">SSH Keys</option>
+                    <option value="token">Tokens</option>
+                </select>
+                <select id="statusFilter" onchange="filterCredentials()">
+                    <option value="">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="expiring">Expiring Soon</option>
+                    <option value="expired">Expired</option>
+                    <option value="disabled">Disabled</option>
+                </select>
+                <button class="btn btn-outline" onclick="resetFilters()">
+                    <i class="fas fa-filter-circle-xmark"></i> Clear Filters
+                </button>
+            </div>
+        </div>
+
+        <!-- Credentials Grid -->
+        <div class="credentials-container">
+            <div class="credentials-grid" id="credentialsGrid">
+                <!-- Credentials will be loaded here -->
+                <div class="loading-placeholder">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <p>Loading credentials...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pagination -->
+        <div class="pagination-container">
+            <div class="pagination-info">
+                Showing <span id="paginationStart">0</span>-<span id="paginationEnd">0</span> of <span id="paginationTotal">0</span> credentials
+            </div>
+            <div class="pagination-controls">
+                <button class="btn btn-outline" onclick="previousPage()" id="prevPageBtn" disabled>
+                    <i class="fas fa-chevron-left"></i> Previous
+                </button>
+                <span class="page-numbers" id="pageNumbers"></span>
+                <button class="btn btn-outline" onclick="nextPage()" id="nextPageBtn" disabled>
+                    Next <i class="fas fa-chevron-right"></i>
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <!-- Create/Edit Credential Modal -->
+    <div id="credentialModal" class="modal">
+        <div class="modal-content large-modal">
+            <div class="modal-header">
+                <h2 id="credentialModalTitle">Create New Credential</h2>
+                <button class="modal-close" onclick="closeCredentialModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form id="credentialForm" onsubmit="saveCredential(event)">
+                <div class="modal-body">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="credentialName">Name *</label>
+                            <input type="text" id="credentialName" required maxlength="255">
+                        </div>
+                        <div class="form-group">
+                            <label for="credentialType">Type *</label>
+                            <select id="credentialType" required onchange="updateCredentialFields()">
+                                <option value="">Select Type</option>
+                                <option value="password">Password</option>
+                                <option value="api_key">API Key</option>
+                                <option value="certificate">Certificate</option>
+                                <option value="ssh_key">SSH Key</option>
+                                <option value="token">Token</option>
+                                <option value="database_connection">Database Connection</option>
+                                <option value="oauth_credentials">OAuth Credentials</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="credentialEnvironment">Environment *</label>
+                            <select id="credentialEnvironment" required>
+                                <option value="">Select Environment</option>
+                                <option value="production">Production</option>
+                                <option value="staging">Staging</option>
+                                <option value="development">Development</option>
+                                <option value="testing">Testing</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="credentialService">Service *</label>
+                            <input type="text" id="credentialService" required placeholder="e.g., MySQL, Redis, API Gateway">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="credentialDescription">Description</label>
+                        <textarea id="credentialDescription" rows="2" placeholder="Brief description of this credential"></textarea>
+                    </div>
+
+                    <!-- Dynamic credential fields will be inserted here -->
+                    <div id="credentialFields">
+                        <!-- Fields will be populated based on credential type -->
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="credentialTags">Tags</label>
+                            <input type="text" id="credentialTags" placeholder="tag1, tag2, tag3">
+                            <small>Comma-separated tags for organization</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="credentialProject">Project</label>
+                            <input type="text" id="credentialProject" placeholder="Project name">
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3>Security & Rotation</h3>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="credentialExpires">Expires At</label>
+                                <input type="datetime-local" id="credentialExpires">
+                            </div>
+                            <div class="form-group">
+                                <label for="rotationInterval">Rotation Interval (days)</label>
+                                <input type="number" id="rotationInterval" value="90" min="1" max="3650">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group checkbox-group">
+                                <label>
+                                    <input type="checkbox" id="autoRotate"> Enable automatic rotation
+                                </label>
+                            </div>
+                            <div class="form-group checkbox-group">
+                                <label>
+                                    <input type="checkbox" id="auditRequired"> Require audit for access
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3>Access Control</h3>
+                        <div class="form-group">
+                            <label for="credentialPermissions">Permissions</label>
+                            <div class="permission-grid" id="permissionGrid">
+                                <!-- Permission controls will be populated here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeCredentialModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Save Credential
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Credential View Modal -->
+    <div id="credentialViewModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="viewCredentialTitle">Credential Details</h2>
+                <div class="modal-header-actions">
+                    <button class="btn btn-outline btn-sm" onclick="editCredential()" id="editCredentialBtn">
+                        <i class="fas fa-edit"></i> Edit
+                    </button>
+                    <button class="modal-close" onclick="closeCredentialViewModal()">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="modal-body">
+                <div id="credentialViewContent">
+                    <!-- Credential details will be populated here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bulk Import Modal -->
+    <div id="bulkImportModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Bulk Import Credentials</h2>
+                <button class="modal-close" onclick="closeBulkImportModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="import-options">
+                    <div class="import-method">
+                        <input type="radio" id="importCSV" name="importMethod" value="csv" checked>
+                        <label for="importCSV">CSV File</label>
+                    </div>
+                    <div class="import-method">
+                        <input type="radio" id="importJSON" name="importMethod" value="json">
+                        <label for="importJSON">JSON File</label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="importFile">Select File</label>
+                    <input type="file" id="importFile" accept=".csv,.json" onchange="validateImportFile()">
+                </div>
+                <div class="import-preview" id="importPreview" style="display: none;">
+                    <h4>Preview</h4>
+                    <div class="preview-content" id="previewContent"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeBulkImportModal()">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="processBulkImport()" id="importBtn" disabled>
+                    <i class="fas fa-upload"></i> Import Credentials
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Audit Log Modal -->
+    <div id="auditLogModal" class="modal">
+        <div class="modal-content large-modal">
+            <div class="modal-header">
+                <h2>Audit Log</h2>
+                <button class="modal-close" onclick="closeAuditLogModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="audit-filters">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="auditDateFrom">From Date</label>
+                            <input type="date" id="auditDateFrom">
+                        </div>
+                        <div class="form-group">
+                            <label for="auditDateTo">To Date</label>
+                            <input type="date" id="auditDateTo">
+                        </div>
+                        <div class="form-group">
+                            <label for="auditAction">Action</label>
+                            <select id="auditAction">
+                                <option value="">All Actions</option>
+                                <option value="create">Create</option>
+                                <option value="read">Read</option>
+                                <option value="update">Update</option>
+                                <option value="delete">Delete</option>
+                                <option value="rotate">Rotate</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <button class="btn btn-primary" onclick="loadAuditLog()">
+                                <i class="fas fa-search"></i> Search
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="audit-log-container">
+                    <div id="auditLogContent">
+                        <!-- Audit log entries will be loaded here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/admin/static/admin.js"></script>
+    <script src="/admin/static/vault.js"></script>
+</body>
+</html>

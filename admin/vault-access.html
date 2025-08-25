@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>hAIveMind Admin - Vault Access Control</title>
+    <link rel="stylesheet" href="/admin/static/admin.css">
+    <link rel="stylesheet" href="/admin/static/vault.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="dashboard vault-access">
+    <nav class="nav-header">
+        <div class="nav-brand">
+            <img src="/assets/logo.png" alt="hAIveMind" class="nav-logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';">
+            <span style="display:none;">hAIveMind</span>
+            <h1>hAIveMind Vault Access</h1>
+        </div>
+        <div class="nav-links">
+            <a href="/admin/dashboard.html">Dashboard</a>
+            <a href="/admin/vault.html">Credential Vault</a>
+            <a href="/admin/vault-access.html" class="active">Access Control</a>
+            <a href="/admin/vault-settings.html">Vault Settings</a>
+        </div>
+        <div class="nav-actions">
+            <button class="dark-mode-toggle" onclick="toggleDarkMode()" title="Toggle Dark Mode">
+                <i class="fas fa-moon"></i>
+            </button>
+            <button class="logout-btn" onclick="logout()">Logout</button>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <!-- Access Control Overview -->
+        <div class="access-overview">
+            <div class="overview-cards">
+                <div class="overview-card">
+                    <div class="card-icon">
+                        <i class="fas fa-users"></i>
+                    </div>
+                    <div class="card-content">
+                        <h3 id="totalUsers">0</h3>
+                        <p>Total Users</p>
+                    </div>
+                </div>
+                <div class="overview-card">
+                    <div class="card-icon">
+                        <i class="fas fa-user-shield"></i>
+                    </div>
+                    <div class="card-content">
+                        <h3 id="activeUsers">0</h3>
+                        <p>Active Users</p>
+                    </div>
+                </div>
+                <div class="overview-card">
+                    <div class="card-icon">
+                        <i class="fas fa-share-alt"></i>
+                    </div>
+                    <div class="card-content">
+                        <h3 id="sharedCredentials">0</h3>
+                        <p>Shared Credentials</p>
+                    </div>
+                </div>
+                <div class="overview-card">
+                    <div class="card-icon">
+                        <i class="fas fa-clock"></i>
+                    </div>
+                    <div class="card-content">
+                        <h3 id="pendingRequests">0</h3>
+                        <p>Pending Requests</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab Navigation -->
+        <div class="tab-navigation">
+            <button class="tab-btn active" onclick="showTab('users')">
+                <i class="fas fa-users"></i> User Management
+            </button>
+            <button class="tab-btn" onclick="showTab('permissions')">
+                <i class="fas fa-key"></i> Permissions
+            </button>
+            <button class="tab-btn" onclick="showTab('sharing')">
+                <i class="fas fa-share-alt"></i> Credential Sharing
+            </button>
+            <button class="tab-btn" onclick="showTab('requests')">
+                <i class="fas fa-inbox"></i> Access Requests
+            </button>
+            <button class="tab-btn" onclick="showTab('audit')">
+                <i class="fas fa-history"></i> Access Audit
+            </button>
+        </div>
+
+        <!-- User Management Tab -->
+        <div id="usersTab" class="tab-content active">
+            <div class="tab-header">
+                <h2><i class="fas fa-users"></i> User Management</h2>
+                <div class="tab-actions">
+                    <button class="btn btn-primary" onclick="showInviteUserModal()">
+                        <i class="fas fa-user-plus"></i> Invite User
+                    </button>
+                    <button class="btn btn-secondary" onclick="exportUserList()">
+                        <i class="fas fa-download"></i> Export Users
+                    </button>
+                </div>
+            </div>
+
+            <!-- User Search and Filters -->
+            <div class="user-filters">
+                <div class="filter-group">
+                    <input type="text" id="userSearch" placeholder="Search users..." onkeyup="searchUsers()">
+                    <select id="userRoleFilter" onchange="filterUsers()">
+                        <option value="">All Roles</option>
+                        <option value="admin">Admin</option>
+                        <option value="operator">Operator</option>
+                        <option value="viewer">Viewer</option>
+                    </select>
+                    <select id="userStatusFilter" onchange="filterUsers()">
+                        <option value="">All Status</option>
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                        <option value="pending">Pending</option>
+                        <option value="suspended">Suspended</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Users Table -->
+            <div class="users-table-container">
+                <table class="users-table">
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>Role</th>
+                            <th>Status</th>
+                            <th>Last Access</th>
+                            <th>Credentials Access</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="usersTableBody">
+                        <!-- Users will be populated here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Permissions Tab -->
+        <div id="permissionsTab" class="tab-content">
+            <div class="tab-header">
+                <h2><i class="fas fa-key"></i> Permission Management</h2>
+                <div class="tab-actions">
+                    <button class="btn btn-primary" onclick="showCreateRoleModal()">
+                        <i class="fas fa-plus"></i> Create Role
+                    </button>
+                </div>
+            </div>
+
+            <!-- Roles and Permissions -->
+            <div class="roles-container">
+                <div class="roles-grid" id="rolesGrid">
+                    <!-- Roles will be populated here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Credential Sharing Tab -->
+        <div id="sharingTab" class="tab-content">
+            <div class="tab-header">
+                <h2><i class="fas fa-share-alt"></i> Credential Sharing</h2>
+                <div class="tab-actions">
+                    <button class="btn btn-primary" onclick="showShareCredentialModal()">
+                        <i class="fas fa-share"></i> Share Credential
+                    </button>
+                </div>
+            </div>
+
+            <!-- Sharing Overview -->
+            <div class="sharing-overview">
+                <div class="sharing-stats">
+                    <div class="stat-item">
+                        <i class="fas fa-share-alt"></i>
+                        <span id="totalShares">0</span>
+                        <label>Total Shares</label>
+                    </div>
+                    <div class="stat-item">
+                        <i class="fas fa-clock"></i>
+                        <span id="temporaryShares">0</span>
+                        <label>Temporary Shares</label>
+                    </div>
+                    <div class="stat-item">
+                        <i class="fas fa-calendar-times"></i>
+                        <span id="expiringShares">0</span>
+                        <label>Expiring Soon</label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Shared Credentials Table -->
+            <div class="shared-credentials-container">
+                <table class="shared-credentials-table">
+                    <thead>
+                        <tr>
+                            <th>Credential</th>
+                            <th>Shared With</th>
+                            <th>Permission Level</th>
+                            <th>Shared Date</th>
+                            <th>Expires</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sharedCredentialsBody">
+                        <!-- Shared credentials will be populated here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Access Requests Tab -->
+        <div id="requestsTab" class="tab-content">
+            <div class="tab-header">
+                <h2><i class="fas fa-inbox"></i> Access Requests</h2>
+                <div class="tab-actions">
+                    <button class="btn btn-secondary" onclick="refreshRequests()">
+                        <i class="fas fa-refresh"></i> Refresh
+                    </button>
+                </div>
+            </div>
+
+            <!-- Request Filters -->
+            <div class="request-filters">
+                <select id="requestStatusFilter" onchange="filterRequests()">
+                    <option value="">All Requests</option>
+                    <option value="pending">Pending</option>
+                    <option value="approved">Approved</option>
+                    <option value="denied">Denied</option>
+                    <option value="expired">Expired</option>
+                </select>
+                <select id="requestTypeFilter" onchange="filterRequests()">
+                    <option value="">All Types</option>
+                    <option value="credential_access">Credential Access</option>
+                    <option value="role_elevation">Role Elevation</option>
+                    <option value="emergency_access">Emergency Access</option>
+                </select>
+            </div>
+
+            <!-- Access Requests Table -->
+            <div class="requests-container">
+                <div class="requests-list" id="requestsList">
+                    <!-- Access requests will be populated here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Access Audit Tab -->
+        <div id="auditTab" class="tab-content">
+            <div class="tab-header">
+                <h2><i class="fas fa-history"></i> Access Audit</h2>
+                <div class="tab-actions">
+                    <button class="btn btn-secondary" onclick="exportAuditLog()">
+                        <i class="fas fa-download"></i> Export Audit Log
+                    </button>
+                </div>
+            </div>
+
+            <!-- Audit Filters -->
+            <div class="audit-filters">
+                <div class="filter-row">
+                    <input type="date" id="auditDateFrom" placeholder="From Date">
+                    <input type="date" id="auditDateTo" placeholder="To Date">
+                    <select id="auditUserFilter">
+                        <option value="">All Users</option>
+                        <!-- Users will be populated here -->
+                    </select>
+                    <select id="auditActionFilter">
+                        <option value="">All Actions</option>
+                        <option value="login">Login</option>
+                        <option value="logout">Logout</option>
+                        <option value="credential_access">Credential Access</option>
+                        <option value="permission_change">Permission Change</option>
+                        <option value="share_credential">Share Credential</option>
+                    </select>
+                    <button class="btn btn-primary" onclick="loadAuditLog()">
+                        <i class="fas fa-search"></i> Search
+                    </button>
+                </div>
+            </div>
+
+            <!-- Audit Log -->
+            <div class="audit-log-container">
+                <div class="audit-log" id="auditLogContainer">
+                    <!-- Audit entries will be populated here -->
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Invite User Modal -->
+    <div id="inviteUserModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Invite User</h2>
+                <button class="modal-close" onclick="closeInviteUserModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form id="inviteUserForm" onsubmit="inviteUser(event)">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="inviteEmail">Email Address</label>
+                        <input type="email" id="inviteEmail" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="inviteRole">Role</label>
+                        <select id="inviteRole" required>
+                            <option value="">Select Role</option>
+                            <option value="viewer">Viewer</option>
+                            <option value="operator">Operator</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="inviteMessage">Welcome Message (optional)</label>
+                        <textarea id="inviteMessage" rows="3" placeholder="Welcome to the hAIveMind Credential Vault..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="inviteRequireMFA" checked> Require MFA setup
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeInviteUserModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-paper-plane"></i> Send Invitation
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Share Credential Modal -->
+    <div id="shareCredentialModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Share Credential</h2>
+                <button class="modal-close" onclick="closeShareCredentialModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form id="shareCredentialForm" onsubmit="shareCredential(event)">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="shareCredentialSelect">Credential</label>
+                        <select id="shareCredentialSelect" required>
+                            <option value="">Select Credential</option>
+                            <!-- Credentials will be populated here -->
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="shareUserSelect">Share With</label>
+                        <select id="shareUserSelect" required>
+                            <option value="">Select User</option>
+                            <!-- Users will be populated here -->
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="sharePermissionLevel">Permission Level</label>
+                        <select id="sharePermissionLevel" required>
+                            <option value="">Select Permission</option>
+                            <option value="read">Read Only</option>
+                            <option value="use">Use (Read + Execute)</option>
+                            <option value="manage">Manage (Read + Use + Edit)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="shareExpiresAt">Expires At (optional)</label>
+                        <input type="datetime-local" id="shareExpiresAt">
+                    </div>
+                    <div class="form-group">
+                        <label for="shareReason">Reason for Sharing</label>
+                        <textarea id="shareReason" rows="2" placeholder="Brief reason for sharing this credential..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="shareNotifyUser" checked> Notify user via email
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeShareCredentialModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-share"></i> Share Credential
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- User Details Modal -->
+    <div id="userDetailsModal" class="modal">
+        <div class="modal-content large-modal">
+            <div class="modal-header">
+                <h2 id="userDetailsTitle">User Details</h2>
+                <button class="modal-close" onclick="closeUserDetailsModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="userDetailsContent">
+                    <!-- User details will be populated here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Access Request Details Modal -->
+    <div id="requestDetailsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Access Request Details</h2>
+                <button class="modal-close" onclick="closeRequestDetailsModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="requestDetailsContent">
+                    <!-- Request details will be populated here -->
+                </div>
+            </div>
+            <div class="modal-footer" id="requestActions">
+                <!-- Request action buttons will be populated here -->
+            </div>
+        </div>
+    </div>
+
+    <script src="/admin/static/admin.js"></script>
+    <script src="/admin/static/vault.js"></script>
+    <script src="/admin/static/vault-access.js"></script>
+</body>
+</html>

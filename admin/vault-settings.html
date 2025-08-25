@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>hAIveMind Admin - Vault Settings</title>
+    <link rel="stylesheet" href="/admin/static/admin.css">
+    <link rel="stylesheet" href="/admin/static/vault.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="dashboard vault-settings">
+    <nav class="nav-header">
+        <div class="nav-brand">
+            <img src="/assets/logo.png" alt="hAIveMind" class="nav-logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';">
+            <span style="display:none;">hAIveMind</span>
+            <h1>hAIveMind Vault Settings</h1>
+        </div>
+        <div class="nav-links">
+            <a href="/admin/dashboard.html">Dashboard</a>
+            <a href="/admin/vault.html">Credential Vault</a>
+            <a href="/admin/vault-settings.html" class="active">Vault Settings</a>
+            <a href="/admin/memory.html">Memory Browser</a>
+        </div>
+        <div class="nav-actions">
+            <button class="dark-mode-toggle" onclick="toggleDarkMode()" title="Toggle Dark Mode">
+                <i class="fas fa-moon"></i>
+            </button>
+            <button class="logout-btn" onclick="logout()">Logout</button>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <!-- Vault Status Overview -->
+        <div class="settings-header">
+            <div class="status-card">
+                <div class="status-icon">
+                    <i class="fas fa-shield-alt"></i>
+                </div>
+                <div class="status-info">
+                    <h2>Vault Security Status</h2>
+                    <div class="status-indicators">
+                        <div class="indicator" id="vaultInitialized">
+                            <i class="fas fa-check-circle"></i>
+                            <span>Vault Initialized</span>
+                        </div>
+                        <div class="indicator" id="masterPasswordSet">
+                            <i class="fas fa-key"></i>
+                            <span>Master Password Set</span>
+                        </div>
+                        <div class="indicator" id="encryptionEnabled">
+                            <i class="fas fa-lock"></i>
+                            <span>Encryption Enabled</span>
+                        </div>
+                        <div class="indicator" id="auditingEnabled">
+                            <i class="fas fa-history"></i>
+                            <span>Auditing Enabled</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings Sections -->
+        <div class="settings-container">
+            <!-- Master Password Section -->
+            <div class="settings-section">
+                <div class="section-header">
+                    <h3><i class="fas fa-key"></i> Master Password Management</h3>
+                    <p>Configure and manage the vault master password</p>
+                </div>
+                <div class="section-content">
+                    <div class="setting-group">
+                        <h4>Change Master Password</h4>
+                        <form id="changeMasterPasswordForm" onsubmit="changeMasterPassword(event)">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="currentMasterPassword">Current Master Password</label>
+                                    <div class="password-input-group">
+                                        <input type="password" id="currentMasterPassword" required autocomplete="current-password">
+                                        <button type="button" class="password-toggle" onclick="togglePasswordVisibility('currentMasterPassword')">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="newMasterPassword">New Master Password</label>
+                                    <div class="password-input-group">
+                                        <input type="password" id="newMasterPassword" required autocomplete="new-password" onkeyup="checkPasswordStrength()">
+                                        <button type="button" class="password-toggle" onclick="togglePasswordVisibility('newMasterPassword')">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                    </div>
+                                    <div class="password-strength" id="passwordStrength">
+                                        <div class="strength-bar">
+                                            <div class="strength-fill" id="strengthFill"></div>
+                                        </div>
+                                        <div class="strength-text" id="strengthText">Enter password to check strength</div>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="confirmMasterPassword">Confirm New Password</label>
+                                    <div class="password-input-group">
+                                        <input type="password" id="confirmMasterPassword" required autocomplete="new-password" onkeyup="checkPasswordMatch()">
+                                        <button type="button" class="password-toggle" onclick="togglePasswordVisibility('confirmMasterPassword')">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                    </div>
+                                    <div class="password-match" id="passwordMatch"></div>
+                                </div>
+                            </div>
+                            <div class="form-actions">
+                                <button type="button" class="btn btn-secondary" onclick="generateStrongPassword()">
+                                    <i class="fas fa-random"></i> Generate Strong Password
+                                </button>
+                                <button type="submit" class="btn btn-warning" id="changeMasterPasswordBtn" disabled>
+                                    <i class="fas fa-key"></i> Change Master Password
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <div class="setting-group">
+                        <h4>Password Policy</h4>
+                        <div class="policy-settings">
+                            <div class="policy-item">
+                                <label for="minPasswordLength">Minimum Password Length</label>
+                                <input type="number" id="minPasswordLength" value="12" min="8" max="128">
+                            </div>
+                            <div class="policy-item">
+                                <label for="requireUppercase">
+                                    <input type="checkbox" id="requireUppercase" checked> Require uppercase letters
+                                </label>
+                            </div>
+                            <div class="policy-item">
+                                <label for="requireLowercase">
+                                    <input type="checkbox" id="requireLowercase" checked> Require lowercase letters
+                                </label>
+                            </div>
+                            <div class="policy-item">
+                                <label for="requireNumbers">
+                                    <input type="checkbox" id="requireNumbers" checked> Require numbers
+                                </label>
+                            </div>
+                            <div class="policy-item">
+                                <label for="requireSpecialChars">
+                                    <input type="checkbox" id="requireSpecialChars" checked> Require special characters
+                                </label>
+                            </div>
+                            <div class="policy-item">
+                                <label for="passwordExpiration">Password Expiration (days)</label>
+                                <input type="number" id="passwordExpiration" value="90" min="0" max="365">
+                                <small>Set to 0 to disable expiration</small>
+                            </div>
+                        </div>
+                        <button class="btn btn-primary" onclick="savePasswordPolicy()">
+                            <i class="fas fa-save"></i> Save Password Policy
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Encryption Settings -->
+            <div class="settings-section">
+                <div class="section-header">
+                    <h3><i class="fas fa-lock"></i> Encryption Configuration</h3>
+                    <p>Configure encryption algorithms and key management</p>
+                </div>
+                <div class="section-content">
+                    <div class="setting-group">
+                        <h4>Encryption Algorithm</h4>
+                        <div class="encryption-options">
+                            <label class="radio-option">
+                                <input type="radio" name="encryptionAlgorithm" value="aes-256-gcm" checked>
+                                <div class="option-content">
+                                    <strong>AES-256-GCM</strong>
+                                    <p>Recommended: High security with authenticated encryption</p>
+                                </div>
+                            </label>
+                            <label class="radio-option">
+                                <input type="radio" name="encryptionAlgorithm" value="chacha20-poly1305">
+                                <div class="option-content">
+                                    <strong>ChaCha20-Poly1305</strong>
+                                    <p>Alternative: Fast encryption with authentication</p>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="setting-group">
+                        <h4>Key Derivation</h4>
+                        <div class="kdf-settings">
+                            <div class="kdf-option">
+                                <label for="kdfAlgorithm">Algorithm</label>
+                                <select id="kdfAlgorithm">
+                                    <option value="argon2id" selected>Argon2id (Recommended)</option>
+                                    <option value="scrypt">Scrypt</option>
+                                    <option value="pbkdf2">PBKDF2</option>
+                                </select>
+                            </div>
+                            <div class="kdf-option">
+                                <label for="kdfIterations">Iterations</label>
+                                <input type="number" id="kdfIterations" value="100000" min="10000" max="1000000">
+                            </div>
+                            <div class="kdf-option">
+                                <label for="kdfMemory">Memory (MB)</label>
+                                <input type="number" id="kdfMemory" value="64" min="8" max="1024">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="setting-group">
+                        <h4>Hardware Security Module (HSM)</h4>
+                        <div class="hsm-settings">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="enableHSM"> Enable HSM Integration
+                            </label>
+                            <div class="hsm-config" id="hsmConfig" style="display: none;">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="hsmProvider">HSM Provider</label>
+                                        <select id="hsmProvider">
+                                            <option value="aws-cloudhsm">AWS CloudHSM</option>
+                                            <option value="azure-keyvault">Azure Key Vault</option>
+                                            <option value="hashicorp-vault">HashiCorp Vault</option>
+                                            <option value="pkcs11">PKCS#11 Compatible</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="hsmEndpoint">HSM Endpoint</label>
+                                        <input type="url" id="hsmEndpoint" placeholder="https://hsm.example.com">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-primary" onclick="saveEncryptionSettings()">
+                        <i class="fas fa-save"></i> Save Encryption Settings
+                    </button>
+                </div>
+            </div>
+
+            <!-- Security Settings -->
+            <div class="settings-section">
+                <div class="section-header">
+                    <h3><i class="fas fa-shield-alt"></i> Security Configuration</h3>
+                    <p>Configure security policies and access controls</p>
+                </div>
+                <div class="section-content">
+                    <div class="setting-group">
+                        <h4>Session Management</h4>
+                        <div class="session-settings">
+                            <div class="session-option">
+                                <label for="sessionTimeout">Session Timeout (minutes)</label>
+                                <input type="number" id="sessionTimeout" value="30" min="5" max="480">
+                            </div>
+                            <div class="session-option">
+                                <label for="maxConcurrentSessions">Max Concurrent Sessions</label>
+                                <input type="number" id="maxConcurrentSessions" value="3" min="1" max="10">
+                            </div>
+                            <div class="session-option">
+                                <label>
+                                    <input type="checkbox" id="requireReauth" checked> Require re-authentication for sensitive operations
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="setting-group">
+                        <h4>Access Control</h4>
+                        <div class="access-settings">
+                            <div class="access-option">
+                                <label>
+                                    <input type="checkbox" id="enableMFA" checked> Enable Multi-Factor Authentication
+                                </label>
+                            </div>
+                            <div class="access-option">
+                                <label>
+                                    <input type="checkbox" id="enableIPWhitelist"> Enable IP Address Whitelist
+                                </label>
+                            </div>
+                            <div class="access-option">
+                                <label for="maxFailedAttempts">Max Failed Login Attempts</label>
+                                <input type="number" id="maxFailedAttempts" value="5" min="3" max="10">
+                            </div>
+                            <div class="access-option">
+                                <label for="lockoutDuration">Account Lockout Duration (minutes)</label>
+                                <input type="number" id="lockoutDuration" value="15" min="5" max="60">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="setting-group">
+                        <h4>Audit and Monitoring</h4>
+                        <div class="audit-settings">
+                            <div class="audit-option">
+                                <label>
+                                    <input type="checkbox" id="enableDetailedLogging" checked> Enable detailed audit logging
+                                </label>
+                            </div>
+                            <div class="audit-option">
+                                <label>
+                                    <input type="checkbox" id="enableRealTimeAlerts" checked> Enable real-time security alerts
+                                </label>
+                            </div>
+                            <div class="audit-option">
+                                <label for="logRetentionDays">Log Retention Period (days)</label>
+                                <input type="number" id="logRetentionDays" value="365" min="30" max="2555">
+                            </div>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-primary" onclick="saveSecuritySettings()">
+                        <i class="fas fa-save"></i> Save Security Settings
+                    </button>
+                </div>
+            </div>
+
+            <!-- Backup and Recovery -->
+            <div class="settings-section">
+                <div class="section-header">
+                    <h3><i class="fas fa-database"></i> Backup and Recovery</h3>
+                    <p>Configure vault backup and disaster recovery options</p>
+                </div>
+                <div class="section-content">
+                    <div class="setting-group">
+                        <h4>Automatic Backups</h4>
+                        <div class="backup-settings">
+                            <div class="backup-option">
+                                <label>
+                                    <input type="checkbox" id="enableAutoBackup" checked> Enable automatic backups
+                                </label>
+                            </div>
+                            <div class="backup-option">
+                                <label for="backupFrequency">Backup Frequency</label>
+                                <select id="backupFrequency">
+                                    <option value="hourly">Hourly</option>
+                                    <option value="daily" selected>Daily</option>
+                                    <option value="weekly">Weekly</option>
+                                </select>
+                            </div>
+                            <div class="backup-option">
+                                <label for="backupRetention">Backup Retention (days)</label>
+                                <input type="number" id="backupRetention" value="30" min="7" max="365">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="setting-group">
+                        <h4>Backup Storage</h4>
+                        <div class="storage-settings">
+                            <label class="radio-option">
+                                <input type="radio" name="backupStorage" value="local" checked>
+                                <div class="option-content">
+                                    <strong>Local Storage</strong>
+                                    <p>Store backups on local filesystem</p>
+                                </div>
+                            </label>
+                            <label class="radio-option">
+                                <input type="radio" name="backupStorage" value="s3">
+                                <div class="option-content">
+                                    <strong>Amazon S3</strong>
+                                    <p>Store backups in AWS S3 bucket</p>
+                                </div>
+                            </label>
+                            <label class="radio-option">
+                                <input type="radio" name="backupStorage" value="azure">
+                                <div class="option-content">
+                                    <strong>Azure Blob Storage</strong>
+                                    <p>Store backups in Azure Storage</p>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="setting-group">
+                        <h4>Recovery Options</h4>
+                        <div class="recovery-actions">
+                            <button class="btn btn-secondary" onclick="createManualBackup()">
+                                <i class="fas fa-save"></i> Create Manual Backup
+                            </button>
+                            <button class="btn btn-warning" onclick="testBackupRestore()">
+                                <i class="fas fa-vial"></i> Test Backup Restore
+                            </button>
+                            <button class="btn btn-info" onclick="showRecoveryWizard()">
+                                <i class="fas fa-magic"></i> Recovery Wizard
+                            </button>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-primary" onclick="saveBackupSettings()">
+                        <i class="fas fa-save"></i> Save Backup Settings
+                    </button>
+                </div>
+            </div>
+
+            <!-- Emergency Access -->
+            <div class="settings-section">
+                <div class="section-header">
+                    <h3><i class="fas fa-exclamation-triangle"></i> Emergency Access</h3>
+                    <p>Configure emergency access procedures and break-glass protocols</p>
+                </div>
+                <div class="section-content">
+                    <div class="setting-group">
+                        <h4>Emergency Administrators</h4>
+                        <div class="emergency-admins">
+                            <div class="admin-list" id="emergencyAdminList">
+                                <!-- Emergency admin list will be populated here -->
+                            </div>
+                            <button class="btn btn-secondary" onclick="addEmergencyAdmin()">
+                                <i class="fas fa-plus"></i> Add Emergency Administrator
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="setting-group">
+                        <h4>Break-Glass Procedures</h4>
+                        <div class="breakglass-settings">
+                            <div class="breakglass-option">
+                                <label>
+                                    <input type="checkbox" id="enableBreakGlass" checked> Enable break-glass access
+                                </label>
+                            </div>
+                            <div class="breakglass-option">
+                                <label for="breakGlassApprovals">Required Approvals</label>
+                                <input type="number" id="breakGlassApprovals" value="2" min="1" max="5">
+                            </div>
+                            <div class="breakglass-option">
+                                <label for="breakGlassTimeout">Access Timeout (hours)</label>
+                                <input type="number" id="breakGlassTimeout" value="4" min="1" max="24">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="setting-group">
+                        <h4>Master Password Recovery</h4>
+                        <div class="recovery-settings">
+                            <div class="recovery-option">
+                                <label>
+                                    <input type="checkbox" id="enableShamirSharing"> Enable Shamir Secret Sharing
+                                </label>
+                            </div>
+                            <div class="shamir-config" id="shamirConfig" style="display: none;">
+                                <div class="shamir-option">
+                                    <label for="shamirShares">Total Shares</label>
+                                    <input type="number" id="shamirShares" value="5" min="3" max="10">
+                                </div>
+                                <div class="shamir-option">
+                                    <label for="shamirThreshold">Required Threshold</label>
+                                    <input type="number" id="shamirThreshold" value="3" min="2" max="7">
+                                </div>
+                            </div>
+                        </div>
+                        <button class="btn btn-warning" onclick="generateRecoveryShares()">
+                            <i class="fas fa-key"></i> Generate Recovery Shares
+                        </button>
+                    </div>
+
+                    <button class="btn btn-primary" onclick="saveEmergencySettings()">
+                        <i class="fas fa-save"></i> Save Emergency Settings
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Emergency Admin Modal -->
+    <div id="emergencyAdminModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Add Emergency Administrator</h2>
+                <button class="modal-close" onclick="closeEmergencyAdminModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form id="emergencyAdminForm" onsubmit="saveEmergencyAdmin(event)">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="adminEmail">Email Address</label>
+                        <input type="email" id="adminEmail" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="adminName">Full Name</label>
+                        <input type="text" id="adminName" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="adminRole">Role</label>
+                        <select id="adminRole" required>
+                            <option value="">Select Role</option>
+                            <option value="emergency_admin">Emergency Administrator</option>
+                            <option value="break_glass">Break-Glass User</option>
+                            <option value="recovery_officer">Recovery Officer</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="adminPhone">Phone Number (for verification)</label>
+                        <input type="tel" id="adminPhone">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeEmergencyAdminModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Add Administrator
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="/admin/static/admin.js"></script>
+    <script src="/admin/static/vault.js"></script>
+    <script src="/admin/static/vault-settings.js"></script>
+</body>
+</html>
