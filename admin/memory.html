@@ -93,6 +93,12 @@
 
         <div class="card">
             <h2>📋 Search Results</h2>
+            <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                <button class="btn" onclick="showAdvancedSearch()">🔍 Advanced Search</button>
+                <button class="btn" onclick="showBulkOperations()">⚡ Bulk Operations</button>
+                <button class="btn" onclick="showMemoryAnalytics()">📊 Analytics</button>
+                <button class="btn" onclick="showDuplicateDetection()">🔄 Find Duplicates</button>
+            </div>
             <div id="search-results">
                 <p style="color: #666; text-align: center;">Enter a search query above to find memories</p>
             </div>
@@ -130,6 +136,7 @@
     </main>
 
     <script src="/admin/static/admin.js"></script>
+    <script src="/admin/static/memory-advanced.js"></script>
     <script>
         async function searchMemories() {
             const query = document.getElementById('search-query').value;
