@@ -116,7 +116,10 @@ class DashboardServer:
             except Exception as e:
                 print(f"Failed to initialize Confluence dashboard: {e}")
         
-        # Initialize Help dashboard if available
+        self.setup_routes()
+        self.mount_static_files()
+        
+        # Initialize Help dashboard if available (after main routes)
         self.help_dashboard = None
         if HELP_DASHBOARD_AVAILABLE and self.storage and self.config:
             try:
@@ -124,9 +127,8 @@ class DashboardServer:
                 print("🎯 Interactive help system dashboard initialized")
             except Exception as e:
                 print(f"Failed to initialize Help dashboard: {e}")
-        
-        self.setup_routes()
-        self.mount_static_files()
+                import traceback
+                traceback.print_exc()
         # Lazy-init playbook engine (shell disabled by default)
         self.playbook_engine = PlaybookEngine(allow_unsafe_shell=False)
         # Memory storage for hAIveMind awareness (initialized lazily when needed)
