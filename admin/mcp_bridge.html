@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>hAIveMind Admin - MCP Bridge</title>
+    <link rel="stylesheet" href="/admin/static/admin.css">
+</head>
+<body class="dashboard">
+    <nav class="nav-header">
+        <div class="nav-brand">
+            <img src="/assets/logo.png" alt="hAIveMind" class="nav-logo">
+            <h1>hAIveMind Admin</h1>
+        </div>
+        <div class="nav-links">
+            <a href="/admin/dashboard.html">Dashboard</a>
+            <a href="/admin/memory.html">Memory Browser</a>
+            <a href="/admin/mcp_servers.html">MCP Servers</a>
+            <a href="/admin/mcp_bridge.html" class="active">MCP Bridge</a>
+            <a href="/admin/vault">Vault Management</a>
+            <a href="/admin/rules-dashboard">Rules & Governance</a>
+            <a href="/admin/playbooks">Playbook Management</a>
+            <a href="/admin/executions">Execution Monitoring</a>
+            <a href="/admin/confluence">Confluence Integration</a>
+            <a href="/admin/help-dashboard">Help System</a>
+        </div>
+        <button class="logout-btn" onclick="logout()">Logout</button>
+    </nav>
+
+    <main class="main-content">
+        <div class="card">
+            <h2>🌉 MCP Bridge Management</h2>
+            <p>Bridge local MCP servers to remote access through hAIveMind network. Enable distributed MCP collaboration across machines.</p>
+            
+            <div class="bridge-actions" style="display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;">
+                <button class="btn btn-primary" onclick="discoverLocalServers()">
+                    🔍 Discover Local Servers
+                </button>
+                <button class="btn btn-success" onclick="autoRegisterBridges()">
+                    ⚡ Auto-Register Known Servers
+                </button>
+                <button class="btn btn-info" onclick="showRegisterModal()">
+                    ➕ Register Custom Bridge
+                </button>
+                <button class="btn" onclick="refreshBridges()">
+                    🔄 Refresh
+                </button>
+                <button class="btn" onclick="showBridgeHealth()">
+                    ❤️ Health Check
+                </button>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>📊 Bridge Statistics</h2>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="total-bridges">-</div>
+                    <div class="stat-label">Total Bridges</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="running-bridges">-</div>
+                    <div class="stat-label">Running Bridges</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="discovered-servers">-</div>
+                    <div class="stat-label">Discovered Servers</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="success-rate">-</div>
+                    <div class="stat-label">Success Rate</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>🎯 Discovered Local Servers</h2>
+            <div id="discovered-servers-list">
+                <p style="color: #666; text-align: center;">Click "Discover Local Servers" to find available MCP servers</p>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>🌐 Registered Bridges</h2>
+            <div id="bridges-list">
+                <p style="color: #666; text-align: center;">Loading bridges...</p>
+            </div>
+        </div>
+    </main>
+
+    <script src="/admin/static/admin.js"></script>
+    <script src="/admin/static/mcp-bridge.js"></script>
+    <script>
+        // Load bridges on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadBridges();
+            loadBridgeHealth();
+        });
+
+        async function discoverLocalServers() {
+            try {
+                showToast('Discovering local MCP servers...', 'info');
+                const response = await authenticatedFetch('/admin/api/mcp-bridge/discover');
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    displayDiscoveredServers(data.servers);
+                    document.getElementById('discovered-servers').textContent = data.total;
+                    showToast(`Discovered ${data.total} local MCP servers`, 'success');
+                } else {
+                    showToast('Failed to discover servers', 'error');
+                }
+            } catch (error) {
+                console.error('Discovery error:', error);
+                showToast('Error during discovery', 'error');
+            }
+        }
+
+        function displayDiscoveredServers(servers) {
+            const container = document.getElementById('discovered-servers-list');
+            
+            if (servers.length === 0) {
+                container.innerHTML = '<p style="color: #666; text-align: center;">No local MCP servers found</p>';
+                return;
+            }
+
+            container.innerHTML = servers.map(server => `
+                <div class="discovered-server" style="border: 1px solid #e1e5e9; border-radius: 6px; padding: 15px; margin-bottom: 15px; background: #f8f9fa;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <h4 style="margin: 0; color: #333;">${server.name}</h4>
+                        <span class="bridge-type" style="background: #e3f2fd; color: #1565c0; padding: 2px 8px; border-radius: 12px; font-size: 12px;">
+                            ${server.type}
+                        </span>
+                    </div>
+                    <div style="margin-bottom: 10px; color: #666;">
+                        <strong>Command:</strong> ${server.command}<br>
+                        <strong>Config:</strong> ${server.config_file}<br>
+                        <strong>Args:</strong> ${server.args.join(' ')}
+                    </div>
+                    <button class="btn btn-primary" onclick="registerDiscoveredServer('${server.name}', ${JSON.stringify(server).replace(/"/g, '&quot;')})">
+                        🌉 Register Bridge
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        async function registerDiscoveredServer(serverName, serverData) {
+            try {
+                const config = {
+                    name: serverData.name,
+                    type: serverData.type,
+                    command: serverData.command,
+                    args: serverData.args,
+                    env: serverData.env,
+                    description: `Auto-discovered ${serverData.type} MCP server`
+                };
+
+                showToast(`Registering bridge for ${serverName}...`, 'info');
+                const response = await authenticatedFetch('/admin/api/mcp-bridge/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    showToast(`Bridge registered successfully: ${result.server_id}`, 'success');
+                    loadBridges();
+                } else {
+                    showToast(`Failed to register bridge for ${serverName}`, 'error');
+                }
+            } catch (error) {
+                console.error('Registration error:', error);
+                showToast('Error registering bridge', 'error');
+            }
+        }
+
+        async function autoRegisterBridges() {
+            try {
+                showToast('Auto-registering known MCP servers...', 'info');
+                const response = await authenticatedFetch('/admin/api/mcp-bridge/auto-register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result.registered.length > 0) {
+                        showToast(`Auto-registered ${result.total} servers`, 'success');
+                        loadBridges();
+                    } else {
+                        showToast('No servers available for auto-registration', 'info');
+                    }
+                } else {
+                    showToast('Auto-registration failed', 'error');
+                }
+            } catch (error) {
+                console.error('Auto-registration error:', error);
+                showToast('Error during auto-registration', 'error');
+            }
+        }
+
+        async function loadBridges() {
+            try {
+                const response = await authenticatedFetch('/admin/api/mcp-bridge/servers');
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    displayBridges(data.bridges);
+                    updateBridgeStats(data.bridges);
+                } else {
+                    document.getElementById('bridges-list').innerHTML = '<p style="color: #d63384;">Failed to load bridges</p>';
+                }
+            } catch (error) {
+                console.error('Load bridges error:', error);
+                document.getElementById('bridges-list').innerHTML = '<p style="color: #d63384;">Error loading bridges</p>';
+            }
+        }
+
+        function displayBridges(bridges) {
+            const container = document.getElementById('bridges-list');
+            
+            if (bridges.length === 0) {
+                container.innerHTML = '<p style="color: #666; text-align: center;">No bridges registered. Use "Discover Local Servers" to find available MCP servers.</p>';
+                return;
+            }
+
+            container.innerHTML = bridges.map(bridge => `
+                <div class="bridge-card" style="border: 1px solid #e1e5e9; border-radius: 8px; padding: 20px; margin-bottom: 20px; background: white;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <div>
+                            <h3 style="margin: 0; color: #333;">${bridge.name}</h3>
+                            <p style="margin: 5px 0 0 0; color: #666; font-size: 14px;">${bridge.server_id}</p>
+                        </div>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <span class="status ${bridge.status === 'running' ? 'online' : 'offline'}">${bridge.status}</span>
+                            <span class="bridge-type" style="background: #e3f2fd; color: #1565c0; padding: 4px 8px; border-radius: 12px; font-size: 12px;">
+                                ${bridge.bridge_type}
+                            </span>
+                        </div>
+                    </div>
+                    
+                    <div class="bridge-details" style="background: #f8f9fa; padding: 15px; border-radius: 6px; margin-bottom: 15px;">
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                            <div>
+                                <strong>Endpoint:</strong><br>
+                                <code>${bridge.bridge_endpoint}</code>
+                            </div>
+                            <div>
+                                <strong>Requests:</strong><br>
+                                ${bridge.request_count} (${bridge.error_count} errors)
+                            </div>
+                            <div>
+                                <strong>Last Activity:</strong><br>
+                                ${formatTime(bridge.last_activity)}
+                            </div>
+                            <div>
+                                <strong>Created:</strong><br>
+                                ${formatTime(bridge.created_at)}
+                            </div>
+                        </div>
+                        
+                        ${bridge.config.command ? `
+                            <div style="margin-top: 15px;">
+                                <strong>Command:</strong> <code>${bridge.config.command} ${bridge.config.args.join(' ')}</code><br>
+                                <strong>Working Directory:</strong> <code>${bridge.config.working_directory}</code>
+                            </div>
+                        ` : ''}
+                        
+                        ${bridge.config.local_host && bridge.config.local_port ? `
+                            <div style="margin-top: 15px;">
+                                <strong>Local Server:</strong> <code>${bridge.config.local_host}:${bridge.config.local_port}</code>
+                            </div>
+                        ` : ''}
+                    </div>
+                    
+                    <div class="bridge-actions" style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <button class="btn btn-small" onclick="getBridgeStatus('${bridge.server_id}')">
+                            📊 Status
+                        </button>
+                        <button class="btn btn-small btn-primary" onclick="testBridge('${bridge.server_id}')">
+                            🧪 Test Connection
+                        </button>
+                        <button class="btn btn-small btn-info" onclick="showBridgeDetails('${bridge.server_id}')">
+                            🔍 Details
+                        </button>
+                        <button class="btn btn-small btn-danger" onclick="removeBridge('${bridge.server_id}', '${bridge.name}')">
+                            🗑️ Remove
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function updateBridgeStats(bridges) {
+            const totalBridges = bridges.length;
+            const runningBridges = bridges.filter(b => b.status === 'running').length;
+            const successRate = totalBridges > 0 ? ((runningBridges / totalBridges) * 100).toFixed(1) + '%' : '0%';
+            
+            document.getElementById('total-bridges').textContent = totalBridges;
+            document.getElementById('running-bridges').textContent = runningBridges;
+            document.getElementById('success-rate').textContent = successRate;
+        }
+
+        async function loadBridgeHealth() {
+            try {
+                const response = await authenticatedFetch('/admin/api/mcp-bridge/health');
+                
+                if (response.ok) {
+                    const health = await response.json();
+                    updateBridgeStats({
+                        length: health.total_bridges,
+                        filter: () => ({ length: health.running_bridges })
+                    });
+                }
+            } catch (error) {
+                console.error('Health check error:', error);
+            }
+        }
+
+        async function getBridgeStatus(serverId) {
+            try {
+                const response = await authenticatedFetch(`/admin/api/mcp-bridge/${serverId}/status`);
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    showBridgeStatusModal(result.status);
+                } else {
+                    showToast('Failed to get bridge status', 'error');
+                }
+            } catch (error) {
+                console.error('Status error:', error);
+                showToast('Error getting bridge status', 'error');
+            }
+        }
+
+        function showBridgeStatusModal(status) {
+            const modal = createModal('Bridge Status', `
+                <div class="bridge-status-details">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                        <div>
+                            <strong>Server ID:</strong><br>${status.server_id}
+                        </div>
+                        <div>
+                            <strong>Status:</strong><br>
+                            <span class="status ${status.status === 'running' ? 'online' : 'offline'}">${status.status}</span>
+                        </div>
+                        <div>
+                            <strong>Bridge Type:</strong><br>${status.bridge_type}
+                        </div>
+                        <div>
+                            <strong>Process Running:</strong><br>${status.process_running ? 'Yes' : 'No'}
+                        </div>
+                        <div>
+                            <strong>Request Count:</strong><br>${status.request_count}
+                        </div>
+                        <div>
+                            <strong>Error Count:</strong><br>${status.error_count}
+                        </div>
+                    </div>
+                    
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 6px;">
+                        <strong>Configuration:</strong><br>
+                        <pre style="margin: 10px 0 0 0; font-size: 12px; overflow-x: auto;">${JSON.stringify(status.config, null, 2)}</pre>
+                    </div>
+                </div>
+            `);
+        }
+
+        async function testBridge(serverId) {
+            try {
+                showToast('Testing bridge connection...', 'info');
+                
+                // Test with a simple tools/list request
+                const response = await authenticatedFetch(`/admin/api/mcp-bridge/${serverId}/proxy`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        method: 'tools/list',
+                        params: {}
+                    })
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    showToast('Bridge connection test successful', 'success');
+                    console.log('Bridge test result:', result);
+                } else {
+                    showToast('Bridge connection test failed', 'error');
+                }
+            } catch (error) {
+                console.error('Bridge test error:', error);
+                showToast('Error testing bridge connection', 'error');
+            }
+        }
+
+        async function removeBridge(serverId, bridgeName) {
+            if (!confirm(`Remove bridge "${bridgeName}"? This will stop remote access to this MCP server.`)) {
+                return;
+            }
+
+            try {
+                showToast(`Removing bridge ${bridgeName}...`, 'info');
+                const response = await authenticatedFetch(`/admin/api/mcp-bridge/${serverId}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    showToast(`Bridge ${bridgeName} removed successfully`, 'success');
+                    loadBridges();
+                } else {
+                    showToast(`Failed to remove bridge ${bridgeName}`, 'error');
+                }
+            } catch (error) {
+                console.error('Remove bridge error:', error);
+                showToast('Error removing bridge', 'error');
+            }
+        }
+
+        function refreshBridges() {
+            loadBridges();
+            loadBridgeHealth();
+            showToast('Refreshing bridge status...', 'info');
+        }
+
+        async function showBridgeHealth() {
+            try {
+                const response = await authenticatedFetch('/admin/api/mcp-bridge/health');
+                
+                if (response.ok) {
+                    const health = await response.json();
+                    const modal = createModal('Bridge Health Status', `
+                        <div class="health-status">
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 20px;">
+                                <div class="stat-card">
+                                    <div class="stat-value">${health.total_bridges}</div>
+                                    <div class="stat-label">Total Bridges</div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-value">${health.running_bridges}</div>
+                                    <div class="stat-label">Running</div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-value">${health.error_bridges}</div>
+                                    <div class="stat-label">Errors</div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-value">${(health.success_rate * 100).toFixed(1)}%</div>
+                                    <div class="stat-label">Success Rate</div>
+                                </div>
+                            </div>
+                            <p style="color: #666; text-align: center;">Last checked: ${formatTime(health.timestamp)}</p>
+                        </div>
+                    `);
+                } else {
+                    showToast('Failed to get health status', 'error');
+                }
+            } catch (error) {
+                console.error('Health check error:', error);
+                showToast('Error getting health status', 'error');
+            }
+        }
+
+        function showRegisterModal() {
+            const modal = createModal('Register Custom Bridge', `
+                <form id="register-bridge-form">
+                    <div class="form-group">
+                        <label>Bridge Name:</label>
+                        <input type="text" name="name" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Bridge Type:</label>
+                        <select name="type" required onchange="toggleBridgeTypeFields(this.value)">
+                            <option value="">Select Type</option>
+                            <option value="stdio">stdio (Command Line)</option>
+                            <option value="http">HTTP Server</option>
+                        </select>
+                    </div>
+                    <div id="stdio-fields" style="display: none;">
+                        <div class="form-group">
+                            <label>Command:</label>
+                            <input type="text" name="command" placeholder="e.g., python, node, uvx">
+                        </div>
+                        <div class="form-group">
+                            <label>Arguments (one per line):</label>
+                            <textarea name="args" placeholder="arg1\narg2\narg3"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>Working Directory:</label>
+                            <input type="text" name="working_directory" placeholder="Leave empty for current directory">
+                        </div>
+                    </div>
+                    <div id="http-fields" style="display: none;">
+                        <div class="form-group">
+                            <label>Local Host:</label>
+                            <input type="text" name="local_host" value="localhost">
+                        </div>
+                        <div class="form-group">
+                            <label>Local Port:</label>
+                            <input type="number" name="local_port" placeholder="8900">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Description:</label>
+                        <textarea name="description" placeholder="Optional description"></textarea>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" onclick="closeModal()" class="btn btn-secondary">Cancel</button>
+                        <button type="button" onclick="registerCustomBridge()" class="btn btn-primary">Register Bridge</button>
+                    </div>
+                </form>
+            `);
+        }
+
+        function toggleBridgeTypeFields(type) {
+            document.getElementById('stdio-fields').style.display = type === 'stdio' ? 'block' : 'none';
+            document.getElementById('http-fields').style.display = type === 'http' ? 'block' : 'none';
+        }
+
+        async function registerCustomBridge() {
+            const form = document.getElementById('register-bridge-form');
+            const formData = new FormData(form);
+            
+            const config = {
+                name: formData.get('name'),
+                type: formData.get('type'),
+                description: formData.get('description') || ''
+            };
+
+            if (config.type === 'stdio') {
+                config.command = formData.get('command');
+                config.args = formData.get('args').split('\n').filter(arg => arg.trim());
+                config.working_directory = formData.get('working_directory') || process.cwd();
+            } else if (config.type === 'http') {
+                config.local_host = formData.get('local_host') || 'localhost';
+                config.local_port = parseInt(formData.get('local_port'));
+            }
+
+            try {
+                showToast('Registering custom bridge...', 'info');
+                const response = await authenticatedFetch('/admin/api/mcp-bridge/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    showToast('Custom bridge registered successfully', 'success');
+                    closeModal();
+                    loadBridges();
+                } else {
+                    showToast('Failed to register custom bridge', 'error');
+                }
+            } catch (error) {
+                console.error('Custom bridge registration error:', error);
+                showToast('Error registering custom bridge', 'error');
+            }
+        }
+    </script>
+</body>
+</html>
