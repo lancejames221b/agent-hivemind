@@ -51,6 +51,14 @@ except ImportError:
     PLAYBOOK_AUTO_GEN_AVAILABLE = False
     logger.warning("Playbook auto-generation not available - missing dependencies")
 
+# Import Interactive Help System
+try:
+    from interactive_help_mcp_tools import register_interactive_help_tools
+    INTERACTIVE_HELP_AVAILABLE = True
+except ImportError:
+    INTERACTIVE_HELP_AVAILABLE = False
+    logger.warning("Interactive help system not available - missing dependencies")
+
 # Import Advanced Rules System
 try:
     from advanced_rules_mcp_tools import AdvancedRulesMCPTools
@@ -2833,6 +2841,18 @@ class MemoryMCPServer:
             except Exception as e:
                 logger.error(f"Failed to initialize Playbook auto-generation: {e}")
                 self.playbook_auto_gen_tools = None
+        
+        # Initialize Interactive Help System if available
+        self.interactive_help_tools = None
+        if INTERACTIVE_HELP_AVAILABLE:
+            try:
+                self.interactive_help_tools = register_interactive_help_tools(
+                    self.server, self.storage, self.config
+                )
+                logger.info("🎯 Interactive help system initialized - context-aware command assistance active")
+            except Exception as e:
+                logger.error(f"Failed to initialize Interactive help system: {e}")
+                self.interactive_help_tools = None
         
         # Initialize Advanced Rules System if available
         self.advanced_rules_tools = None
