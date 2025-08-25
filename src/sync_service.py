@@ -22,9 +22,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import httpx
 
-# Import rules sync components
-from .rules_sync_service import RulesSyncService
-from .rules_sync_api import create_rules_sync_router
+# Import rules sync components (disabled for basic operation)
+RulesSyncService = None
+create_rules_sync_router = None
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -460,19 +460,19 @@ async def startup_event():
     
     sync_service = MemorySyncService(config)
     
-    # Initialize rules sync service if enabled
-    if config.get('rules', {}).get('enable_haivemind_integration', True):
-        try:
-            # Import memory storage (would need to be passed from main memory server)
-            rules_sync_service = RulesSyncService(config, memory_storage=None)
-            
-            # Add rules sync router to the app
-            rules_router = create_rules_sync_router(rules_sync_service)
-            app.include_router(rules_router)
-            
-            logger.info("Rules Sync Service initialized and integrated")
-        except Exception as e:
-            logger.error(f"Failed to initialize Rules Sync Service: {e}")
+    # Initialize rules sync service if enabled (disabled for basic operation)
+    # if config.get('rules', {}).get('enable_haivemind_integration', True):
+    #     try:
+    #         # Import memory storage (would need to be passed from main memory server)
+    #         rules_sync_service = RulesSyncService(config, memory_storage=None)
+    #         
+    #         # Add rules sync router to the app
+    #         rules_router = create_rules_sync_router(rules_sync_service)
+    #         app.include_router(rules_router)
+    #         
+    #         logger.info("Rules Sync Service initialized and integrated")
+    #     except Exception as e:
+    #         logger.error(f"Failed to initialize Rules Sync Service: {e}")
     
     logger.info("Memory Sync Service started")
 
