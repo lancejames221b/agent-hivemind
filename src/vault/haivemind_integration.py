@@ -135,6 +135,7 @@ class HAIveMindVaultIntegration:
             asyncio.create_task(self._threat_intelligence_updater())
             asyncio.create_task(self._collaborative_analysis())
             asyncio.create_task(self._intelligence_sharing())
+            asyncio.create_task(self._vault_analytics_collector())
             
             self.logger.info("hAIveMind integration initialized successfully")
             return True
@@ -944,15 +945,357 @@ class HAIveMindVaultIntegration:
                         data=sharing_data
                     )
                 
+                # Also share vault-specific insights and best practices
+                await self._share_vault_insights()
+                
                 await asyncio.sleep(7200)  # Share every 2 hours
                 
             except Exception as e:
                 self.logger.error(f"Intelligence sharing error: {str(e)}")
                 await asyncio.sleep(600)
     
-    async def get_haivemind_status(self) -> Dict[str, Any]:
-        """Get hAIveMind integration status"""
+    async def _share_vault_insights(self) -> None:
+        """Share vault-specific insights with the network"""
         try:
+            # Generate and share performance insights
+            performance_insights = {
+                'title': 'Vault Performance Optimization Insights',
+                'insights_type': 'performance_optimization',
+                'recommendations': [
+                    'Implement credential caching for frequently accessed items',
+                    'Use batch operations for bulk credential management',
+                    'Enable connection pooling for database operations',
+                    'Implement async encryption/decryption for better throughput'
+                ],
+                'effectiveness_score': 0.85,
+                'implementation_difficulty': 'medium',
+                'security_impact': 'neutral'
+            }
+            
+            await self.share_vault_best_practices(performance_insights)
+            
+            # Generate and share security insights
+            security_insights = {
+                'title': 'Vault Security Enhancement Practices',
+                'insights_type': 'security_enhancement',
+                'recommendations': [
+                    'Enable comprehensive audit logging for all operations',
+                    'Implement anomaly detection for unusual access patterns',
+                    'Use timing attack protection for credential comparisons',
+                    'Enable automatic credential rotation for high-risk items'
+                ],
+                'effectiveness_score': 0.9,
+                'implementation_difficulty': 'medium',
+                'security_impact': 'high'
+            }
+            
+            await self.share_vault_best_practices(security_insights)
+            
+        except Exception as e:
+            self.logger.error(f"Failed to share vault insights: {str(e)}")
+    
+    async def _vault_analytics_collector(self) -> None:
+        """Background task to collect and share vault analytics"""
+        while True:
+            try:
+                # Collect vault analytics data
+                analytics_data = {
+                    'collection_timestamp': datetime.utcnow().isoformat(),
+                    'machine_id': self.config.get('machine_id', 'unknown'),
+                    'vault_metrics': {
+                        'active_credentials': 0,  # Would be populated from actual metrics
+                        'recent_access_count': 0,
+                        'security_events_count': len(self.security_insights),
+                        'threat_intelligence_count': len(self.threat_intelligence),
+                        'collaborative_responses': len(self.collaborative_responses)
+                    },
+                    'performance_indicators': {
+                        'avg_response_time': 0.0,  # Would be populated from performance optimizer
+                        'cache_hit_ratio': 0.0,
+                        'encryption_performance': 0.0,
+                        'database_performance': 0.0
+                    },
+                    'security_indicators': {
+                        'anomalies_detected': sum(1 for insight in self.security_insights.values() if insight.risk_score > 0.7),
+                        'high_risk_events': sum(1 for insight in self.security_insights.values() if insight.risk_score > 0.8),
+                        'collaborative_responses_initiated': len([
+                            r for r in self.collaborative_responses.values() 
+                            if r.coordination_status == 'initiated'
+                        ])
+                    }
+                }
+                
+                # Store analytics in hAIveMind
+                await self.store_vault_analytics(analytics_data)
+                
+                await asyncio.sleep(1800)  # Collect every 30 minutes
+                
+            except Exception as e:
+                self.logger.error(f"Vault analytics collection error: {str(e)}")
+                await asyncio.sleep(300)
+    
+    async def store_vault_analytics(self, analytics_data: Dict[str, Any]) -> bool:
+        """Store vault analytics in hAIveMind for cross-system learning"""
+        try:
+            analytics_memory = {
+                'analytics_type': 'vault_operations',
+                'timestamp': datetime.utcnow().isoformat(),
+                'machine_id': self.config.get('machine_id', 'unknown'),
+                'data': analytics_data
+            }
+            
+            await self.memory_server.store_memory(
+                content=json.dumps(analytics_memory),
+                category='infrastructure',
+                subcategory='vault_analytics',
+                tags=['vault', 'analytics', 'performance', 'security'],
+                importance=0.7
+            )
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to store vault analytics: {str(e)}")
+            return False
+    
+    async def learn_from_credential_patterns(self, credential_data: Dict[str, Any]) -> None:
+        """Learn from credential usage patterns for optimization"""
+        try:
+            pattern_data = {
+                'pattern_type': 'credential_usage',
+                'credential_type': credential_data.get('credential_type'),
+                'access_frequency': credential_data.get('access_count', 0),
+                'user_patterns': credential_data.get('user_patterns', {}),
+                'time_patterns': credential_data.get('time_patterns', {}),
+                'security_events': credential_data.get('security_events', []),
+                'performance_metrics': credential_data.get('performance_metrics', {}),
+                'timestamp': datetime.utcnow().isoformat()
+            }
+            
+            await self.memory_server.store_memory(
+                content=json.dumps(pattern_data),
+                category='infrastructure',
+                subcategory='credential_patterns',
+                tags=['vault', 'patterns', 'optimization', credential_data.get('credential_type', 'unknown')],
+                importance=0.6
+            )
+            
+        except Exception as e:
+            self.logger.error(f"Failed to learn from credential patterns: {str(e)}")
+    
+    async def analyze_vault_performance_trends(self) -> Dict[str, Any]:
+        """Analyze vault performance trends across the hAIveMind network"""
+        try:
+            # Search for vault performance data across the network
+            search_results = await self.memory_server.search_memories(
+                query="vault performance metrics analytics",
+                category="infrastructure",
+                limit=500
+            )
+            
+            performance_trends = {
+                'response_times': [],
+                'cache_hit_rates': [],
+                'encryption_performance': [],
+                'database_performance': [],
+                'error_rates': [],
+                'concurrent_users': []
+            }
+            
+            for memory in search_results.get('memories', []):
+                try:
+                    data = json.loads(memory['content'])
+                    if data.get('analytics_type') == 'vault_operations':
+                        analytics = data.get('data', {})
+                        
+                        # Extract performance metrics
+                        if 'avg_response_time' in analytics:
+                            performance_trends['response_times'].append(analytics['avg_response_time'])
+                        
+                        if 'cache_hit_ratio' in analytics:
+                            performance_trends['cache_hit_rates'].append(analytics['cache_hit_ratio'])
+                        
+                        if 'encryption_performance' in analytics:
+                            performance_trends['encryption_performance'].append(analytics['encryption_performance'])
+                        
+                        if 'database_performance' in analytics:
+                            performance_trends['database_performance'].append(analytics['database_performance'])
+                        
+                        if 'error_rate' in analytics:
+                            performance_trends['error_rates'].append(analytics['error_rate'])
+                        
+                        if 'concurrent_users' in analytics:
+                            performance_trends['concurrent_users'].append(analytics['concurrent_users'])
+                
+                except Exception as e:
+                    continue
+            
+            # Calculate trend statistics
+            trends_analysis = {}
+            for metric, values in performance_trends.items():
+                if values:
+                    trends_analysis[metric] = {
+                        'average': sum(values) / len(values),
+                        'min': min(values),
+                        'max': max(values),
+                        'samples': len(values),
+                        'trend': 'improving' if len(values) > 1 and values[-1] < values[0] else 'stable'
+                    }
+            
+            return trends_analysis
+            
+        except Exception as e:
+            self.logger.error(f"Failed to analyze performance trends: {str(e)}")
+            return {}
+    
+    async def generate_security_recommendations(self) -> List[str]:
+        """Generate security recommendations based on network-wide vault intelligence"""
+        try:
+            recommendations = []
+            
+            # Search for security events across the network
+            security_search = await self.memory_server.search_memories(
+                query="vault security threat incident",
+                category="security",
+                limit=200
+            )
+            
+            # Analyze common security patterns
+            threat_patterns = {}
+            for memory in security_search.get('memories', []):
+                try:
+                    data = json.loads(memory['content'])
+                    if 'threat_type' in data:
+                        threat_type = data['threat_type']
+                        threat_patterns[threat_type] = threat_patterns.get(threat_type, 0) + 1
+                except Exception:
+                    continue
+            
+            # Generate recommendations based on patterns
+            if threat_patterns.get('credential_compromise', 0) > 5:
+                recommendations.append("Implement mandatory MFA for all credential access")
+                recommendations.append("Enable automatic credential rotation for high-risk credentials")
+            
+            if threat_patterns.get('unusual_access_pattern', 0) > 3:
+                recommendations.append("Enhance anomaly detection sensitivity")
+                recommendations.append("Implement geolocation-based access controls")
+            
+            if threat_patterns.get('privilege_escalation', 0) > 2:
+                recommendations.append("Review and tighten access control policies")
+                recommendations.append("Implement just-in-time access for administrative operations")
+            
+            # Add general best practices if no specific threats detected
+            if not recommendations:
+                recommendations.extend([
+                    "Regularly review and audit credential access patterns",
+                    "Implement automated security scanning for stored credentials",
+                    "Enable comprehensive audit logging for all vault operations",
+                    "Consider implementing zero-trust architecture for credential access"
+                ])
+            
+            return recommendations
+            
+        except Exception as e:
+            self.logger.error(f"Failed to generate security recommendations: {str(e)}")
+            return ["Enable comprehensive security monitoring and alerting"]
+    
+    async def share_vault_best_practices(self, best_practices: Dict[str, Any]) -> bool:
+        """Share vault best practices with the hAIveMind network"""
+        try:
+            best_practices_data = {
+                'practice_type': 'vault_best_practices',
+                'practices': best_practices,
+                'source_machine': self.config.get('machine_id', 'unknown'),
+                'effectiveness_score': best_practices.get('effectiveness_score', 0.8),
+                'implementation_difficulty': best_practices.get('implementation_difficulty', 'medium'),
+                'security_impact': best_practices.get('security_impact', 'high'),
+                'timestamp': datetime.utcnow().isoformat()
+            }
+            
+            await self.memory_server.store_memory(
+                content=json.dumps(best_practices_data),
+                category='infrastructure',
+                subcategory='best_practices',
+                tags=['vault', 'best_practices', 'security', 'optimization'],
+                importance=0.9
+            )
+            
+            # Broadcast to network
+            await self.memory_server.broadcast_discovery(
+                message=f"Vault best practices shared: {best_practices.get('title', 'Security Enhancement')}",
+                category='infrastructure',
+                severity='info',
+                data=best_practices_data
+            )
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to share best practices: {str(e)}")
+            return False
+    
+    async def get_network_vault_insights(self) -> Dict[str, Any]:
+        """Get insights from vault operations across the hAIveMind network"""
+        try:
+            insights = {
+                'network_performance': await self.analyze_vault_performance_trends(),
+                'security_recommendations': await self.generate_security_recommendations(),
+                'common_credential_types': {},
+                'optimization_opportunities': [],
+                'security_alerts': []
+            }
+            
+            # Get common credential types across network
+            credential_search = await self.memory_server.search_memories(
+                query="credential_patterns credential_type",
+                category="infrastructure",
+                limit=300
+            )
+            
+            credential_type_counts = {}
+            for memory in credential_search.get('memories', []):
+                try:
+                    data = json.loads(memory['content'])
+                    if data.get('pattern_type') == 'credential_usage':
+                        cred_type = data.get('credential_type')
+                        if cred_type:
+                            credential_type_counts[cred_type] = credential_type_counts.get(cred_type, 0) + 1
+                except Exception:
+                    continue
+            
+            insights['common_credential_types'] = credential_type_counts
+            
+            # Generate optimization opportunities
+            if insights['network_performance']:
+                perf = insights['network_performance']
+                
+                if 'cache_hit_rates' in perf and perf['cache_hit_rates'].get('average', 0) < 0.7:
+                    insights['optimization_opportunities'].append(
+                        "Improve caching strategy - network average cache hit rate is below 70%"
+                    )
+                
+                if 'response_times' in perf and perf['response_times'].get('average', 0) > 500:
+                    insights['optimization_opportunities'].append(
+                        "Optimize response times - network average exceeds 500ms"
+                    )
+                
+                if 'error_rates' in perf and perf['error_rates'].get('average', 0) > 0.05:
+                    insights['optimization_opportunities'].append(
+                        "Reduce error rates - network average exceeds 5%"
+                    )
+            
+            return insights
+            
+        except Exception as e:
+            self.logger.error(f"Failed to get network vault insights: {str(e)}")
+            return {'error': str(e)}
+    
+    async def get_haivemind_status(self) -> Dict[str, Any]:
+        """Get comprehensive hAIveMind integration status"""
+        try:
+            # Get network insights
+            network_insights = await self.get_network_vault_insights()
+            
             status = {
                 'agent_registered': True,
                 'threat_intelligence_count': len(self.threat_intelligence),
@@ -968,8 +1311,19 @@ class HAIveMindVaultIntegration:
                     'threat_correlation',
                     'collaborative_response',
                     'intelligence_sharing',
-                    'pattern_analysis'
-                ]
+                    'pattern_analysis',
+                    'performance_optimization',
+                    'security_recommendations',
+                    'best_practices_sharing'
+                ],
+                'network_insights': network_insights,
+                'vault_specific_features': {
+                    'credential_pattern_analysis': True,
+                    'performance_trend_analysis': True,
+                    'security_recommendation_engine': True,
+                    'best_practices_sharing': True,
+                    'cross_system_learning': True
+                }
             }
             
             return status
