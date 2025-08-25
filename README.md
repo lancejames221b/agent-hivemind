@@ -37,13 +37,15 @@ pip install -r requirements.txt
 
 # 2. Start hAIveMind services
 python src/memory_server.py &
-python src/remote_mcp_server.py &  # Now includes dashboard on port 8900
-python src/sync_service.py &
+python src/remote_mcp_server.py &  # MCP/SSE endpoints on port 8900
+python src/dashboard_server.py &   # Dashboard on port 8901
 
-# 3. Access the dashboard
-# Dashboard: http://localhost:8900/admin/
+# 3. Access the services
+# Dashboard: http://localhost:8901/admin/    ⚠️ INCONSISTENT - NEEDS FIX
 # MCP SSE:   http://localhost:8900/sse
 # Health:    http://localhost:8900/health
+
+# ⚠️ WARNING: Architecture inconsistency - see ticket for unified port plan
 
 # 4. Install MCP client
 cd mcp-client && ./install.sh
