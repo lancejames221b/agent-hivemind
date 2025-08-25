@@ -1,391 +1,453 @@
 {
   "vault": {
-    "enterprise_features": {
-      "enabled": true,
-      "license_type": "enterprise",
-      "deployment_mode": "high_availability",
-      "compliance_mode": "strict"
+    "name": "hAIveMind Enterprise Credential Vault",
+    "version": "1.0.0",
+    "environment": "production",
+    "debug": false,
+    "api": {
+      "host": "0.0.0.0",
+      "port": 8080,
+      "workers": 4,
+      "max_connections": 1000,
+      "keepalive_timeout": 30,
+      "request_timeout": 60,
+      "max_request_size": 10485760,
+      "cors": {
+        "enabled": true,
+        "allowed_origins": [
+          "https://vault.haivemind.local",
+          "https://admin.haivemind.local"
+        ],
+        "allowed_methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allowed_headers": ["*"],
+        "allow_credentials": true
+      },
+      "rate_limiting": {
+        "enabled": true,
+        "default_limit": "100/minute",
+        "auth_limit": "10/minute",
+        "admin_limit": "30/minute",
+        "storage": "redis"
+      }
     },
-    
+    "database": {
+      "url": "${VAULT_DATABASE_URL}",
+      "pool_size": 20,
+      "max_overflow": 30,
+      "pool_timeout": 30,
+      "pool_recycle": 3600,
+      "echo": false,
+      "ssl_mode": "require",
+      "ssl_cert": "/etc/ssl/certs/vault-client.crt",
+      "ssl_key": "/etc/ssl/private/vault-client.key",
+      "ssl_ca": "/etc/ssl/certs/ca-bundle.crt"
+    },
+    "redis": {
+      "url": "${VAULT_REDIS_URL}",
+      "password": "${VAULT_REDIS_PASSWORD}",
+      "db": 0,
+      "max_connections": 50,
+      "retry_on_timeout": true,
+      "socket_timeout": 5,
+      "socket_connect_timeout": 5,
+      "health_check_interval": 30,
+      "ssl": {
+        "enabled": true,
+        "cert_reqs": "required",
+        "ca_certs": "/etc/ssl/certs/ca-bundle.crt",
+        "certfile": "/etc/ssl/certs/vault-redis.crt",
+        "keyfile": "/etc/ssl/private/vault-redis.key"
+      }
+    },
+    "encryption": {
+      "algorithm": "AES-256-GCM",
+      "key_derivation": "Argon2",
+      "pbkdf2_iterations": 100000,
+      "argon2_time_cost": 3,
+      "argon2_memory_cost": 65536,
+      "argon2_parallelism": 1,
+      "salt_length": 32,
+      "nonce_length": 12,
+      "key_length": 32,
+      "key_rotation": {
+        "enabled": true,
+        "interval_days": 90,
+        "overlap_period_days": 30,
+        "auto_rotation": true
+      }
+    },
     "hsm": {
-      "primary_hsm": {
-        "provider": "aws_cloudhsm",
-        "endpoint": "https://cloudhsm.us-east-1.amazonaws.com",
-        "auth_token": "${AWS_CLOUDHSM_TOKEN}",
-        "key_label": "vault_master_key",
-        "partition_name": "vault_partition"
-      },
-      "backup_hsm": {
-        "provider": "azure_hsm", 
-        "endpoint": "https://vault.vault.azure.net",
-        "auth_token": "${AZURE_HSM_TOKEN}",
-        "key_label": "vault_backup_key"
-      },
-      "local_hsm": {
-        "provider": "pkcs11",
-        "endpoint": "/usr/lib/softhsm/libsofthsm2.so",
-        "auth_token": "${PKCS11_PIN}",
-        "key_label": "vault_local_key",
-        "slot_id": 0
-      }
-    },
-    
-    "approval_policies": {
-      "credential_access": {
-        "approval_level": "low",
-        "required_approvers": 1,
-        "total_approvers": 2,
-        "approver_roles": ["vault_admin", "security_officer"],
-        "timeout_hours": 2,
-        "emergency_bypass": true,
-        "business_hours_only": false
-      },
-      "credential_deletion": {
-        "approval_level": "high",
-        "required_approvers": 3,
-        "total_approvers": 5,
-        "approver_roles": ["vault_admin", "security_officer", "compliance_officer"],
-        "timeout_hours": 24,
-        "emergency_bypass": false,
-        "business_hours_only": true
-      },
-      "vault_configuration": {
-        "approval_level": "critical",
-        "required_approvers": 5,
-        "total_approvers": 7,
-        "approver_roles": ["vault_admin", "security_officer", "compliance_officer", "ciso"],
-        "timeout_hours": 48,
-        "emergency_bypass": false,
-        "business_hours_only": true
-      },
-      "emergency_revocation": {
-        "approval_level": "high",
-        "required_approvers": 2,
-        "total_approvers": 3,
-        "approver_roles": ["incident_commander", "security_officer", "vault_admin"],
-        "timeout_hours": 1,
-        "emergency_bypass": true,
-        "business_hours_only": false
-      }
-    },
-    
-    "escrow_policies": {
-      "individual": {
-        "retention_days": 90,
-        "auto_recovery_triggers": ["user_disabled", "termination_date"],
-        "required_approvers": 1,
-        "authorized_recovery_roles": ["manager", "hr_admin"],
-        "encryption_level": "AES-256-GCM",
-        "audit_frequency_days": 30,
-        "compliance_requirements": ["SOX", "PCI"]
-      },
-      "department": {
-        "retention_days": 365,
-        "auto_recovery_triggers": ["department_restructure"],
-        "required_approvers": 2,
-        "authorized_recovery_roles": ["department_head", "security_officer"],
-        "encryption_level": "AES-256-GCM",
-        "audit_frequency_days": 90,
-        "compliance_requirements": ["SOX", "GDPR"]
-      },
-      "emergency": {
-        "retention_days": 1095,
-        "auto_recovery_triggers": ["disaster_declared", "emergency_activation"],
-        "required_approvers": 3,
-        "authorized_recovery_roles": ["incident_commander", "ciso", "ceo"],
-        "encryption_level": "AES-256-GCM",
-        "audit_frequency_days": 7,
-        "compliance_requirements": ["SOX", "HIPAA", "PCI"]
-      }
-    },
-    
-    "threat_detection": {
       "enabled": true,
-      "auto_train_models": true,
-      "enable_real_time": true,
-      "ml_models": {
-        "isolation_forest": {
-          "contamination": 0.1,
-          "n_estimators": 200
+      "providers": {
+        "aws_cloudhsm": {
+          "enabled": false,
+          "cluster_id": "${AWS_CLOUDHSM_CLUSTER_ID}",
+          "user": "${AWS_CLOUDHSM_USER}",
+          "password": "${AWS_CLOUDHSM_PASSWORD}",
+          "key_label": "vault_master_key",
+          "region": "us-east-1"
         },
-        "neural_network": {
-          "hidden_layers": [100, 50],
-          "activation": "relu",
-          "solver": "adam",
-          "max_iter": 1000
+        "azure_hsm": {
+          "enabled": false,
+          "vault_url": "${AZURE_KEY_VAULT_URL}",
+          "client_id": "${AZURE_CLIENT_ID}",
+          "client_secret": "${AZURE_CLIENT_SECRET}",
+          "tenant_id": "${AZURE_TENANT_ID}",
+          "key_name": "vault-master-key"
         },
-        "clustering": {
-          "algorithm": "dbscan",
-          "eps": 0.5,
-          "min_samples": 5
+        "yubihsm2": {
+          "enabled": true,
+          "connector_url": "http://localhost:12345",
+          "auth_key_id": 1,
+          "auth_key": "${YUBIHSM2_AUTH_KEY}",
+          "key_id": 100,
+          "key_label": "vault_master_key"
+        }
+      }
+    },
+    "authentication": {
+      "jwt_secret": "${VAULT_JWT_SECRET}",
+      "jwt_algorithm": "HS256",
+      "session_timeout_hours": 8,
+      "max_sessions_per_user": 5,
+      "password_policy": {
+        "min_length": 12,
+        "max_length": 128,
+        "require_uppercase": true,
+        "require_lowercase": true,
+        "require_numbers": true,
+        "require_special_chars": true,
+        "special_chars": "!@#$%^&*()_+-=[]{}|;:,.<>?",
+        "max_age_days": 90,
+        "history_count": 12,
+        "lockout_attempts": 5,
+        "lockout_duration_minutes": 30
+      },
+      "mfa": {
+        "enabled": true,
+        "required_for_admins": true,
+        "methods": ["totp", "webauthn"],
+        "totp": {
+          "issuer": "hAIveMind Vault",
+          "window": 1,
+          "backup_codes": 10
+        },
+        "webauthn": {
+          "rp_name": "hAIveMind Vault",
+          "rp_id": "vault.haivemind.local",
+          "origin": "https://vault.haivemind.local"
+        }
+      }
+    },
+    "ldap": {
+      "enabled": true,
+      "server": "${LDAP_SERVER}",
+      "port": 636,
+      "use_ssl": true,
+      "use_tls": false,
+      "bind_dn": "${LDAP_BIND_DN}",
+      "bind_password": "${LDAP_BIND_PASSWORD}",
+      "base_dn": "${LDAP_BASE_DN}",
+      "user_search_base": "OU=Users,${LDAP_BASE_DN}",
+      "user_search_filter": "(sAMAccountName={username})",
+      "user_attributes": [
+        "sAMAccountName",
+        "mail",
+        "givenName",
+        "sn",
+        "memberOf",
+        "userPrincipalName"
+      ],
+      "group_search_base": "OU=Groups,${LDAP_BASE_DN}",
+      "group_search_filter": "(objectClass=group)",
+      "group_attributes": ["cn", "member"],
+      "timeout": 30,
+      "auto_bind": true,
+      "sync_interval_hours": 24,
+      "role_mapping": {
+        "CN=Vault Admins,OU=Groups,${LDAP_BASE_DN}": "super_admin",
+        "CN=Security Team,OU=Groups,${LDAP_BASE_DN}": "security_admin",
+        "CN=DevOps Team,OU=Groups,${LDAP_BASE_DN}": "organization_admin",
+        "CN=Developers,OU=Groups,${LDAP_BASE_DN}": "developer"
+      }
+    },
+    "compliance": {
+      "enabled": true,
+      "standards": ["soc2_type2", "hipaa", "pci_dss", "gdpr", "iso27001"],
+      "audit": {
+        "enabled": true,
+        "retention_days": 2555,
+        "log_sensitive_data": false,
+        "high_risk_events": [
+          "credential_delete",
+          "user_create",
+          "role_assignment",
+          "emergency_access",
+          "admin_action"
+        ],
+        "export_formats": ["csv", "json", "xml"],
+        "encryption_at_rest": true
+      },
+      "reporting": {
+        "enabled": true,
+        "auto_generate": true,
+        "schedule": "monthly",
+        "recipients": [
+          "security@company.com",
+          "compliance@company.com"
+        ],
+        "formats": ["pdf", "json"]
+      },
+      "checks": {
+        "enabled": true,
+        "schedule": "daily",
+        "alert_on_violations": true,
+        "auto_remediation": false
+      }
+    },
+    "backup": {
+      "enabled": true,
+      "encryption": true,
+      "compression": true,
+      "schedule": {
+        "full_backup": "0 2 * * 0",
+        "incremental_backup": "0 2 * * 1-6",
+        "transaction_log_backup": "*/15 * * * *"
+      },
+      "retention": {
+        "daily_backups": 30,
+        "weekly_backups": 12,
+        "monthly_backups": 12,
+        "yearly_backups": 7
+      },
+      "storage": {
+        "local": {
+          "enabled": true,
+          "path": "/var/backups/vault",
+          "max_size_gb": 100
+        },
+        "s3": {
+          "enabled": true,
+          "bucket": "${VAULT_BACKUP_S3_BUCKET}",
+          "region": "us-east-1",
+          "access_key": "${AWS_ACCESS_KEY_ID}",
+          "secret_key": "${AWS_SECRET_ACCESS_KEY}",
+          "encryption": "AES256",
+          "storage_class": "STANDARD_IA"
+        },
+        "azure": {
+          "enabled": false,
+          "account_name": "${AZURE_STORAGE_ACCOUNT}",
+          "account_key": "${AZURE_STORAGE_KEY}",
+          "container": "vault-backups"
+        }
+      }
+    },
+    "monitoring": {
+      "enabled": true,
+      "metrics": {
+        "enabled": true,
+        "endpoint": "/metrics",
+        "port": 9090,
+        "interval": 30
+      },
+      "health_checks": {
+        "enabled": true,
+        "endpoint": "/health",
+        "detailed_endpoint": "/health/detailed",
+        "interval": 30,
+        "timeout": 10
+      },
+      "logging": {
+        "level": "INFO",
+        "format": "json",
+        "output": "stdout",
+        "file": {
+          "enabled": true,
+          "path": "/var/log/vault/vault.log",
+          "max_size_mb": 100,
+          "backup_count": 10,
+          "rotation": "daily"
+        },
+        "syslog": {
+          "enabled": true,
+          "host": "syslog.company.com",
+          "port": 514,
+          "facility": "local0"
         }
       },
-      "threat_thresholds": {
-        "low": 0.3,
-        "medium": 0.6,
-        "high": 0.8,
-        "critical": 0.95
-      }
-    },
-    
-    "siem_integration": {
-      "splunk": {
-        "provider": "splunk",
-        "endpoint": "https://splunk.company.com:8089",
-        "api_key": "${SPLUNK_API_KEY}",
-        "index_name": "vault_security",
-        "source_type": "vault_enterprise",
-        "batch_size": 100,
-        "verify_ssl": true
-      },
-      "elastic": {
-        "provider": "elastic_siem",
-        "endpoint": "https://elasticsearch.company.com:9200",
-        "api_key": "${ELASTIC_API_KEY}",
-        "index_name": "vault-security",
-        "batch_size": 100,
-        "verify_ssl": true
-      },
-      "qradar": {
-        "provider": "qradar",
-        "endpoint": "https://qradar.company.com/api",
-        "api_key": "${QRADAR_SEC_TOKEN}",
-        "batch_size": 50,
-        "verify_ssl": true
-      },
-      "azure_sentinel": {
-        "provider": "azure_sentinel",
-        "endpoint": "https://management.azure.com",
-        "api_key": "${AZURE_SENTINEL_TOKEN}",
-        "organization_id": "${AZURE_SUBSCRIPTION_ID}",
-        "batch_size": 100,
-        "verify_ssl": true
-      }
-    },
-    
-    "threat_intel_feeds": [
-      {
-        "name": "internal_vault_intel",
-        "type": "internal",
-        "description": "Internal vault security intelligence"
-      },
-      {
-        "name": "haivemind_collective_intel",
-        "type": "collective", 
-        "description": "Collective intelligence from hAIveMind network"
-      },
-      {
-        "name": "mitre_attack",
-        "type": "external",
-        "description": "MITRE ATT&CK framework data",
-        "endpoint": "https://attack.mitre.org/",
-        "update_frequency": "weekly"
-      },
-      {
-        "name": "cisa_known_exploited",
-        "type": "external", 
-        "description": "CISA Known Exploited Vulnerabilities",
-        "endpoint": "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json",
-        "update_frequency": "daily"
-      }
-    ],
-    
-    "compliance": {
-      "sox": {
-        "enabled": true,
-        "audit_retention_days": 2555,
-        "required_controls": [
-          "access_controls",
-          "change_management", 
-          "audit_trails",
-          "separation_of_duties"
-        ]
-      },
-      "pci_dss": {
-        "enabled": true,
-        "version": "4.0",
-        "merchant_level": 1,
-        "required_controls": [
-          "encryption_at_rest",
-          "encryption_in_transit",
-          "access_controls",
-          "monitoring",
-          "vulnerability_management"
-        ]
-      },
-      "hipaa": {
-        "enabled": true,
-        "covered_entity": true,
-        "required_controls": [
-          "phi_encryption",
-          "access_logging",
-          "minimum_necessary",
-          "audit_controls"
-        ]
-      },
-      "gdpr": {
-        "enabled": true,
-        "data_controller": true,
-        "required_controls": [
-          "data_minimization",
-          "consent_management",
-          "right_to_erasure",
-          "data_protection_impact_assessment"
-        ]
-      },
-      "iso27001": {
-        "enabled": true,
-        "certification_level": "full",
-        "required_controls": [
-          "information_security_policy",
-          "risk_management",
-          "access_control",
-          "cryptography",
-          "incident_management"
-        ]
-      }
-    },
-    
-    "enterprise_integration": {
-      "active_directory": {
-        "enabled": false,
-        "domain": "company.local",
-        "ldap_server": "ldaps://dc.company.local:636",
-        "bind_dn": "CN=vault_service,OU=Service Accounts,DC=company,DC=local",
-        "bind_password": "${AD_BIND_PASSWORD}",
-        "user_search_base": "OU=Users,DC=company,DC=local",
-        "group_search_base": "OU=Groups,DC=company,DC=local"
-      },
-      "saml_sso": {
-        "enabled": false,
-        "identity_provider": "https://idp.company.com/auth/realms/master",
-        "service_provider_metadata": "/etc/vault/sp-metadata.xml",
-        "certificate_path": "/etc/vault/saml-cert.pem",
-        "private_key_path": "/etc/vault/saml-key.pem"
-      },
-      "oauth2": {
-        "enabled": false,
-        "authorization_server": "https://oauth.company.com",
-        "client_id": "${OAUTH2_CLIENT_ID}",
-        "client_secret": "${OAUTH2_CLIENT_SECRET}",
-        "scopes": ["vault.read", "vault.write", "vault.admin"]
-      },
-      "pki_integration": {
-        "enabled": false,
-        "root_ca": "/etc/vault/ca.pem",
-        "intermediate_ca": "/etc/vault/intermediate.pem",
-        "crl_distribution_point": "https://pki.company.com/crl",
-        "ocsp_responder": "https://ocsp.company.com"
-      }
-    },
-    
-    "high_availability": {
-      "enabled": true,
-      "cluster_mode": "raft",
-      "node_count": 5,
-      "auto_failover": true,
-      "backup_schedule": "0 2 * * *",
-      "replication": {
-        "enabled": true,
-        "mode": "dr",
-        "regions": ["us-east-1", "us-west-2", "eu-west-1"],
-        "sync_interval": 300
-      },
-      "load_balancer": {
-        "enabled": true,
-        "health_check_path": "/v1/sys/health",
-        "health_check_interval": 30
-      }
-    },
-    
-    "monitoring": {
-      "metrics_enabled": true,
-      "telemetry_endpoint": "https://telemetry.company.com/vault",
-      "prometheus_metrics": true,
-      "grafana_dashboard": true,
       "alerting": {
         "enabled": true,
-        "webhook_url": "https://alerts.company.com/webhook",
-        "critical_threshold": 0.9,
-        "warning_threshold": 0.7
+        "channels": {
+          "email": {
+            "enabled": true,
+            "smtp_server": "${SMTP_SERVER}",
+            "smtp_port": 587,
+            "username": "${SMTP_USERNAME}",
+            "password": "${SMTP_PASSWORD}",
+            "from": "vault-alerts@company.com",
+            "to": ["security@company.com", "devops@company.com"]
+          },
+          "slack": {
+            "enabled": true,
+            "webhook_url": "${SLACK_WEBHOOK_URL}",
+            "channel": "#security-alerts"
+          },
+          "pagerduty": {
+            "enabled": true,
+            "integration_key": "${PAGERDUTY_INTEGRATION_KEY}"
+          }
+        },
+        "rules": [
+          {
+            "name": "High Risk Event",
+            "condition": "risk_score >= 0.8",
+            "severity": "critical",
+            "channels": ["email", "slack", "pagerduty"]
+          },
+          {
+            "name": "Failed Authentication",
+            "condition": "event_type == 'auth_failure' AND count > 5",
+            "severity": "warning",
+            "channels": ["email", "slack"]
+          },
+          {
+            "name": "Database Connection Error",
+            "condition": "component == 'database' AND status == 'unhealthy'",
+            "severity": "critical",
+            "channels": ["email", "pagerduty"]
+          }
+        ]
       }
     },
-    
-    "performance": {
-      "cache_size": "512MB",
-      "max_connections": 1000,
-      "connection_timeout": 30,
-      "read_timeout": 60,
-      "write_timeout": 60,
-      "batch_processing": {
-        "enabled": true,
-        "batch_size": 1000,
-        "flush_interval": 5
-      }
-    },
-    
-    "security": {
-      "tls_version": "1.3",
-      "cipher_suites": [
-        "TLS_AES_256_GCM_SHA384",
-        "TLS_CHACHA20_POLY1305_SHA256",
-        "TLS_AES_128_GCM_SHA256"
-      ],
-      "certificate_path": "/etc/vault/tls.crt",
-      "private_key_path": "/etc/vault/tls.key",
-      "ca_cert_path": "/etc/vault/ca.crt",
-      "client_auth_required": true,
-      "session_timeout": 3600,
-      "max_failed_attempts": 5,
-      "lockout_duration": 300
-    }
-  },
-  
-  "claudeops": {
     "haivemind": {
+      "enabled": true,
       "agent_id": "vault_security_agent",
-      "role": "security_vault",
+      "machine_id": "${HAIVEMIND_MACHINE_ID}",
+      "memory_server_url": "${HAIVEMIND_MEMORY_SERVER_URL}",
+      "api_token": "${HAIVEMIND_API_TOKEN}",
       "capabilities": [
         "credential_monitoring",
         "access_control",
-        "authentication_analysis", 
+        "authentication_analysis",
         "privilege_management",
         "security_compliance",
         "threat_detection",
         "anomaly_detection",
         "incident_response"
       ],
-      "specialization": "credential_security",
-      "broadcast_discoveries": true,
-      "accept_delegated_tasks": true,
-      "share_threat_intelligence": true,
-      "collaborate_on_incidents": true
-    }
-  },
-  
-  "logging": {
-    "level": "INFO",
-    "format": "json",
-    "audit_log": "/var/log/vault/audit.log",
-    "security_log": "/var/log/vault/security.log",
-    "compliance_log": "/var/log/vault/compliance.log",
-    "rotation": {
-      "enabled": true,
-      "max_size": "100MB",
-      "max_files": 10,
-      "compress": true
-    }
-  },
-  
-  "storage": {
-    "backend": "raft",
-    "raft_storage_path": "/opt/vault/data/raft",
-    "cluster_addr": "https://vault.company.com:8201",
-    "api_addr": "https://vault.company.com:8200",
-    "encryption": {
-      "enabled": true,
-      "key_derivation": "pbkdf2",
-      "iterations": 100000
+      "analytics": {
+        "enabled": true,
+        "behavioral_analysis": true,
+        "pattern_recognition": true,
+        "anomaly_detection": true,
+        "risk_assessment": true,
+        "threat_hunting": true,
+        "predictive_analysis": true,
+        "correlation_analysis": true,
+        "trend_analysis": true
+      },
+      "intelligence_sharing": {
+        "enabled": true,
+        "classification_level": "tlp_amber",
+        "share_anonymized_patterns": true,
+        "share_threat_indicators": true,
+        "collaborative_response": true
+      },
+      "threat_intel_feeds": [
+        {
+          "name": "internal_vault_intel",
+          "type": "internal",
+          "enabled": true
+        },
+        {
+          "name": "haivemind_collective_intel",
+          "type": "collective",
+          "enabled": true
+        },
+        {
+          "name": "mitre_attack",
+          "type": "external",
+          "enabled": true,
+          "url": "https://attack.mitre.org/",
+          "update_interval_hours": 24
+        },
+        {
+          "name": "cisa_known_exploited",
+          "type": "external",
+          "enabled": true,
+          "url": "https://www.cisa.gov/known-exploited-vulnerabilities-catalog",
+          "update_interval_hours": 6
+        }
+      ]
+    },
+    "security": {
+      "tls": {
+        "enabled": true,
+        "min_version": "1.2",
+        "cert_file": "/etc/ssl/certs/vault.crt",
+        "key_file": "/etc/ssl/private/vault.key",
+        "ca_file": "/etc/ssl/certs/ca-bundle.crt",
+        "verify_client": false,
+        "ciphers": [
+          "ECDHE-RSA-AES256-GCM-SHA384",
+          "ECDHE-RSA-AES128-GCM-SHA256",
+          "ECDHE-RSA-AES256-SHA384",
+          "ECDHE-RSA-AES128-SHA256"
+        ]
+      },
+      "headers": {
+        "strict_transport_security": "max-age=31536000; includeSubDomains",
+        "content_security_policy": "default-src 'self'",
+        "x_frame_options": "DENY",
+        "x_content_type_options": "nosniff",
+        "x_xss_protection": "1; mode=block",
+        "referrer_policy": "strict-origin-when-cross-origin"
+      },
+      "ip_whitelist": [
+        "10.0.0.0/8",
+        "172.16.0.0/12",
+        "192.168.0.0/16"
+      ],
+      "geo_blocking": {
+        "enabled": true,
+        "allowed_countries": ["US", "CA", "GB", "DE", "FR"],
+        "blocked_countries": ["CN", "RU", "KP", "IR"]
+      },
+      "intrusion_detection": {
+        "enabled": true,
+        "max_requests_per_minute": 1000,
+        "max_failed_auth_attempts": 5,
+        "block_duration_minutes": 60,
+        "suspicious_patterns": [
+          "sql_injection",
+          "xss_attempt",
+          "directory_traversal",
+          "command_injection"
+        ]
+      }
+    },
+    "performance": {
+      "caching": {
+        "enabled": true,
+        "ttl_seconds": 300,
+        "max_size_mb": 512,
+        "compression": true
+      },
+      "connection_pooling": {
+        "enabled": true,
+        "max_connections": 100,
+        "min_connections": 10,
+        "connection_timeout": 30,
+        "idle_timeout": 300
+      },
+      "optimization": {
+        "enable_gzip": true,
+        "enable_brotli": true,
+        "static_file_caching": true,
+        "database_query_optimization": true,
+        "redis_pipelining": true
+      }
     }
   }
 }
