@@ -1,0 +1,340 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  vault-postgres:
+    image: postgres:15-alpine
+    container_name: vault-postgres
+    environment:
+      POSTGRES_DB: vault
+      POSTGRES_USER: vault
+      POSTGRES_PASSWORD: ${VAULT_DB_PASSWORD:-secure_vault_password}
+      POSTGRES_INITDB_ARGS: "--auth-host=md5"
+    volumes:
+      - vault_postgres_data:/var/lib/postgresql/data
+      - ./config/vault_database_schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./ssl/postgres:/var/lib/postgresql/ssl:ro
+    ports:
+      - "5432:5432"
+    command: >
+      postgres
+      -c ssl=on
+      -c ssl_cert_file=/var/lib/postgresql/ssl/server.crt
+      -c ssl_key_file=/var/lib/postgresql/ssl/server.key
+      -c ssl_ca_file=/var/lib/postgresql/ssl/ca.crt
+      -c max_connections=200
+      -c shared_buffers=256MB
+      -c effective_cache_size=1GB
+      -c work_mem=4MB
+      -c maintenance_work_mem=64MB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c default_statistics_target=100
+      -c random_page_cost=1.1
+      -c log_statement=all
+      -c log_duration=on
+      -c log_min_duration_statement=1000
+    networks:
+      - vault-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vault -d vault"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis Cache
+  vault-redis:
+    image: redis:7-alpine
+    container_name: vault-redis
+    environment:
+      REDIS_PASSWORD: ${VAULT_REDIS_PASSWORD:-secure_redis_password}
+    volumes:
+      - vault_redis_data:/data
+      - ./config/redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - ./ssl/redis:/etc/ssl/redis:ro
+    ports:
+      - "6379:6379"
+    command: >
+      redis-server /usr/local/etc/redis/redis.conf
+      --requirepass ${VAULT_REDIS_PASSWORD:-secure_redis_password}
+      --maxmemory 2gb
+      --maxmemory-policy allkeys-lru
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+      --appendonly yes
+      --appendfsync everysec
+    networks:
+      - vault-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # hAIveMind Memory Server
+  haivemind-memory:
+    image: haivemind/memory-server:latest
+    container_name: haivemind-memory
+    environment:
+      - REDIS_URL=redis://vault-redis:6379
+      - REDIS_PASSWORD=${VAULT_REDIS_PASSWORD:-secure_redis_password}
+      - CHROMADB_PATH=/data/chroma
+      - JWT_SECRET=${HAIVEMIND_JWT_SECRET:-change-this-secret-key}
+    volumes:
+      - haivemind_chroma_data:/data/chroma
+      - ./config/config.json:/app/config/config.json:ro
+    ports:
+      - "8900:8900"
+    depends_on:
+      - vault-redis
+    networks:
+      - vault-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8900/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Vault API Server
+  vault-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.vault
+    container_name: vault-api
+    environment:
+      # Database Configuration
+      VAULT_DATABASE_URL: postgresql://vault:${VAULT_DB_PASSWORD:-secure_vault_password}@vault-postgres:5432/vault?sslmode=require
+      VAULT_REDIS_URL: redis://vault-redis:6379/0
+      VAULT_REDIS_PASSWORD: ${VAULT_REDIS_PASSWORD:-secure_redis_password}
+      
+      # Security Configuration
+      VAULT_JWT_SECRET: ${VAULT_JWT_SECRET:-your-256-bit-jwt-secret-key-here}
+      HAIVEMIND_JWT_SECRET: ${HAIVEMIND_JWT_SECRET:-change-this-secret-key}
+      HAIVEMIND_ADMIN_TOKEN: ${HAIVEMIND_ADMIN_TOKEN:-admin-token}
+      HAIVEMIND_AGENT_TOKEN: ${HAIVEMIND_AGENT_TOKEN:-agent-token}
+      
+      # LDAP Configuration (optional)
+      LDAP_SERVER: ${LDAP_SERVER:-}
+      LDAP_BIND_DN: ${LDAP_BIND_DN:-}
+      LDAP_BIND_PASSWORD: ${LDAP_BIND_PASSWORD:-}
+      LDAP_BASE_DN: ${LDAP_BASE_DN:-}
+      
+      # HSM Configuration (optional)
+      YUBIHSM2_AUTH_KEY: ${YUBIHSM2_AUTH_KEY:-}
+      
+      # hAIveMind Configuration
+      HAIVEMIND_MACHINE_ID: ${HAIVEMIND_MACHINE_ID:-vault-docker-01}
+      HAIVEMIND_MEMORY_SERVER_URL: http://haivemind-memory:8900
+      HAIVEMIND_API_TOKEN: ${HAIVEMIND_API_TOKEN:-api-token}
+      
+      # Application Configuration
+      VAULT_ENVIRONMENT: ${VAULT_ENVIRONMENT:-development}
+      VAULT_DEBUG: ${VAULT_DEBUG:-false}
+      VAULT_LOG_LEVEL: ${VAULT_LOG_LEVEL:-INFO}
+    volumes:
+      - ./config:/app/config:ro
+      - ./ssl:/app/ssl:ro
+      - vault_logs:/var/log/vault
+    ports:
+      - "8080:8080"
+      - "9090:9090"  # Metrics endpoint
+    depends_on:
+      - vault-postgres
+      - vault-redis
+      - haivemind-memory
+    networks:
+      - vault-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # NGINX Load Balancer / Reverse Proxy
+  vault-nginx:
+    image: nginx:alpine
+    container_name: vault-nginx
+    volumes:
+      - ./config/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl/nginx:/etc/ssl/nginx:ro
+      - vault_logs:/var/log/nginx
+    ports:
+      - "443:443"
+      - "80:80"
+    depends_on:
+      - vault-api
+    networks:
+      - vault-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Prometheus Monitoring
+  vault-prometheus:
+    image: prom/prometheus:latest
+    container_name: vault-prometheus
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - vault_prometheus_data:/prometheus
+    ports:
+      - "9091:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    depends_on:
+      - vault-api
+    networks:
+      - vault-network
+    restart: unless-stopped
+
+  # Grafana Dashboard
+  vault-grafana:
+    image: grafana/grafana:latest
+    container_name: vault-grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: false
+      GF_SERVER_ROOT_URL: https://grafana.vault.local
+    volumes:
+      - vault_grafana_data:/var/lib/grafana
+      - ./config/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - vault-prometheus
+    networks:
+      - vault-network
+    restart: unless-stopped
+
+  # Elasticsearch for Log Aggregation
+  vault-elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: vault-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+    volumes:
+      - vault_elasticsearch_data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+    networks:
+      - vault-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Kibana for Log Visualization
+  vault-kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
+    container_name: vault-kibana
+    environment:
+      ELASTICSEARCH_HOSTS: http://vault-elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      - vault-elasticsearch
+    networks:
+      - vault-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5601/api/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Filebeat for Log Shipping
+  vault-filebeat:
+    image: docker.elastic.co/beats/filebeat:8.11.0
+    container_name: vault-filebeat
+    user: root
+    volumes:
+      - ./config/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - vault_logs:/var/log/vault:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - vault-elasticsearch
+    networks:
+      - vault-network
+    restart: unless-stopped
+
+  # YubiHSM Connector (optional)
+  yubihsm-connector:
+    image: yubico/yubihsm-connector:latest
+    container_name: yubihsm-connector
+    ports:
+      - "12345:12345"
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+    networks:
+      - vault-network
+    restart: unless-stopped
+    profiles:
+      - hsm
+
+  # Backup Service
+  vault-backup:
+    build:
+      context: .
+      dockerfile: Dockerfile.backup
+    container_name: vault-backup
+    environment:
+      VAULT_DATABASE_URL: postgresql://vault:${VAULT_DB_PASSWORD:-secure_vault_password}@vault-postgres:5432/vault
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      BACKUP_S3_BUCKET: ${BACKUP_S3_BUCKET:-vault-backups}
+      BACKUP_SCHEDULE: ${BACKUP_SCHEDULE:-0 2 * * *}
+    volumes:
+      - vault_backups:/var/backups/vault
+      - ./config:/app/config:ro
+    depends_on:
+      - vault-postgres
+      - vault-redis
+    networks:
+      - vault-network
+    restart: unless-stopped
+    profiles:
+      - backup
+
+networks:
+  vault-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  vault_postgres_data:
+    driver: local
+  vault_redis_data:
+    driver: local
+  haivemind_chroma_data:
+    driver: local
+  vault_logs:
+    driver: local
+  vault_prometheus_data:
+    driver: local
+  vault_grafana_data:
+    driver: local
+  vault_elasticsearch_data:
+    driver: local
+  vault_backups:
+    driver: local

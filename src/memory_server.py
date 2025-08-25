@@ -59,6 +59,14 @@ except ImportError:
     INTERACTIVE_HELP_AVAILABLE = False
     logger.warning("Interactive help system not available - missing dependencies")
 
+# Import Advanced Rules System
+try:
+    from advanced_rules_mcp_tools import AdvancedRulesMCPTools
+    ADVANCED_RULES_AVAILABLE = True
+except ImportError:
+    ADVANCED_RULES_AVAILABLE = False
+    logger.warning("Advanced rules system not available - missing dependencies")
+
 # Logger already setup above
 
 class MemoryStorage:
@@ -2846,6 +2854,27 @@ class MemoryMCPServer:
                 logger.error(f"Failed to initialize Interactive help system: {e}")
                 self.interactive_help_tools = None
         
+        # Initialize Advanced Rules System if available
+        self.advanced_rules_tools = None
+        if ADVANCED_RULES_AVAILABLE:
+            try:
+                # Import the base rules engine
+                from rules_engine import RulesEngine
+                base_rules_engine = RulesEngine(
+                    db_path=self.config.get('rules_db_path', 'data/rules.db'),
+                    chroma_client=self.storage.chroma_client,
+                    redis_client=self.storage.redis_client,
+                    config=self.config
+                )
+                
+                self.advanced_rules_tools = AdvancedRulesMCPTools(
+                    self.storage, base_rules_engine, self.config
+                )
+                logger.info("🎯 Advanced Rules System initialized - Enterprise governance and templates active")
+            except Exception as e:
+                logger.error(f"Failed to initialize Advanced Rules System: {e}")
+                self.advanced_rules_tools = None
+        
         # Register tools
         self._register_tools()
     
@@ -3519,6 +3548,11 @@ class MemoryMCPServer:
             ]
             
             tools.extend(playbook_tools)
+            
+            # Add Advanced Rules System tools if available
+            if self.advanced_rules_tools:
+                advanced_rules_tools = self.advanced_rules_tools.get_tools()
+                tools.extend(advanced_rules_tools)
                     
             return tools
         
@@ -3821,6 +3855,47 @@ class MemoryMCPServer:
                         result = await self.playbook_auto_gen_tools.export_generated_playbooks(**arguments)
                     
                     return [TextContent(type="text", text=json.dumps(result, indent=2))]
+                
+                # ============ Advanced Rules System Handlers ============
+                elif self.advanced_rules_tools and name in [
+                    "create_advanced_rule", "evaluate_advanced_rules", "create_rule_template",
+                    "instantiate_template", "search_templates", "get_compliance_templates",
+                    "create_compliance_rule", "create_tenant", "request_rule_approval",
+                    "get_compliance_report", "deploy_specialized_rules", "get_specialized_rules",
+                    "get_rule_impact_analysis", "get_advanced_analytics"
+                ]:
+                    # Handle Advanced Rules System tools
+                    if name == "create_advanced_rule":
+                        result = await self.advanced_rules_tools.handle_create_advanced_rule(arguments)
+                    elif name == "evaluate_advanced_rules":
+                        result = await self.advanced_rules_tools.handle_evaluate_advanced_rules(arguments)
+                    elif name == "create_rule_template":
+                        result = await self.advanced_rules_tools.handle_create_rule_template(arguments)
+                    elif name == "instantiate_template":
+                        result = await self.advanced_rules_tools.handle_instantiate_template(arguments)
+                    elif name == "search_templates":
+                        result = await self.advanced_rules_tools.handle_search_templates(arguments)
+                    elif name == "get_compliance_templates":
+                        result = await self.advanced_rules_tools.handle_get_compliance_templates(arguments)
+                    elif name == "create_compliance_rule":
+                        result = await self.advanced_rules_tools.handle_create_compliance_rule(arguments)
+                    elif name == "create_tenant":
+                        result = await self.advanced_rules_tools.handle_create_tenant(arguments)
+                    elif name == "request_rule_approval":
+                        result = await self.advanced_rules_tools.handle_request_rule_approval(arguments)
+                    elif name == "get_compliance_report":
+                        result = await self.advanced_rules_tools.handle_get_compliance_report(arguments)
+                    elif name == "deploy_specialized_rules":
+                        result = await self.advanced_rules_tools.handle_deploy_specialized_rules(arguments)
+                    elif name == "get_specialized_rules":
+                        result = await self.advanced_rules_tools.handle_get_specialized_rules(arguments)
+                    elif name == "get_rule_impact_analysis":
+                        result = await self.advanced_rules_tools.handle_get_rule_impact_analysis(arguments)
+                    elif name == "get_advanced_analytics":
+                        result = await self.advanced_rules_tools.handle_get_advanced_analytics(arguments)
+                    
+                    # Return the result directly since advanced rules tools return TextContent
+                    return result if isinstance(result, list) else [TextContent(type="text", text=str(result))]
                 
                 else:
                     raise ValueError(f"Unknown tool: {name}")
