@@ -3895,6 +3895,9 @@ main "$@" """,
                     }
                 })
             
+            # Suppress MCP framework warnings about early requests  
+            logging.getLogger("root").setLevel(logging.ERROR)
+            
             # Run the server (SSE transport)
             self.mcp.run(transport="sse")
             
