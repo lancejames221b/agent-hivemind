@@ -32,6 +32,13 @@ try:
 except ImportError:
     CONFLUENCE_DASHBOARD_AVAILABLE = False
 
+# Import Help dashboard if available
+try:
+    from help_dashboard import add_help_dashboard_routes
+    HELP_DASHBOARD_AVAILABLE = True
+except ImportError:
+    HELP_DASHBOARD_AVAILABLE = False
+
 # Request/Response Models
 class LoginRequest(BaseModel):
     username: str
@@ -75,10 +82,12 @@ class ConfigDownloadRequest(BaseModel):
     format: str
 
 class DashboardServer:
-    def __init__(self, db_path: str = "database/haivemind.db"):
+    def __init__(self, db_path: str = "database/haivemind.db", storage=None, config=None):
         self.db = ControlDatabase(db_path)
         self.app = FastAPI(title="hAIveMind Control Dashboard", version="2.0.0")
         self.security = HTTPBearer(auto_error=False)
+        self.storage = storage
+        self.config = config
         
         # JWT configuration
         self.jwt_secret = os.environ.get('HAIVEMIND_JWT_SECRET', 'change-this-secret-key')
@@ -94,23 +103,34 @@ class DashboardServer:
         if CONFLUENCE_DASHBOARD_AVAILABLE:
             try:
                 # Load config for Confluence integration
-                config_path = Path("config/config.json")
-                if config_path.exists():
-                    with open(config_path, 'r') as f:
-                        config = json.load(f)
-                    
+                if not self.config:
+                    config_path = Path("config/config.json")
+                    if config_path.exists():
+                        with open(config_path, 'r') as f:
+                            self.config = json.load(f)
+                
+                if self.config:
                     self.confluence_dashboard = ConfluenceDashboard(
-                        config, self.db, None  # haivemind_storage will be set later
+                        self.config, self.db, self.storage
                     )
             except Exception as e:
                 print(f"Failed to initialize Confluence dashboard: {e}")
+        
+        # Initialize Help dashboard if available
+        self.help_dashboard = None
+        if HELP_DASHBOARD_AVAILABLE and self.storage and self.config:
+            try:
+                self.help_dashboard = add_help_dashboard_routes(self.app, self.storage, self.config)
+                print("🎯 Interactive help system dashboard initialized")
+            except Exception as e:
+                print(f"Failed to initialize Help dashboard: {e}")
         
         self.setup_routes()
         self.mount_static_files()
         # Lazy-init playbook engine (shell disabled by default)
         self.playbook_engine = PlaybookEngine(allow_unsafe_shell=False)
         # Memory storage for hAIveMind awareness (initialized lazily when needed)
-        self._memory_storage = None
+        self._memory_storage = storage
         # Configuration generator (initialized lazily when needed)
         self._config_generator = None
 
