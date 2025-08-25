@@ -1,0 +1,513 @@
+{
+  "scenarios": [
+    {
+      "id": "database-deadlock-resolution",
+      "title": "Database Deadlock Resolution",
+      "category": "incidents",
+      "complexity": "medium",
+      "duration": "2-4 hours",
+      "description": "High-frequency database deadlocks causing transaction failures",
+      "context": {
+        "system": "MySQL 8.0 cluster",
+        "symptoms": "Transaction timeouts, 15% error rate increase",
+        "impact": "User registration and payment processing affected",
+        "urgency": "high"
+      },
+      "command_sequence": [
+        {
+          "step": 1,
+          "command": "remember",
+          "args": "\"Database deadlock issue: MySQL cluster experiencing high deadlock frequency. 15% increase in transaction failures. Affects user registration and payment processing. Started 2025-01-24 14:30 UTC\" incidents --important --tags=\"mysql,deadlock,transactions,payments\"",
+          "purpose": "Document the incident immediately with key details"
+        },
+        {
+          "step": 2,
+          "command": "hv-broadcast",
+          "args": "\"Database deadlock issue affecting payments and user registration - investigating\" incident warning",
+          "purpose": "Alert the collective to the ongoing issue"
+        },
+        {
+          "step": 3,
+          "command": "hv-query",
+          "args": "\"mysql deadlock resolution transaction optimization\" incidents --recent=720",
+          "purpose": "Research similar past incidents and solutions"
+        },
+        {
+          "step": 4,
+          "command": "hv-delegate",
+          "args": "\"Analyze MySQL deadlock patterns and identify root cause - check transaction order and locking\" high database_ops,monitoring",
+          "purpose": "Assign investigation to database specialists"
+        },
+        {
+          "step": 5,
+          "command": "hv-status",
+          "args": "--agents",
+          "purpose": "Verify database specialists are available and responding"
+        },
+        {
+          "step": 6,
+          "command": "hv-query",
+          "args": "\"mysql transaction optimization deadlock prevention\" infrastructure --agent=mysql-specialist",
+          "purpose": "Get expert advice on deadlock prevention techniques"
+        },
+        {
+          "step": 7,
+          "command": "remember",
+          "args": "\"Deadlock root cause identified: Transaction order inconsistency in user registration flow. Payment processing and profile updates acquiring locks in different order. Solution: Standardize lock acquisition order across all transaction types\" incidents --tags=\"root-cause,mysql,deadlock,transaction-order\"",
+          "purpose": "Document the root cause analysis findings"
+        },
+        {
+          "step": 8,
+          "command": "hv-delegate",
+          "args": "\"Implement transaction order standardization to prevent deadlocks - update registration and payment flows\" high development,database_ops",
+          "purpose": "Assign implementation of the solution"
+        },
+        {
+          "step": 9,
+          "command": "hv-broadcast",
+          "args": "\"Database deadlock root cause identified - implementing transaction order fix\" incident info",
+          "purpose": "Update collective on progress"
+        },
+        {
+          "step": 10,
+          "command": "remember",
+          "args": "\"Deadlock resolution completed: Standardized transaction lock acquisition order. Deadlock rate reduced from 15% to <0.1%. Implementation: 1) Updated user registration to acquire user lock first, then profile lock 2) Modified payment processing to follow same order 3) Added deadlock monitoring alerts\" incidents --tags=\"resolution,mysql,deadlock,success\"",
+          "purpose": "Document successful resolution and implementation details"
+        }
+      ],
+      "success_metrics": {
+        "deadlock_rate": "< 0.1%",
+        "transaction_success_rate": "> 99.5%",
+        "resolution_time": "< 4 hours",
+        "user_impact": "minimal during fix implementation"
+      },
+      "lessons_learned": [
+        "Transaction order consistency is critical for deadlock prevention",
+        "Early monitoring and alerting enables faster resolution",
+        "Database specialists provide valuable optimization insights",
+        "Standardized procedures prevent recurring issues"
+      ]
+    },
+    {
+      "id": "elasticsearch-performance-optimization",
+      "title": "Elasticsearch Performance Crisis",
+      "category": "infrastructure",
+      "complexity": "high",
+      "duration": "4-8 hours",
+      "description": "Elasticsearch cluster performance degradation affecting search functionality",
+      "context": {
+        "system": "Elasticsearch 7.x cluster (3 nodes)",
+        "symptoms": "Query response time increased from 200ms to 3000ms",
+        "impact": "Search functionality unusable, user complaints increasing",
+        "urgency": "critical"
+      },
+      "command_sequence": [
+        {
+          "step": 1,
+          "command": "remember",
+          "args": "\"CRITICAL: Elasticsearch performance crisis. Query response time degraded from 200ms to 3000ms. Search functionality essentially unusable. User complaints flooding support. Cluster: elastic1-3, started degrading 2025-01-24 09:00 UTC\" infrastructure --important --tags=\"elasticsearch,performance,critical,search\"",
+          "purpose": "Document critical performance issue"
+        },
+        {
+          "step": 2,
+          "command": "hv-broadcast",
+          "args": "\"CRITICAL: Elasticsearch cluster performance crisis - search functionality degraded 15x\" infrastructure critical",
+          "purpose": "Alert all agents to critical infrastructure issue"
+        },
+        {
+          "step": 3,
+          "command": "hv-query",
+          "args": "\"elasticsearch performance degradation query optimization\" infrastructure --recent=2160",
+          "purpose": "Research similar performance issues and solutions"
+        },
+        {
+          "step": 4,
+          "command": "hv-delegate",
+          "args": "\"Emergency elasticsearch performance analysis - identify bottlenecks and resource constraints\" critical elasticsearch_ops,monitoring",
+          "purpose": "Assign urgent analysis to elasticsearch specialists"
+        },
+        {
+          "step": 5,
+          "command": "hv-delegate",
+          "args": "\"Analyze elasticsearch cluster resources - CPU, memory, disk I/O patterns\" critical infrastructure_management,monitoring",
+          "purpose": "Parallel analysis of infrastructure resources"
+        },
+        {
+          "step": 6,
+          "command": "hv-status",
+          "args": "--detailed",
+          "purpose": "Monitor specialist availability and response"
+        },
+        {
+          "step": 7,
+          "command": "hv-query",
+          "args": "\"elasticsearch JVM heap optimization query performance\" infrastructure --agent=elastic1-specialist",
+          "purpose": "Get expert guidance on JVM and query optimization"
+        },
+        {
+          "step": 8,
+          "command": "remember",
+          "args": "\"Performance analysis results: 1) JVM heap pressure causing excessive GC (95% heap usage) 2) Large aggregation queries without field data circuit breaker 3) Concurrent indexing during peak query times 4) No query caching enabled. Immediate actions needed: heap tuning, query optimization, indexing throttling\" infrastructure --tags=\"elasticsearch,analysis,jvm,heap,queries\"",
+          "purpose": "Document analysis findings and required actions"
+        },
+        {
+          "step": 9,
+          "command": "hv-delegate",
+          "args": "\"Implement immediate elasticsearch optimizations - increase heap size, enable query cache, throttle indexing\" critical elasticsearch_ops",
+          "purpose": "Assign immediate optimization implementation"
+        },
+        {
+          "step": 10,
+          "command": "hv-delegate",
+          "args": "\"Optimize problematic elasticsearch queries - add field data circuit breakers and query timeouts\" high elasticsearch_ops,development",
+          "purpose": "Assign query optimization work"
+        },
+        {
+          "step": 11,
+          "command": "hv-broadcast",
+          "args": "\"Elasticsearch optimizations in progress - heap tuning and query optimization underway\" infrastructure warning",
+          "purpose": "Update collective on optimization progress"
+        },
+        {
+          "step": 12,
+          "command": "remember",
+          "args": "\"Elasticsearch performance restoration SUCCESS: Query response time improved from 3000ms to 180ms (better than baseline). Optimizations: 1) Increased JVM heap from 4GB to 8GB 2) Enabled query result caching 3) Implemented field data circuit breaker 4) Added query timeout of 30s 5) Scheduled indexing during off-peak hours. User complaints stopped, search functionality fully restored\" infrastructure --tags=\"elasticsearch,success,optimization,performance\"",
+          "purpose": "Document successful resolution and all optimizations applied"
+        },
+        {
+          "step": 13,
+          "command": "hv-broadcast",
+          "args": "\"Elasticsearch performance crisis RESOLVED - search functionality restored and optimized\" infrastructure info",
+          "purpose": "Announce successful resolution to collective"
+        },
+        {
+          "step": 14,
+          "command": "remember",
+          "args": "\"Elasticsearch performance optimization runbook: 1) Monitor JVM heap usage (alert >80%) 2) Implement query result caching 3) Set field data circuit breakers 4) Add query timeouts 5) Schedule heavy indexing off-peak 6) Regular performance baseline monitoring 7) Capacity planning for query load growth\" runbooks --tags=\"elasticsearch,performance,optimization,monitoring\"",
+          "purpose": "Create reusable runbook for future performance issues"
+        }
+      ],
+      "success_metrics": {
+        "query_response_time": "< 200ms (improved from 3000ms)",
+        "search_availability": "100%",
+        "user_complaints": "0 (down from 50+ per hour)",
+        "cluster_stability": "stable with monitoring"
+      },
+      "prevention_measures": [
+        "JVM heap monitoring with 80% threshold alerts",
+        "Query performance monitoring and alerting",
+        "Scheduled indexing during off-peak hours",
+        "Regular capacity planning reviews",
+        "Query optimization guidelines for developers"
+      ]
+    },
+    {
+      "id": "security-breach-response",
+      "title": "Data Breach Incident Response",
+      "category": "security",
+      "complexity": "critical",
+      "duration": "6-12 hours",
+      "description": "Suspected data breach with unauthorized access to user database",
+      "context": {
+        "system": "User authentication and profile database",
+        "symptoms": "Unusual database queries, suspicious admin login activity",
+        "impact": "Potential exposure of 50,000 user records",
+        "urgency": "critical"
+      },
+      "command_sequence": [
+        {
+          "step": 1,
+          "command": "remember",
+          "args": "\"SECURITY BREACH: Suspected unauthorized access to user database. Unusual queries detected accessing user profiles, suspicious admin login from unknown IP 203.45.67.89. Potential exposure: 50,000 user records including emails, hashed passwords, profile data. Detected: 2025-01-24 16:45 UTC\" security --important --tags=\"data-breach,unauthorized-access,user-database,critical\"",
+          "purpose": "Immediately document security incident with all known details"
+        },
+        {
+          "step": 2,
+          "command": "hv-broadcast",
+          "args": "\"CRITICAL SECURITY INCIDENT: Suspected data breach - unauthorized database access detected\" security critical",
+          "purpose": "Alert all agents to critical security incident"
+        },
+        {
+          "step": 3,
+          "command": "hv-delegate",
+          "args": "\"IMMEDIATE: Isolate compromised systems and block suspicious IP addresses - prevent further access\" critical security_analysis,incident_response",
+          "purpose": "Immediate containment to prevent further damage"
+        },
+        {
+          "step": 4,
+          "command": "hv-delegate",
+          "args": "\"Begin forensic analysis of database access logs and admin login activity\" critical security_analysis,monitoring",
+          "purpose": "Start forensic investigation in parallel with containment"
+        },
+        {
+          "step": 5,
+          "command": "hv-query",
+          "args": "\"data breach response procedures containment forensics\" security --recent=4320",
+          "purpose": "Research established breach response procedures"
+        },
+        {
+          "step": 6,
+          "command": "hv-status",
+          "args": "--agents",
+          "purpose": "Ensure security team is fully available for incident response"
+        },
+        {
+          "step": 7,
+          "command": "remember",
+          "args": "\"Containment actions completed: 1) Blocked IP 203.45.67.89 and related subnet 2) Disabled compromised admin account 3) Isolated database server from external access 4) Enabled enhanced logging 5) Activated incident response team. Forensic analysis in progress\" security --tags=\"containment,ip-blocking,account-disabled,isolation\"",
+          "purpose": "Document containment actions taken"
+        },
+        {
+          "step": 8,
+          "command": "hv-delegate",
+          "args": "\"Notify legal and compliance teams of potential data breach - prepare regulatory notifications\" high security_analysis,compliance",
+          "purpose": "Ensure legal and regulatory requirements are addressed"
+        },
+        {
+          "step": 9,
+          "command": "hv-query",
+          "args": "\"GDPR breach notification requirements timeline\" security --agent=security-analyst",
+          "purpose": "Get specific guidance on regulatory notification requirements"
+        },
+        {
+          "step": 10,
+          "command": "remember",
+          "args": "\"Forensic analysis results: Breach confirmed - compromised admin credentials used to access user database. Attack timeline: 2025-01-24 14:30-16:45 UTC. Data accessed: 47,832 user records (emails, hashed passwords, profile info). NO payment data accessed. Attack vector: Credential stuffing attack on admin panel. Compromised account: admin_backup (unused for 6 months)\" security --tags=\"forensic-analysis,confirmed-breach,credential-stuffing,timeline\"",
+          "purpose": "Document detailed forensic findings"
+        },
+        {
+          "step": 11,
+          "command": "hv-delegate",
+          "args": "\"Prepare user notification communications and password reset procedures\" high security_analysis,development",
+          "purpose": "Prepare user communications and remediation"
+        },
+        {
+          "step": 12,
+          "command": "hv-broadcast",
+          "args": "\"Data breach confirmed - 47,832 user records accessed - containment successful, user notifications preparing\" security critical",
+          "purpose": "Update collective on confirmed breach and response status"
+        },
+        {
+          "step": 13,
+          "command": "remember",
+          "args": "\"Breach response actions: 1) All affected users notified via email 2) Forced password reset for all users 3) Enhanced MFA implemented 4) Unused admin accounts disabled 5) Admin panel IP restrictions implemented 6) Security monitoring enhanced 7) Regulatory notifications filed within 72 hours. NO payment data compromised. Incident contained within 2 hours of detection\" security --tags=\"response-actions,user-notification,password-reset,mfa,regulatory-compliance\"",
+          "purpose": "Document comprehensive response actions"
+        },
+        {
+          "step": 14,
+          "command": "remember",
+          "args": "\"Data breach lessons learned: 1) Unused admin accounts are security risks 2) Admin panel needs stronger access controls 3) Database access monitoring critical for early detection 4) Incident response team coordination worked well 5) User communication templates need updating. Improvements: Regular admin account audits, enhanced admin panel security, improved monitoring alerts\" security --tags=\"lessons-learned,admin-security,monitoring,incident-response\"",
+          "purpose": "Document lessons learned and improvements"
+        },
+        {
+          "step": 15,
+          "command": "hv-broadcast",
+          "args": "\"Data breach incident response completed - enhanced security measures implemented\" security info",
+          "purpose": "Announce completion of incident response"
+        }
+      ],
+      "success_metrics": {
+        "containment_time": "< 2 hours from detection",
+        "user_notification": "100% within 24 hours",
+        "regulatory_compliance": "notifications filed within 72 hours",
+        "system_security": "enhanced with additional controls"
+      },
+      "regulatory_requirements": [
+        "GDPR breach notification within 72 hours",
+        "User notification within reasonable timeframe",
+        "Detailed incident documentation",
+        "Evidence preservation for investigation",
+        "Security improvement implementation"
+      ]
+    },
+    {
+      "id": "microservices-deployment",
+      "title": "Complex Microservices Deployment",
+      "category": "deployments",
+      "complexity": "high",
+      "duration": "3-6 hours",
+      "description": "Coordinated deployment of 8 microservices with database migrations",
+      "context": {
+        "system": "E-commerce platform microservices",
+        "changes": "Payment processing overhaul, user service updates, new inventory service",
+        "requirements": "Zero downtime, rollback capability, performance validation",
+        "urgency": "high"
+      },
+      "command_sequence": [
+        {
+          "step": 1,
+          "command": "remember",
+          "args": "\"Major deployment v3.2.0: 8 microservices update including payment processing overhaul, user service enhancements, new inventory service. Database migrations required. Zero-downtime requirement. Services: payment-api, user-service, inventory-service, order-service, notification-service, auth-service, catalog-service, shipping-service\" deployments --important --tags=\"v3.2.0,microservices,payment,zero-downtime\"",
+          "purpose": "Document comprehensive deployment plan"
+        },
+        {
+          "step": 2,
+          "command": "hv-sync",
+          "args": "force --verbose",
+          "purpose": "Ensure all agents are synchronized before major deployment"
+        },
+        {
+          "step": 3,
+          "command": "hv-status",
+          "args": "--agents --detailed",
+          "purpose": "Verify all required agents are available for coordination"
+        },
+        {
+          "step": 4,
+          "command": "hv-query",
+          "args": "\"microservices deployment coordination zero downtime\" deployments --recent=2160",
+          "purpose": "Research best practices for complex microservices deployments"
+        },
+        {
+          "step": 5,
+          "command": "hv-delegate",
+          "args": "\"Prepare database migrations for payment and inventory services - test on staging first\" high database_ops,development",
+          "purpose": "Prepare critical database changes"
+        },
+        {
+          "step": 6,
+          "command": "hv-delegate",
+          "args": "\"Configure load balancer rules for new service routing and health checks\" high infrastructure_management,networking",
+          "purpose": "Prepare load balancer for new service configurations"
+        },
+        {
+          "step": 7,
+          "command": "hv-delegate",
+          "args": "\"Set up comprehensive deployment monitoring and rollback procedures\" high monitoring,deployment",
+          "purpose": "Ensure monitoring and rollback capabilities are ready"
+        },
+        {
+          "step": 8,
+          "command": "hv-broadcast",
+          "args": "\"Major deployment v3.2.0 preparation in progress - 8 microservices coordination\" deployments info",
+          "purpose": "Inform collective of deployment preparation"
+        },
+        {
+          "step": 9,
+          "command": "remember",
+          "args": "\"Deployment preparation completed: 1) Database migrations tested and ready 2) Load balancer rules configured 3) Blue-green deployment pipeline prepared 4) Monitoring dashboards set up 5) Rollback procedures verified 6) Service dependency mapping confirmed. Ready for production deployment\" deployments --tags=\"v3.2.0,preparation,ready\"",
+          "purpose": "Document completion of preparation phase"
+        },
+        {
+          "step": 10,
+          "command": "hv-broadcast",
+          "args": "\"Starting deployment v3.2.0 - 8 microservices coordinated deployment beginning\" deployments warning",
+          "purpose": "Announce start of actual deployment"
+        },
+        {
+          "step": 11,
+          "command": "hv-delegate",
+          "args": "\"Execute database migrations in correct dependency order - coordinate with service deployments\" critical database_ops",
+          "purpose": "Execute database changes first"
+        },
+        {
+          "step": 12,
+          "command": "hv-delegate",
+          "args": "\"Deploy core services (auth, user) using blue-green strategy - coordinate with load balancer\" critical deployment,infrastructure_management",
+          "purpose": "Deploy foundational services first"
+        },
+        {
+          "step": 13,
+          "command": "hv-delegate",
+          "args": "\"Deploy business services (payment, inventory, order) in dependency order\" critical deployment,infrastructure_management",
+          "purpose": "Deploy business logic services"
+        },
+        {
+          "step": 14,
+          "command": "hv-delegate",
+          "args": "\"Deploy supporting services (notification, catalog, shipping) and update load balancer routing\" high deployment,infrastructure_management",
+          "purpose": "Deploy remaining services and update routing"
+        },
+        {
+          "step": 15,
+          "command": "hv-status",
+          "args": "--detailed",
+          "purpose": "Monitor deployment progress across all agents"
+        },
+        {
+          "step": 16,
+          "command": "hv-delegate",
+          "args": "\"Execute comprehensive deployment validation - all services, integrations, and user flows\" high testing,monitoring",
+          "purpose": "Validate entire system functionality"
+        },
+        {
+          "step": 17,
+          "command": "remember",
+          "args": "\"Deployment v3.2.0 SUCCESS: All 8 microservices deployed successfully with zero downtime. Total deployment time: 4.5 hours. Performance improvements: Payment processing 40% faster, inventory updates real-time, user experience enhanced. No rollback required. All validation tests passed\" deployments --tags=\"v3.2.0,success,zero-downtime,performance\"",
+          "purpose": "Document successful deployment outcome"
+        },
+        {
+          "step": 18,
+          "command": "hv-broadcast",
+          "args": "\"Deployment v3.2.0 completed successfully - all microservices operational with improved performance\" deployments info",
+          "purpose": "Announce successful completion to collective"
+        },
+        {
+          "step": 19,
+          "command": "remember",
+          "args": "\"Microservices deployment coordination template: 1) Comprehensive planning and dependency mapping 2) Agent synchronization before start 3) Parallel preparation tasks 4) Sequential deployment by dependency order 5) Continuous monitoring and validation 6) Clear rollback procedures 7) Performance validation post-deployment. Key success factors: thorough preparation, agent coordination, dependency awareness\" runbooks --tags=\"microservices,deployment,coordination,template\"",
+          "purpose": "Create reusable template for future complex deployments"
+        }
+      ],
+      "success_metrics": {
+        "downtime": "0 minutes",
+        "deployment_time": "< 6 hours",
+        "service_availability": "100%",
+        "performance_improvement": "> 20%",
+        "rollback_required": "false"
+      },
+      "deployment_order": [
+        "Database migrations",
+        "Core services (auth, user)",
+        "Business services (payment, inventory, order)",
+        "Supporting services (notification, catalog, shipping)",
+        "Load balancer routing updates",
+        "Validation and monitoring"
+      ]
+    }
+  ],
+  "scenario_categories": {
+    "incidents": {
+      "description": "Problem resolution and troubleshooting scenarios",
+      "typical_duration": "1-6 hours",
+      "key_commands": ["remember", "hv-broadcast", "hv-query", "hv-delegate"]
+    },
+    "infrastructure": {
+      "description": "System optimization and maintenance scenarios",
+      "typical_duration": "2-8 hours",
+      "key_commands": ["hv-status", "hv-delegate", "remember", "hv-query"]
+    },
+    "security": {
+      "description": "Security incident response and compliance scenarios",
+      "typical_duration": "2-12 hours",
+      "key_commands": ["remember", "hv-broadcast", "hv-delegate", "hv-query"]
+    },
+    "deployments": {
+      "description": "Application and service deployment scenarios",
+      "typical_duration": "1-6 hours",
+      "key_commands": ["hv-sync", "hv-delegate", "hv-status", "remember"]
+    }
+  },
+  "complexity_levels": {
+    "low": {
+      "description": "Simple, single-system issues",
+      "duration": "< 2 hours",
+      "agents_involved": "1-2"
+    },
+    "medium": {
+      "description": "Multi-system coordination required",
+      "duration": "2-6 hours",
+      "agents_involved": "2-4"
+    },
+    "high": {
+      "description": "Complex multi-agent coordination",
+      "duration": "4-12 hours",
+      "agents_involved": "4-8"
+    },
+    "critical": {
+      "description": "Emergency response requiring all available resources",
+      "duration": "Variable",
+      "agents_involved": "All available"
+    }
+  }
+}

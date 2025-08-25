@@ -1,0 +1,160 @@
+name: "Performance Optimization Workflow"
+description: "Systematic approach to diagnosing and resolving performance issues"
+category: "infrastructure"
+estimated_duration: "4-12 hours"
+priority: "high"
+
+phases:
+  - name: "Problem Identification"
+    duration: "30-60 minutes"
+    steps:
+      - command: "remember"
+        description: "Document performance issue details"
+        template: 'remember "Performance issue: [SYMPTOMS] - [METRICS] - [TIMEFRAME] - [USER_IMPACT]" incidents --important --tags="performance,[COMPONENT],[METRIC_TYPE]"'
+        
+      - command: "hv-broadcast"
+        description: "Alert team to performance issue"
+        template: 'hv-broadcast "Performance degradation detected in [COMPONENT] - [IMPACT_SUMMARY]" incident [SEVERITY]'
+        
+      - command: "hv-query"
+        description: "Research similar performance issues"
+        template: 'hv-query "[COMPONENT] performance [SYMPTOMS]" incidents --recent=2160'
+
+  - name: "Data Collection"
+    duration: "1-2 hours"
+    steps:
+      - command: "hv-delegate"
+        description: "Collect performance metrics"
+        template: 'hv-delegate "Collect comprehensive performance metrics for [COMPONENT] - [SPECIFIC_METRICS]" high monitoring,[COMPONENT_CAPABILITY]'
+        
+      - command: "hv-delegate"
+        description: "Analyze system resources"
+        template: 'hv-delegate "Analyze system resource utilization - CPU, memory, disk, network for [AFFECTED_SYSTEMS]" high infrastructure_management,monitoring'
+        
+      - command: "hv-query"
+        description: "Get baseline performance data"
+        template: 'hv-query "[COMPONENT] baseline performance metrics" monitoring --recent=720'
+
+  - name: "Root Cause Analysis"
+    duration: "2-4 hours"
+    steps:
+      - command: "hv-status"
+        description: "Check specialist availability"
+        template: 'hv-status --agents'
+        
+      - command: "hv-delegate"
+        description: "Perform database analysis if applicable"
+        template: 'hv-delegate "Analyze database performance - slow queries, locks, connection pools" high database_ops,monitoring'
+        
+      - command: "hv-delegate"
+        description: "Analyze application performance"
+        template: 'hv-delegate "Profile application performance - identify bottlenecks and resource usage" high development,monitoring'
+        
+      - command: "hv-query"
+        description: "Research optimization techniques"
+        template: 'hv-query "[COMPONENT] optimization techniques [SPECIFIC_ISSUE]" infrastructure --agent=[SPECIALIST_AGENT]'
+
+  - name: "Solution Implementation"
+    duration: "2-6 hours"
+    steps:
+      - command: "remember"
+        description: "Document root cause findings"
+        template: 'remember "Root cause analysis: [ROOT_CAUSE] - Contributing factors: [FACTORS] - Proposed solutions: [SOLUTIONS]" incidents --tags="root-cause,performance,[COMPONENT]"'
+        
+      - command: "hv-delegate"
+        description: "Implement performance optimizations"
+        template: 'hv-delegate "Implement performance optimizations for [COMPONENT] - [OPTIMIZATION_PLAN]" high [COMPONENT_CAPABILITY],development'
+        
+      - command: "hv-delegate"
+        description: "Set up enhanced monitoring"
+        template: 'hv-delegate "Configure enhanced performance monitoring for [COMPONENT] - prevent future issues" medium monitoring,infrastructure_management'
+
+  - name: "Validation and Documentation"
+    duration: "1-2 hours"
+    steps:
+      - command: "hv-delegate"
+        description: "Validate performance improvements"
+        template: 'hv-delegate "Validate performance improvements - measure before/after metrics" medium monitoring,testing'
+        
+      - command: "remember"
+        description: "Document optimization results"
+        template: 'remember "Performance optimization results: [IMPROVEMENTS] - Metrics: [BEFORE_AFTER] - Implementation: [WHAT_WAS_DONE]" infrastructure --tags="optimization,results,[COMPONENT]"'
+        
+      - command: "hv-broadcast"
+        description: "Announce performance improvements"
+        template: 'hv-broadcast "Performance optimization completed for [COMPONENT] - [IMPROVEMENT_SUMMARY]" infrastructure info'
+        
+      - command: "remember"
+        description: "Store optimization procedures"
+        template: 'remember "Performance optimization procedures for [COMPONENT]: [STEP_BY_STEP_PROCESS]" runbooks --tags="performance,optimization,[COMPONENT]"'
+
+variables:
+  COMPONENT:
+    description: "System component with performance issues"
+    examples: ["database", "api", "web-frontend", "elasticsearch", "cache"]
+    
+  SYMPTOMS:
+    description: "Observable performance symptoms"
+    examples: ["slow response times", "high CPU usage", "memory leaks", "timeout errors"]
+    
+  METRICS:
+    description: "Specific performance metrics"
+    examples: ["response time 2000ms", "CPU 95%", "memory usage 8GB", "error rate 15%"]
+    
+  SEVERITY:
+    description: "Issue severity level"
+    examples: ["critical", "warning", "info"]
+    
+  COMPONENT_CAPABILITY:
+    description: "Agent capability for the component"
+    examples: ["database_ops", "elasticsearch_ops", "development", "infrastructure_management"]
+    
+  SPECIALIST_AGENT:
+    description: "Specialist agent for the component"
+    examples: ["mysql-specialist", "elastic1-specialist", "redis-specialist"]
+
+success_criteria:
+  - "Root cause identified and documented"
+  - "Performance improvements measurable (>20% improvement)"
+  - "Enhanced monitoring in place"
+  - "Optimization procedures documented"
+  - "No regression in other system components"
+  - "User experience improved"
+
+monitoring_metrics:
+  - "Response time percentiles (p50, p95, p99)"
+  - "Throughput (requests/second)"
+  - "Error rates"
+  - "Resource utilization (CPU, memory, disk)"
+  - "Database query performance"
+  - "Cache hit rates"
+
+common_optimizations:
+  database:
+    - "Query optimization and indexing"
+    - "Connection pool tuning"
+    - "Caching strategies"
+    - "Database configuration tuning"
+    
+  api:
+    - "Response caching"
+    - "Database query optimization"
+    - "Async processing"
+    - "Rate limiting"
+    
+  elasticsearch:
+    - "Query optimization"
+    - "Index lifecycle management"
+    - "JVM heap tuning"
+    - "Shard optimization"
+    
+  web-frontend:
+    - "Asset optimization"
+    - "CDN implementation"
+    - "Code splitting"
+    - "Caching strategies"
+
+related_workflows:
+  - "capacity-planning.yaml"
+  - "monitoring-setup.yaml"
+  - "database-optimization.yaml"

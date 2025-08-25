@@ -1,0 +1,188 @@
+name: "Deployment Coordination Workflow"
+description: "Multi-service deployment with zero-downtime requirements"
+category: "deployments"
+estimated_duration: "2-6 hours"
+priority: "high"
+
+phases:
+  - name: "Pre-Deployment Preparation"
+    duration: "1-2 hours"
+    steps:
+      - command: "remember"
+        description: "Document deployment plan"
+        template: 'remember "Deployment [VERSION]: [SERVICES] - [CHANGES] - [REQUIREMENTS] - [ROLLBACK_PLAN]" deployments --important --tags="[VERSION],[DEPLOYMENT_TYPE],planning"'
+        
+      - command: "hv-sync"
+        description: "Ensure all agents are synchronized"
+        template: 'hv-sync force --verbose'
+        
+      - command: "hv-status"
+        description: "Verify all required agents are available"
+        template: 'hv-status --agents --detailed'
+        
+      - command: "hv-query"
+        description: "Review similar deployment experiences"
+        template: 'hv-query "[DEPLOYMENT_TYPE] deployment [SERVICES]" deployments --recent=2160'
+
+  - name: "Preparation Tasks"
+    duration: "30-60 minutes"
+    parallel: true
+    steps:
+      - command: "hv-delegate"
+        description: "Prepare database migrations"
+        template: 'hv-delegate "Prepare and test database migrations for [VERSION] - validate on staging" high database_ops,development'
+        
+      - command: "hv-delegate"
+        description: "Configure load balancer rules"
+        template: 'hv-delegate "Configure load balancer rules for [SERVICES] deployment - prepare for traffic switching" high infrastructure_management,networking'
+        
+      - command: "hv-delegate"
+        description: "Prepare monitoring and health checks"
+        template: 'hv-delegate "Set up deployment monitoring and health checks for [SERVICES]" high monitoring,deployment'
+        
+      - command: "hv-delegate"
+        description: "Prepare cache warming scripts"
+        template: 'hv-delegate "Prepare cache warming and data migration scripts" medium caching,development'
+
+  - name: "Deployment Execution"
+    duration: "30-90 minutes"
+    steps:
+      - command: "hv-broadcast"
+        description: "Announce deployment start"
+        template: 'hv-broadcast "Starting deployment [VERSION] - [SERVICES] - estimated duration [DURATION]" deployments warning'
+        
+      - command: "hv-delegate"
+        description: "Execute database migrations"
+        template: 'hv-delegate "Execute database migrations for [VERSION] - coordinate with application deployment" critical database_ops'
+        
+      - command: "hv-status"
+        description: "Monitor database migration progress"
+        template: 'hv-status --agents'
+        
+      - command: "hv-delegate"
+        description: "Deploy services in sequence"
+        template: 'hv-delegate "Deploy [SERVICES] using [DEPLOYMENT_STRATEGY] - coordinate with load balancer updates" critical deployment,infrastructure_management'
+        
+      - command: "hv-delegate"
+        description: "Update load balancer routing"
+        template: 'hv-delegate "Update load balancer routing to new service versions - implement gradual traffic shift" critical infrastructure_management,networking'
+
+  - name: "Validation and Monitoring"
+    duration: "30-60 minutes"
+    steps:
+      - command: "hv-delegate"
+        description: "Execute comprehensive validation"
+        template: 'hv-delegate "Perform comprehensive deployment validation - all services, integrations, and user flows" high testing,monitoring'
+        
+      - command: "hv-delegate"
+        description: "Execute cache warming"
+        template: 'hv-delegate "Execute cache warming and data validation procedures" medium caching,monitoring'
+        
+      - command: "hv-status"
+        description: "Monitor deployment health"
+        template: 'hv-status --detailed'
+        
+      - command: "hv-query"
+        description: "Check for any deployment issues"
+        template: 'hv-query "deployment validation [SERVICES] health check" monitoring --recent=1'
+
+  - name: "Completion and Documentation"
+    duration: "15-30 minutes"
+    steps:
+      - command: "remember"
+        description: "Document deployment results"
+        template: 'remember "Deployment [VERSION] completed: [RESULTS] - Duration: [ACTUAL_DURATION] - Issues: [ISSUES] - Performance: [PERFORMANCE_IMPACT]" deployments --tags="[VERSION],results,[DEPLOYMENT_TYPE]"'
+        
+      - command: "hv-broadcast"
+        description: "Announce successful deployment"
+        template: 'hv-broadcast "Deployment [VERSION] completed successfully - [SUMMARY] - all services operational" deployments info'
+        
+      - command: "remember"
+        description: "Store deployment lessons learned"
+        template: 'remember "Deployment [VERSION] lessons learned: [LESSONS] - Improvements for next time: [IMPROVEMENTS]" deployments --tags="lessons-learned,[VERSION]"'
+
+rollback_procedure:
+  - name: "Rollback Execution"
+    trigger: "If validation fails or critical issues detected"
+    steps:
+      - command: "hv-broadcast"
+        description: "Announce rollback initiation"
+        template: 'hv-broadcast "Initiating rollback for deployment [VERSION] - [REASON]" deployments critical'
+        
+      - command: "hv-delegate"
+        description: "Execute service rollback"
+        template: 'hv-delegate "Rollback [SERVICES] to previous version - coordinate with load balancer" critical deployment,infrastructure_management'
+        
+      - command: "hv-delegate"
+        description: "Rollback database if needed"
+        template: 'hv-delegate "Execute database rollback procedures if required" critical database_ops'
+        
+      - command: "remember"
+        description: "Document rollback reasons"
+        template: 'remember "Deployment [VERSION] rolled back: [REASON] - [ROLLBACK_ACTIONS] - [LESSONS_LEARNED]" deployments --important --tags="rollback,[VERSION]"'
+
+variables:
+  VERSION:
+    description: "Deployment version identifier"
+    examples: ["v2.4.0", "v1.3.2", "hotfix-auth-2025-01-24"]
+    
+  SERVICES:
+    description: "Services being deployed"
+    examples: ["user-service, auth-service", "payment-api", "all microservices"]
+    
+  DEPLOYMENT_TYPE:
+    description: "Type of deployment"
+    examples: ["microservices", "monolith", "hotfix", "major-release"]
+    
+  DEPLOYMENT_STRATEGY:
+    description: "Deployment strategy"
+    examples: ["blue-green", "rolling", "canary", "recreate"]
+    
+  CHANGES:
+    description: "Summary of changes being deployed"
+    
+  REQUIREMENTS:
+    description: "Special requirements for this deployment"
+    examples: ["zero-downtime", "database migration", "cache warming"]
+    
+  DURATION:
+    description: "Estimated deployment duration"
+    examples: ["45 minutes", "2 hours", "30 minutes"]
+
+success_criteria:
+  - "All services deployed successfully"
+  - "Zero or minimal downtime achieved"
+  - "All health checks passing"
+  - "Performance metrics within acceptable range"
+  - "No critical errors in logs"
+  - "User experience unaffected"
+
+pre_deployment_checklist:
+  - "All agents synchronized and available"
+  - "Database migrations tested on staging"
+  - "Load balancer rules configured"
+  - "Monitoring and alerting set up"
+  - "Rollback procedures verified"
+  - "Team communication channels active"
+
+post_deployment_checklist:
+  - "All services responding correctly"
+  - "Database migrations completed successfully"
+  - "Cache warming completed"
+  - "Performance metrics stable"
+  - "Error rates within normal range"
+  - "User acceptance testing passed"
+
+common_issues:
+  - "Database migration timeout"
+  - "Service dependency conflicts"
+  - "Load balancer configuration errors"
+  - "Cache invalidation issues"
+  - "Network connectivity problems"
+  - "Resource constraint violations"
+
+related_workflows:
+  - "database-migration.yaml"
+  - "load-balancer-configuration.yaml"
+  - "monitoring-setup.yaml"
+  - "rollback-procedures.yaml"

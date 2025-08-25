@@ -1,0 +1,117 @@
+name: "Security Incident Response Workflow"
+description: "Comprehensive template for handling security incidents with hAIveMind coordination"
+category: "security"
+estimated_duration: "2-8 hours"
+priority: "critical"
+
+phases:
+  - name: "Initial Response"
+    duration: "15-30 minutes"
+    steps:
+      - command: "remember"
+        description: "Document incident details immediately"
+        template: 'remember "Security incident: [DESCRIPTION] - [IMPACT] - [TIMEFRAME] - [INITIAL_FINDINGS]" security --important --tags="[INCIDENT_TYPE],[AFFECTED_SYSTEMS],[SEVERITY]"'
+        
+      - command: "hv-broadcast"
+        description: "Alert all agents to security incident"
+        template: 'hv-broadcast "[INCIDENT_SUMMARY] - immediate response required" security critical'
+        
+      - command: "hv-query"
+        description: "Check for similar past incidents"
+        template: 'hv-query "[INCIDENT_TYPE] [KEY_INDICATORS]" security --recent=2160'
+
+  - name: "Containment"
+    duration: "30-60 minutes"
+    steps:
+      - command: "hv-delegate"
+        description: "Implement immediate containment measures"
+        template: 'hv-delegate "Implement immediate containment for [INCIDENT_TYPE] - [SPECIFIC_ACTIONS]" critical security_analysis,incident_response'
+        
+      - command: "hv-status"
+        description: "Verify security team availability"
+        template: 'hv-status --agents'
+        
+      - command: "hv-delegate"
+        description: "Begin forensic analysis"
+        template: 'hv-delegate "Perform forensic analysis of [INCIDENT_TYPE] - identify scope and impact" high security_analysis,monitoring'
+
+  - name: "Investigation"
+    duration: "1-4 hours"
+    steps:
+      - command: "hv-query"
+        description: "Research containment procedures"
+        template: 'hv-query "[INCIDENT_TYPE] containment procedures" security --agent=security-analyst'
+        
+      - command: "remember"
+        description: "Document containment actions"
+        template: 'remember "Containment actions taken: [ACTIONS_LIST] - [RESULTS] - [TIMELINE]" security --tags="containment,[INCIDENT_TYPE]"'
+        
+      - command: "hv-status"
+        description: "Monitor investigation progress"
+        template: 'hv-status --detailed'
+
+  - name: "Resolution"
+    duration: "1-3 hours"
+    steps:
+      - command: "remember"
+        description: "Document root cause and resolution"
+        template: 'remember "Root cause identified: [ROOT_CAUSE] - Resolution: [RESOLUTION_STEPS] - Impact: [IMPACT_ASSESSMENT]" security --tags="root-cause,[INCIDENT_TYPE],resolution"'
+        
+      - command: "hv-delegate"
+        description: "Implement long-term fixes"
+        template: 'hv-delegate "Implement security improvements based on [INCIDENT_TYPE] findings - [IMPROVEMENTS]" medium security_analysis,development'
+        
+      - command: "hv-broadcast"
+        description: "Announce resolution"
+        template: 'hv-broadcast "[INCIDENT_TYPE] resolved - [BRIEF_RESOLUTION] - enhanced security measures implemented" security info'
+
+  - name: "Post-Incident"
+    duration: "30-60 minutes"
+    steps:
+      - command: "remember"
+        description: "Document lessons learned"
+        template: 'remember "Security incident lessons learned: [LESSONS] - Prevention measures: [PREVENTION] - Process improvements: [IMPROVEMENTS]" security --tags="lessons-learned,[INCIDENT_TYPE],prevention"'
+        
+      - command: "remember"
+        description: "Update incident response procedures"
+        template: 'remember "Updated incident response procedures for [INCIDENT_TYPE]: [UPDATED_PROCEDURES]" runbooks --tags="incident-response,[INCIDENT_TYPE],procedures"'
+
+variables:
+  INCIDENT_TYPE:
+    description: "Type of security incident"
+    examples: ["sql-injection", "data-breach", "unauthorized-access", "malware", "ddos"]
+    
+  DESCRIPTION:
+    description: "Detailed description of the incident"
+    
+  IMPACT:
+    description: "Business and technical impact"
+    examples: ["user data exposed", "service unavailable", "performance degraded"]
+    
+  AFFECTED_SYSTEMS:
+    description: "Systems affected by the incident"
+    examples: ["authentication", "database", "api", "web-frontend"]
+    
+  SEVERITY:
+    description: "Incident severity level"
+    examples: ["critical", "high", "medium", "low"]
+
+success_criteria:
+  - "Incident contained within 1 hour"
+  - "Root cause identified and documented"
+  - "Resolution implemented and tested"
+  - "Lessons learned documented"
+  - "Prevention measures implemented"
+  - "All stakeholders notified"
+
+common_mistakes:
+  - "Not documenting initial findings immediately"
+  - "Skipping the query for similar incidents"
+  - "Implementing fixes without proper testing"
+  - "Not updating incident response procedures"
+  - "Forgetting to broadcast resolution to collective"
+
+related_workflows:
+  - "vulnerability-assessment.yaml"
+  - "compliance-audit.yaml"
+  - "disaster-recovery.yaml"
