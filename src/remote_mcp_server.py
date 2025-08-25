@@ -27,6 +27,7 @@ except ImportError:
 from memory_server import MemoryStorage
 from auth import AuthManager
 from command_installer import CommandInstaller
+from mcp_bridge import get_bridge_manager
 
 # Setup logging
 logging.basicConfig(
@@ -66,6 +67,7 @@ class RemoteMemoryMCPServer:
             }
         }
         self.command_installer = CommandInstaller(self.storage, self.config)
+        self.bridge_manager = get_bridge_manager(self.storage)
         
         # Get remote server config
         remote_config = self.config.get('remote_server', {})
@@ -3423,6 +3425,20 @@ main "$@" """,
         # ===== END RULES & GOVERNANCE APIs =====
         
         # Execution monitoring dashboard endpoint (must come before catch-all admin route)
+        @self.mcp.custom_route("/admin/mcp_bridge.html", methods=["GET"])
+        @self.mcp.custom_route("/admin/mcp-bridge", methods=["GET"])
+        async def mcp_bridge_dashboard(request):
+            """Serve the MCP Bridge management dashboard interface"""
+            try:
+                bridge_dashboard_path = Path(__file__).parent.parent / "admin" / "mcp_bridge.html"
+                if bridge_dashboard_path.exists():
+                    return FileResponse(str(bridge_dashboard_path), media_type="text/html")
+                else:
+                    return JSONResponse({"error": "MCP Bridge dashboard not found"}, status_code=404)
+            except Exception as e:
+                logger.error(f"Error serving MCP Bridge dashboard: {e}")
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
         @self.mcp.custom_route("/admin/executions", methods=["GET"])
         async def executions_dashboard(request):
             """Serve the execution monitoring dashboard interface"""
@@ -3602,6 +3618,218 @@ main "$@" """,
                 return JSONResponse({"error": str(e)}, status_code=500)
         
         logger.info("📊 Enhanced dashboard routes registered")
+        
+        # ===== MCP BRIDGE API ENDPOINTS =====
+        
+        # Discover local MCP servers
+        @self.mcp.custom_route("/admin/api/mcp-bridge/discover", methods=["GET"])
+        async def discover_local_servers(request):
+            """Discover local MCP servers from configuration files"""
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            
+            try:
+                discovered = await self.bridge_manager.discover_local_servers()
+                return JSONResponse({
+                    "servers": discovered,
+                    "total": len(discovered),
+                    "status": "success"
+                })
+            except Exception as e:
+                logger.error(f"Error discovering local servers: {e}")
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # Register MCP bridge
+        @self.mcp.custom_route("/admin/api/mcp-bridge/register", methods=["POST"])
+        async def register_bridge(request):
+            """Register a new MCP server bridge"""
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            
+            try:
+                config = await request.json()
+                server_id = await self.bridge_manager.register_bridge(config)
+                
+                return JSONResponse({
+                    "server_id": server_id,
+                    "endpoint": f"/mcp-bridge/{server_id}",
+                    "status": "registered",
+                    "success": True
+                })
+            except Exception as e:
+                logger.error(f"Error registering bridge: {e}")
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # List bridges
+        @self.mcp.custom_route("/admin/api/mcp-bridge/servers", methods=["GET"])
+        async def list_bridges(request):
+            """List all registered MCP bridges"""
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            
+            try:
+                bridges = await self.bridge_manager.list_bridges()
+                return JSONResponse({
+                    "bridges": bridges,
+                    "total": len(bridges),
+                    "status": "success"
+                })
+            except Exception as e:
+                logger.error(f"Error listing bridges: {e}")
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # Get bridge status
+        @self.mcp.custom_route("/admin/api/mcp-bridge/{server_id}/status", methods=["GET"])
+        async def get_bridge_status(request):
+            """Get status of a specific bridge"""
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            
+            try:
+                server_id = request.path_params["server_id"]
+                status = await self.bridge_manager.get_bridge_status(server_id)
+                
+                if not status:
+                    return JSONResponse({"error": "Bridge not found"}, status_code=404)
+                
+                return JSONResponse({
+                    "status": status,
+                    "success": True
+                })
+            except Exception as e:
+                logger.error(f"Error getting bridge status: {e}")
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # Proxy requests to bridge
+        @self.mcp.custom_route("/admin/api/mcp-bridge/{server_id}/proxy", methods=["POST"])
+        async def proxy_bridge_request(request):
+            """Proxy a request to a bridged MCP server"""
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            
+            try:
+                server_id = request.path_params["server_id"]
+                request_data = await request.json()
+                
+                method = request_data.get("method")
+                params = request_data.get("params", {})
+                
+                if not method:
+                    return JSONResponse({"error": "Method required"}, status_code=400)
+                
+                response = await self.bridge_manager.proxy_request(server_id, method, params)
+                return JSONResponse(response)
+                
+            except ValueError as e:
+                return JSONResponse({"error": str(e)}, status_code=404)
+            except Exception as e:
+                logger.error(f"Error proxying request: {e}")
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # Remove bridge
+        @self.mcp.custom_route("/admin/api/mcp-bridge/{server_id}", methods=["DELETE"])
+        async def remove_bridge(request):
+            """Remove a registered bridge"""
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            
+            try:
+                server_id = request.path_params["server_id"]
+                removed = await self.bridge_manager.remove_bridge(server_id)
+                
+                if not removed:
+                    return JSONResponse({"error": "Bridge not found"}, status_code=404)
+                
+                return JSONResponse({
+                    "success": True,
+                    "message": f"Bridge {server_id} removed"
+                })
+            except Exception as e:
+                logger.error(f"Error removing bridge: {e}")
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # Bridge health check
+        @self.mcp.custom_route("/admin/api/mcp-bridge/health", methods=["GET"])
+        async def bridge_health_check(request):
+            """Get health status of all bridges"""
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            
+            try:
+                health = await self.bridge_manager.health_check()
+                return JSONResponse(health)
+            except Exception as e:
+                logger.error(f"Error getting bridge health: {e}")
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # Bridge auto-register for known servers
+        @self.mcp.custom_route("/admin/api/mcp-bridge/auto-register", methods=["POST"])
+        async def auto_register_bridges(request):
+            """Auto-register known MCP servers like vibe-kanban"""
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            
+            try:
+                # Auto-register predefined bridges from configuration
+                registered_bridges = []
+                
+                # Load bridge configuration
+                try:
+                    from pathlib import Path
+                    bridge_config_path = Path(__file__).parent.parent / "config" / "bridge_config.json"
+                    if bridge_config_path.exists():
+                        with open(bridge_config_path, 'r') as f:
+                            bridge_config = json.load(f)
+                        
+                        predefined_bridges = bridge_config.get("predefined_bridges", {})
+                        
+                        for bridge_name, bridge_config in predefined_bridges.items():
+                            try:
+                                server_id = await self.bridge_manager.register_bridge(bridge_config)
+                                registered_bridges.append({
+                                    "name": bridge_config.get("name", bridge_name),
+                                    "server_id": server_id,
+                                    "endpoint": f"/mcp-bridge/{server_id}"
+                                })
+                            except Exception as e:
+                                logger.warning(f"Could not auto-register {bridge_name}: {e}")
+                    else:
+                        # Fallback to hardcoded vibe-kanban config if bridge_config.json not found
+                        vibe_config = {
+                            "name": "Vibe Kanban",
+                            "type": "stdio",
+                            "command": "npx",
+                            "args": ["vibe-kanban", "--mcp"],
+                            "working_directory": "/home/lj/memory-mcp",
+                            "description": "Task and project management MCP server",
+                            "tags": ["kanban", "project-management", "tasks"]
+                        }
+                        
+                        try:
+                            server_id = await self.bridge_manager.register_bridge(vibe_config)
+                            registered_bridges.append({
+                                "name": "Vibe Kanban",
+                                "server_id": server_id,
+                                "endpoint": f"/mcp-bridge/{server_id}"
+                            })
+                        except Exception as e:
+                            logger.warning(f"Could not auto-register vibe-kanban: {e}")
+                            
+                except Exception as e:
+                    logger.error(f"Error loading bridge configuration: {e}")
+                    # Fall back to hardcoded config if needed
+                
+                return JSONResponse({
+                    "registered": registered_bridges,
+                    "total": len(registered_bridges),
+                    "status": "completed"
+                })
+                
+            except Exception as e:
+                logger.error(f"Error in auto-registration: {e}")
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        logger.info("🌉 MCP Bridge API endpoints registered")
     
     async def _check_admin_auth(self, request):
         """Check if request has valid admin authentication"""

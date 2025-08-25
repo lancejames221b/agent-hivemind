@@ -1,0 +1,82 @@
+{
+  "bridge_manager": {
+    "discovery_paths": [
+      "~/.claude/claude_desktop_config.json",
+      "./.mcp.json",
+      "./mcp.json"
+    ],
+    "max_bridges": 50,
+    "cleanup_interval_hours": 24,
+    "health_check_interval_seconds": 300
+  },
+  "default_bridge_settings": {
+    "timeout_seconds": 30,
+    "retry_attempts": 3,
+    "keepalive_interval_seconds": 60,
+    "max_request_size_mb": 10,
+    "rate_limit_requests_per_minute": 1000
+  },
+  "protocol_translation": {
+    "stdio_to_http": {
+      "buffer_size": 8192,
+      "json_rpc_version": "2.0",
+      "response_timeout_seconds": 30
+    },
+    "http_to_sse": {
+      "sse_keepalive_seconds": 30,
+      "sse_retry_delay_ms": 3000,
+      "max_connections": 100
+    }
+  },
+  "security": {
+    "require_authentication": true,
+    "allowed_methods": [
+      "tools/list",
+      "tools/call",
+      "resources/list",
+      "resources/read",
+      "prompts/list",
+      "prompts/get"
+    ],
+    "rate_limiting": {
+      "enabled": true,
+      "requests_per_minute": 1000,
+      "burst_size": 100
+    },
+    "access_control": {
+      "default_access": "authenticated_users",
+      "admin_methods": [
+        "bridge/register",
+        "bridge/remove",
+        "bridge/configure"
+      ]
+    }
+  },
+  "monitoring": {
+    "metrics_retention_days": 30,
+    "log_level": "INFO",
+    "performance_monitoring": true,
+    "error_tracking": true,
+    "usage_analytics": true
+  },
+  "predefined_bridges": {
+    "vibe-kanban": {
+      "name": "Vibe Kanban",
+      "description": "Task and project management MCP server",
+      "type": "stdio",
+      "command": "npx",
+      "args": ["vibe-kanban", "--mcp"],
+      "working_directory": "/home/lj/memory-mcp",
+      "priority": "high",
+      "auto_start": true,
+      "tags": ["kanban", "project-management", "tasks"]
+    }
+  },
+  "federation": {
+    "enabled": true,
+    "hub_mode": true,
+    "cross_machine_sync": true,
+    "conflict_resolution": "timestamp_wins",
+    "sync_interval_seconds": 300
+  }
+}
