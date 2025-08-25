@@ -259,6 +259,8 @@
   },
   "security": {
     "enable_auth": true,
+    "admin_username": "admin",
+    "admin_password_hash": "$2b$12$xjtV8hfHVh3B3KFFHc0Tq.EXDC2ksDStRKUKDpMsivIk58slOMNC6",
     "jwt_secret": "${HAIVEMIND_JWT_SECRET:-change-this-secret-key}",
     "session_timeout_hours": 24,
     "api_tokens": {
