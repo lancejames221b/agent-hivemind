@@ -47,6 +47,22 @@ class RemoteMemoryMCPServer:
         # Initialize memory storage and auth
         self.storage = MemoryStorage(self.config)
         self.auth = AuthManager(self.config)
+        
+        # Initialize MCP server registry (in-memory for now)
+        self.server_registry = {
+            "memory-server": {
+                "id": "memory-server",
+                "name": "hAIveMind Memory",
+                "endpoint": f"http://localhost:{self.config.get('server', {}).get('port', 8900)}/sse",
+                "transport": "sse",
+                "status": "online",
+                "health": "healthy",
+                "tools_count": 0,  # Will be updated dynamically
+                "last_seen": time.time(),
+                "auto_start": True,
+                "created_at": time.time()
+            }
+        }
         self.command_installer = CommandInstaller(self.storage, self.config)
         
         # Get remote server config
@@ -1032,119 +1048,25 @@ The agent is now synchronized with the hAIveMind collective. All commands and co
                 # On any resolution error, return 404 to avoid information leaks
                 return JSONResponse({"error": "File not found"}, status_code=404)
         
-        # SPECIFIC DASHBOARD ROUTES (must be before catch-all route)
-        @self.mcp.custom_route("/admin/rules-dashboard", methods=["GET"])
-        async def rules_dashboard_new(request):
-            """Serve the rules dashboard interface"""
-            return HTMLResponse("""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>Rules & Governance - hAIveMind</title>
-                <link rel="stylesheet" href="/admin/static/admin.css">
-            </head>
-            <body class="dashboard">
-                <nav class="nav-header">
-                    <div class="nav-brand">
-                        <img src="/assets/logo.png" alt="hAIveMind" class="nav-logo">
-                        <h1>hAIveMind Rules & Governance</h1>
-                    </div>
-                    <div class="nav-links">
-                        <a href="/admin/dashboard.html">Dashboard</a>
-                        <a href="/admin/memory.html">Memory Browser</a>
-                        <a href="/admin/mcp_servers.html">MCP Servers</a>
-                        <a href="/admin/vault">Vault Management</a>
-                        <a href="/admin/rules-dashboard" class="active">Rules & Governance</a>
-                        <a href="/admin/playbooks">Playbook Management</a>
-                        <a href="/admin/executions">Execution Monitoring</a>
-                        <a href="/admin/confluence">Confluence Integration</a>
-                        <a href="/admin/help-dashboard">Help System</a>
-                    </div>
-                    <button class="logout-btn" onclick="logout()">Logout</button>
-                </nav>
-                <main class="main-content">
-                    <div class="card">
-                        <h2>🎯 Rules & Governance System</h2>
-                        <p>Comprehensive rule management for consistent agent behavior across the hAIveMind network.</p>
-                        
-                        <div class="feature-grid">
-                            <div class="feature-card">
-                                <h3><i class="fas fa-plus"></i> Create Rules</h3>
-                                <p>Visual rule builder with templates and validation</p>
-                                <button class="btn btn-primary" onclick="alert('Rule builder working!')">Create New Rule</button>
-                            </div>
-                            <div class="feature-card">
-                                <h3><i class="fas fa-list"></i> Rule Catalog</h3>
-                                <p>Browse and manage all rules with filtering and search</p>
-                                <button class="btn btn-secondary" onclick="alert('Rule catalog working!')">Browse Rules</button>
-                            </div>
-                        </div>
-                    </div>
-                </main>
-                <script src="/admin/static/admin.js"></script>
-            </body>
-            </html>
-            """)
+        # ===== SPECIFIC DASHBOARD ROUTES (must be before catch-all route) =====
         
-        @self.mcp.custom_route("/admin/playbooks", methods=["GET"])
-        async def playbooks_dashboard_new(request):
-            return HTMLResponse("""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>Playbook Management - hAIveMind</title>
-                <link rel="stylesheet" href="/admin/static/admin.css">
-            </head>
-            <body class="dashboard">
-                <nav class="nav-header">
-                    <div class="nav-brand">
-                        <img src="/assets/logo.png" alt="hAIveMind" class="nav-logo">
-                        <h1>hAIveMind Playbook Management</h1>
-                    </div>
-                    <div class="nav-links">
-                        <a href="/admin/dashboard.html">Dashboard</a>
-                        <a href="/admin/memory.html">Memory Browser</a>
-                        <a href="/admin/mcp_servers.html">MCP Servers</a>
-                        <a href="/admin/vault">Vault Management</a>
-                        <a href="/admin/rules-dashboard">Rules & Governance</a>
-                        <a href="/admin/playbooks" class="active">Playbook Management</a>
-                        <a href="/admin/executions">Execution Monitoring</a>
-                        <a href="/admin/confluence">Confluence Integration</a>
-                        <a href="/admin/help-dashboard">Help System</a>
-                    </div>
-                    <button class="logout-btn" onclick="logout()">Logout</button>
-                </nav>
-                <main class="main-content">
-                    <div class="card">
-                        <h2>📚 Playbook Management</h2>
-                        <p>Create, manage, and execute automated playbooks for DevOps operations.</p>
-                        <div class="feature-grid">
-                            <div class="feature-card">
-                                <h3><i class="fas fa-plus"></i> Create Playbook</h3>
-                                <button class="btn btn-primary">Create New</button>
-                            </div>
-                        </div>
-                    </div>
-                </main>
-                <script src="/admin/static/admin.js"></script>
-            </body>
-            </html>
-            """)
-        
+        # Confluence integration dashboard endpoint
         @self.mcp.custom_route("/admin/confluence", methods=["GET"])
-        async def confluence_dashboard_new(request):
+        async def confluence_dashboard(request):
+            """Serve the Confluence integration dashboard interface"""
             return HTMLResponse("""
             <!DOCTYPE html>
             <html>
             <head>
                 <title>Confluence Integration - hAIveMind</title>
                 <link rel="stylesheet" href="/admin/static/admin.css">
+                <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
             </head>
             <body class="dashboard">
                 <nav class="nav-header">
                     <div class="nav-brand">
                         <img src="/assets/logo.png" alt="hAIveMind" class="nav-logo">
-                        <h1>hAIveMind Confluence</h1>
+                        <h1>hAIveMind Confluence Integration</h1>
                     </div>
                     <div class="nav-links">
                         <a href="/admin/dashboard.html">Dashboard</a>
@@ -1161,128 +1083,70 @@ The agent is now synchronized with the hAIveMind collective. All commands and co
                 </nav>
                 <main class="main-content">
                     <div class="card">
-                        <h2>🔗 Confluence Integration</h2>
-                        <p>Sync documentation from Confluence into hAIveMind.</p>
+                        <h2><i class="fab fa-confluence"></i> Confluence Integration</h2>
+                        <p>Sync documentation and runbooks from Confluence spaces into hAIveMind knowledge base.</p>
+                        
+                        <div class="feature-grid">
+                            <div class="feature-card">
+                                <h3><i class="fas fa-cog"></i> Configuration</h3>
+                                <p>Configure Confluence API connection and authentication</p>
+                                <button class="btn btn-primary" onclick="showConfig()">Configure Connection</button>
+                            </div>
+                            <div class="feature-card">
+                                <h3><i class="fas fa-sync"></i> Sync Management</h3>
+                                <p>Manage automatic sync schedules and manual imports</p>
+                                <button class="btn btn-secondary" onclick="showSyncManager()">Manage Sync</button>
+                            </div>
+                            <div class="feature-card">
+                                <h3><i class="fas fa-sitemap"></i> Space Mapping</h3>
+                                <p>Map Confluence spaces to hAIveMind categories</p>
+                                <button class="btn btn-info" onclick="showSpaceMapping()">Configure Spaces</button>
+                            </div>
+                            <div class="feature-card">
+                                <h3><i class="fas fa-history"></i> Import History</h3>
+                                <p>View sync history and resolve conflicts</p>
+                                <button class="btn btn-warning" onclick="showImportHistory()">View History</button>
+                            </div>
+                        </div>
+
+                        <div class="sync-status" id="syncStatus">
+                            <h3>Sync Status</h3>
+                            <div class="status-grid">
+                                <div class="status-item">
+                                    <span class="status-label">Connection Status</span>
+                                    <span class="status-value" id="connectionStatus">Loading...</span>
+                                </div>
+                                <div class="status-item">
+                                    <span class="status-label">Last Sync</span>
+                                    <span class="status-value" id="lastSync">Loading...</span>
+                                </div>
+                                <div class="status-item">
+                                    <span class="status-label">Monitored Spaces</span>
+                                    <span class="status-value" id="monitoredSpaces">Loading...</span>
+                                </div>
+                                <div class="status-item">
+                                    <span class="status-label">Synced Pages</span>
+                                    <span class="status-value" id="syncedPages">Loading...</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="quick-actions">
+                            <h3>Quick Actions</h3>
+                            <button class="btn btn-success" onclick="triggerManualSync()">
+                                <i class="fas fa-download"></i> Manual Sync Now
+                            </button>
+                            <button class="btn btn-info" onclick="testConnection()">
+                                <i class="fas fa-plug"></i> Test Connection
+                            </button>
+                            <button class="btn btn-secondary" onclick="viewLogs()">
+                                <i class="fas fa-file-text"></i> View Sync Logs
+                            </button>
+                        </div>
                     </div>
                 </main>
                 <script src="/admin/static/admin.js"></script>
-            </body>
-            </html>
-            """)
-        
-        @self.mcp.custom_route("/admin/executions", methods=["GET"])
-        async def executions_dashboard_new(request):
-            return HTMLResponse("""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>Execution Monitoring - hAIveMind</title>
-                <link rel="stylesheet" href="/admin/static/admin.css">
-            </head>
-            <body class="dashboard">
-                <nav class="nav-header">
-                    <div class="nav-brand">
-                        <img src="/assets/logo.png" alt="hAIveMind" class="nav-logo">
-                        <h1>hAIveMind Executions</h1>
-                    </div>
-                    <div class="nav-links">
-                        <a href="/admin/dashboard.html">Dashboard</a>
-                        <a href="/admin/memory.html">Memory Browser</a>
-                        <a href="/admin/mcp_servers.html">MCP Servers</a>
-                        <a href="/admin/vault">Vault Management</a>
-                        <a href="/admin/rules-dashboard">Rules & Governance</a>
-                        <a href="/admin/playbooks">Playbook Management</a>
-                        <a href="/admin/executions" class="active">Execution Monitoring</a>
-                        <a href="/admin/confluence">Confluence Integration</a>
-                        <a href="/admin/help-dashboard">Help System</a>
-                    </div>
-                    <button class="logout-btn" onclick="logout()">Logout</button>
-                </nav>
-                <main class="main-content">
-                    <div class="card">
-                        <h2>⚡ Execution Monitoring</h2>
-                        <p>Real-time monitoring of playbook executions.</p>
-                    </div>
-                </main>
-                <script src="/admin/static/admin.js"></script>
-            </body>
-            </html>
-            """)
-        
-        @self.mcp.custom_route("/admin/vault", methods=["GET"])
-        async def vault_dashboard_new(request):
-            return HTMLResponse("""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>Vault Management - hAIveMind</title>
-                <link rel="stylesheet" href="/admin/static/admin.css">
-            </head>
-            <body class="dashboard">
-                <nav class="nav-header">
-                    <div class="nav-brand">
-                        <img src="/assets/logo.png" alt="hAIveMind" class="nav-logo">
-                        <h1>hAIveMind Vault</h1>
-                    </div>
-                    <div class="nav-links">
-                        <a href="/admin/dashboard.html">Dashboard</a>
-                        <a href="/admin/memory.html">Memory Browser</a>
-                        <a href="/admin/mcp_servers.html">MCP Servers</a>
-                        <a href="/admin/vault" class="active">Vault Management</a>
-                        <a href="/admin/rules-dashboard">Rules & Governance</a>
-                        <a href="/admin/playbooks">Playbook Management</a>
-                        <a href="/admin/executions">Execution Monitoring</a>
-                        <a href="/admin/confluence">Confluence Integration</a>
-                        <a href="/admin/help-dashboard">Help System</a>
-                    </div>
-                    <button class="logout-btn" onclick="logout()">Logout</button>
-                </nav>
-                <main class="main-content">
-                    <div class="card">
-                        <h2>🔒 Vault Management</h2>
-                        <p>Secure credential and secret management.</p>
-                    </div>
-                </main>
-                <script src="/admin/static/admin.js"></script>
-            </body>
-            </html>
-            """)
-        
-        @self.mcp.custom_route("/admin/help-dashboard", methods=["GET"])
-        async def help_dashboard_new(request):
-            return HTMLResponse("""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>Help System - hAIveMind</title>
-                <link rel="stylesheet" href="/admin/static/admin.css">
-            </head>
-            <body class="dashboard">
-                <nav class="nav-header">
-                    <div class="nav-brand">
-                        <img src="/assets/logo.png" alt="hAIveMind" class="nav-logo">
-                        <h1>hAIveMind Help</h1>
-                    </div>
-                    <div class="nav-links">
-                        <a href="/admin/dashboard.html">Dashboard</a>
-                        <a href="/admin/memory.html">Memory Browser</a>
-                        <a href="/admin/mcp_servers.html">MCP Servers</a>
-                        <a href="/admin/vault">Vault Management</a>
-                        <a href="/admin/rules-dashboard">Rules & Governance</a>
-                        <a href="/admin/playbooks">Playbook Management</a>
-                        <a href="/admin/executions">Execution Monitoring</a>
-                        <a href="/admin/confluence">Confluence Integration</a>
-                        <a href="/admin/help-dashboard" class="active">Help System</a>
-                    </div>
-                    <button class="logout-btn" onclick="logout()">Logout</button>
-                </nav>
-                <main class="main-content">
-                    <div class="card">
-                        <h2>❓ Help System</h2>
-                        <p>Documentation and support for hAIveMind.</p>
-                    </div>
-                </main>
-                <script src="/admin/static/admin.js"></script>
+                <script src="/admin/static/confluence.js"></script>
             </body>
             </html>
             """)
@@ -1575,25 +1439,554 @@ The agent is now synchronized with the hAIveMind collective. All commands and co
                 logger.error(f"Error getting memory stats: {e}")
                 return JSONResponse({"error": str(e)}, status_code=500)
         
-        # Authentication verification endpoint
-        @self.mcp.custom_route("/admin/api/verify", methods=["GET"])
-        async def verify_auth(request):
-            """Verify current authentication status"""
-            auth_header = request.headers.get('Authorization')
-            if not auth_header or not auth_header.startswith('Bearer '):
-                return JSONResponse({"authenticated": False, "error": "No token"}, status_code=401)
+        # ===== MCP SERVER MANAGEMENT APIs =====
+        
+        # List all registered MCP servers
+        @self.mcp.custom_route("/admin/api/mcp/servers", methods=["GET"])
+        async def list_mcp_servers(request):
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
             
-            token = auth_header.split(' ')[1]
-            valid, payload = self.auth.validate_jwt_token(token)
-            if valid:
+            try:
+                # Get servers from registry
+                servers = []
+                for server_id, server in self.server_registry.items():
+                    server_data = dict(server)
+                    # Update tools count for memory server
+                    if server_id == "memory-server":
+                        server_data["tools_count"] = len(await self._get_available_tools())
+                        server_data["last_seen"] = time.time()
+                    servers.append(server_data)
+                
                 return JSONResponse({
-                    "authenticated": True,
-                    "user": payload.get('user'),
-                    "role": payload.get('role'),
-                    "expires": payload.get('exp')
+                    "servers": servers,
+                    "total": len(servers),
+                    "online": len([s for s in servers if s["status"] == "online"]),
+                    "offline": len([s for s in servers if s["status"] == "offline"]),
+                    "error": len([s for s in servers if s["status"] == "error"])
                 })
-            else:
-                return JSONResponse({"authenticated": False, "error": "Invalid token"}, status_code=401)
+            except Exception as e:
+                logger.error(f"Error listing MCP servers: {e}")
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # Register new MCP server
+        @self.mcp.custom_route("/admin/api/mcp/servers", methods=["POST"])
+        async def register_mcp_server(request):
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            
+            try:
+                data = await request.json()
+                required_fields = ["name", "endpoint", "transport"]
+                
+                if not all(field in data for field in required_fields):
+                    return JSONResponse({"error": "Missing required fields"}, status_code=400)
+                
+                # Store in server registry
+                server_id = f"server_{int(time.time())}"
+                
+                server = {
+                    "id": server_id,
+                    "name": data["name"],
+                    "endpoint": data["endpoint"],
+                    "transport": data["transport"],
+                    "status": "registered",
+                    "health": "unknown",
+                    "tools_count": 0,
+                    "last_seen": time.time(),
+                    "created_at": time.time(),
+                    "auto_start": data.get("auto_start", False)
+                }
+                
+                # Add to registry
+                self.server_registry[server_id] = server
+                
+                logger.info(f"Registered new MCP server: {server['name']} ({server_id})")
+                return JSONResponse(server, status_code=201)
+            except Exception as e:
+                logger.error(f"Error registering MCP server: {e}")
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # Get specific MCP server details
+        @self.mcp.custom_route("/admin/api/mcp/servers/{server_id}", methods=["GET"])
+        async def get_mcp_server(request):
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            
+            try:
+                server_id = request.path_params["server_id"]
+                
+                if server_id not in self.server_registry:
+                    return JSONResponse({"error": "Server not found"}, status_code=404)
+                
+                server = dict(self.server_registry[server_id])
+                
+                # Add extra details for memory server
+                if server_id == "memory-server":
+                    server.update({
+                        "tools_count": len(await self._get_available_tools()),
+                        "last_seen": time.time(),
+                        "uptime": time.time() - self._start_time,
+                        "memory_usage": 0,  # TODO: Get actual metrics
+                        "cpu_usage": 0,
+                        "last_error": None
+                    })
+                
+                return JSONResponse(server)
+                    
+            except Exception as e:
+                logger.error(f"Error getting MCP server: {e}")
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # Update MCP server configuration
+        @self.mcp.custom_route("/admin/api/mcp/servers/{server_id}", methods=["PUT"])
+        async def update_mcp_server(request):
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            
+            try:
+                server_id = request.path_params["server_id"]
+                data = await request.json()
+                
+                # TODO: Update in database
+                logger.info(f"Updated MCP server configuration: {server_id}")
+                return JSONResponse({"message": "Server updated", "id": server_id})
+                
+            except Exception as e:
+                logger.error(f"Error updating MCP server: {e}")
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # Delete MCP server
+        @self.mcp.custom_route("/admin/api/mcp/servers/{server_id}", methods=["DELETE"])
+        async def delete_mcp_server(request):
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            
+            try:
+                server_id = request.path_params["server_id"]
+                
+                if server_id not in self.server_registry:
+                    return JSONResponse({"error": "Server not found"}, status_code=404)
+                
+                # Don't allow deleting the main memory server
+                if server_id == "memory-server":
+                    return JSONResponse({"error": "Cannot delete main memory server"}, status_code=400)
+                
+                # Remove from registry
+                del self.server_registry[server_id]
+                
+                logger.info(f"Deleted MCP server: {server_id}")
+                return JSONResponse({"message": "Server deleted"})
+                
+            except Exception as e:
+                logger.error(f"Error deleting MCP server: {e}")
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # Check server health
+        @self.mcp.custom_route("/admin/api/mcp/servers/{server_id}/health", methods=["GET"])
+        async def check_server_health(request):
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            
+            try:
+                server_id = request.path_params["server_id"]
+                
+                # TODO: Implement actual health check
+                health = {
+                    "server_id": server_id,
+                    "status": "healthy",
+                    "last_check": time.time(),
+                    "response_time": 50,  # ms
+                    "uptime": time.time() - self._start_time if server_id == "memory-server" else 0,
+                    "errors_count": 0
+                }
+                
+                return JSONResponse(health)
+                
+            except Exception as e:
+                logger.error(f"Error checking server health: {e}")
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # Start MCP server
+        @self.mcp.custom_route("/admin/api/mcp/servers/{server_id}/start", methods=["POST"])
+        async def start_mcp_server(request):
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            
+            try:
+                server_id = request.path_params["server_id"]
+                
+                # TODO: Implement server start functionality
+                logger.info(f"Starting MCP server: {server_id}")
+                return JSONResponse({"message": f"Server {server_id} started"})
+                
+            except Exception as e:
+                logger.error(f"Error starting server: {e}")
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # Stop MCP server  
+        @self.mcp.custom_route("/admin/api/mcp/servers/{server_id}/stop", methods=["POST"])
+        async def stop_mcp_server(request):
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            
+            try:
+                server_id = request.path_params["server_id"]
+                
+                # TODO: Implement server stop functionality
+                logger.info(f"Stopping MCP server: {server_id}")
+                return JSONResponse({"message": f"Server {server_id} stopped"})
+                
+            except Exception as e:
+                logger.error(f"Error stopping server: {e}")
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # List server tools
+        @self.mcp.custom_route("/admin/api/mcp/servers/{server_id}/tools", methods=["GET"])
+        async def list_server_tools(request):
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            
+            try:
+                server_id = request.path_params["server_id"]
+                
+                if server_id == "memory-server":
+                    tools = await self._get_available_tools()
+                    return JSONResponse({
+                        "server_id": server_id,
+                        "tools": [{"name": tool, "description": f"hAIveMind tool: {tool}"} for tool in tools]
+                    })
+                else:
+                    return JSONResponse({"server_id": server_id, "tools": []})
+                    
+            except Exception as e:
+                logger.error(f"Error listing server tools: {e}")
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # Browse all available tools
+        @self.mcp.custom_route("/admin/api/mcp/tools/catalog", methods=["GET"])
+        async def browse_tools_catalog(request):
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            
+            try:
+                all_tools = await self._get_available_tools()
+                catalog = [
+                    {
+                        "name": tool,
+                        "server": "memory-server",
+                        "description": f"hAIveMind memory tool: {tool}",
+                        "category": "memory" if "memory" in tool else "system"
+                    }
+                    for tool in all_tools
+                ]
+                
+                return JSONResponse({"tools": catalog, "total": len(catalog)})
+                
+            except Exception as e:
+                logger.error(f"Error browsing tools catalog: {e}")
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # Test tool execution
+        @self.mcp.custom_route("/admin/api/mcp/tools/invoke", methods=["POST"])
+        async def invoke_tool(request):
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            
+            try:
+                data = await request.json()
+                tool_name = data.get("tool")
+                args = data.get("arguments", {})
+                
+                # TODO: Implement actual tool invocation
+                result = {
+                    "tool": tool_name,
+                    "success": True,
+                    "result": f"Tool {tool_name} executed successfully (test)",
+                    "execution_time": 0.1,
+                    "timestamp": time.time()
+                }
+                
+                return JSONResponse(result)
+                
+            except Exception as e:
+                logger.error(f"Error invoking tool: {e}")
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # ===== END MCP SERVER MANAGEMENT APIs =====
+        
+        # ===== CONFLUENCE INTEGRATION APIs =====
+        
+        # Confluence configuration API
+        @self.mcp.custom_route("/admin/api/confluence/config", methods=["GET", "POST"])
+        async def confluence_config(request):
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            
+            try:
+                if request.method == "GET":
+                    # Get current configuration
+                    config = {
+                        "server_url": "",
+                        "username": "",
+                        "api_token": "",
+                        "connection_status": "not_configured",
+                        "last_tested": None
+                    }
+                    
+                    # Load from config if available
+                    confluence_config = self.config.get("confluence", {})
+                    if confluence_config:
+                        config.update({
+                            "server_url": confluence_config.get("server_url", ""),
+                            "username": confluence_config.get("username", ""),
+                            "api_token": confluence_config.get("api_token", ""),
+                            "connection_status": confluence_config.get("connection_status", "not_configured"),
+                            "last_tested": confluence_config.get("last_tested")
+                        })
+                    
+                    return JSONResponse(config)
+                
+                elif request.method == "POST":
+                    # Update configuration
+                    data = await request.json()
+                    
+                    # Validate required fields
+                    required_fields = ["server_url", "username", "api_token"]
+                    if not all(field in data for field in required_fields):
+                        return JSONResponse({"error": "Missing required fields"}, status_code=400)
+                    
+                    # Update configuration
+                    if "confluence" not in self.config:
+                        self.config["confluence"] = {}
+                    
+                    self.config["confluence"].update({
+                        "server_url": data["server_url"],
+                        "username": data["username"],
+                        "api_token": data["api_token"],
+                        "connection_status": "configured",
+                        "last_updated": time.time()
+                    })
+                    
+                    # Save configuration
+                    await self._save_config()
+                    
+                    return JSONResponse({
+                        "message": "Configuration updated",
+                        "status": "success"
+                    })
+                    
+            except Exception as e:
+                logger.error(f"Error managing Confluence config: {e}")
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # Test Confluence connection
+        @self.mcp.custom_route("/admin/api/confluence/test", methods=["POST"])
+        async def test_confluence_connection(request):
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            
+            try:
+                confluence_config = self.config.get("confluence", {})
+                if not confluence_config.get("server_url"):
+                    return JSONResponse({"error": "Confluence not configured"}, status_code=400)
+                
+                # Test connection using existing integration
+                from confluence_integration import ConfluenceIntegration
+                
+                integration = ConfluenceIntegration(
+                    server_url=confluence_config["server_url"],
+                    username=confluence_config["username"],
+                    api_token=confluence_config["api_token"]
+                )
+                
+                test_result = await integration.test_connection()
+                
+                # Update configuration with test results
+                self.config["confluence"]["connection_status"] = "connected" if test_result["success"] else "error"
+                self.config["confluence"]["last_tested"] = time.time()
+                await self._save_config()
+                
+                return JSONResponse(test_result)
+                
+            except Exception as e:
+                logger.error(f"Error testing Confluence connection: {e}")
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # Get Confluence spaces
+        @self.mcp.custom_route("/admin/api/confluence/spaces", methods=["GET"])
+        async def get_confluence_spaces(request):
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            
+            try:
+                confluence_config = self.config.get("confluence", {})
+                if not confluence_config.get("server_url"):
+                    return JSONResponse({"error": "Confluence not configured"}, status_code=400)
+                
+                from confluence_integration import ConfluenceIntegration
+                
+                integration = ConfluenceIntegration(
+                    server_url=confluence_config["server_url"],
+                    username=confluence_config["username"],
+                    api_token=confluence_config["api_token"]
+                )
+                
+                spaces = await integration.get_spaces()
+                
+                return JSONResponse({
+                    "spaces": spaces,
+                    "total": len(spaces)
+                })
+                
+            except Exception as e:
+                logger.error(f"Error getting Confluence spaces: {e}")
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # Get pages from a specific space
+        @self.mcp.custom_route("/admin/api/confluence/spaces/{space_key}/pages", methods=["GET"])
+        async def get_confluence_pages(request):
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            
+            try:
+                space_key = request.path_params["space_key"]
+                confluence_config = self.config.get("confluence", {})
+                
+                if not confluence_config.get("server_url"):
+                    return JSONResponse({"error": "Confluence not configured"}, status_code=400)
+                
+                from confluence_integration import ConfluenceIntegration
+                
+                integration = ConfluenceIntegration(
+                    server_url=confluence_config["server_url"],
+                    username=confluence_config["username"],
+                    api_token=confluence_config["api_token"]
+                )
+                
+                pages = await integration.get_pages(space_key)
+                
+                return JSONResponse({
+                    "space_key": space_key,
+                    "pages": pages,
+                    "total": len(pages)
+                })
+                
+            except Exception as e:
+                logger.error(f"Error getting Confluence pages: {e}")
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # Import pages into hAIveMind
+        @self.mcp.custom_route("/admin/api/confluence/import", methods=["POST"])
+        async def import_confluence_pages(request):
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            
+            try:
+                data = await request.json()
+                page_ids = data.get("page_ids", [])
+                
+                if not page_ids:
+                    return JSONResponse({"error": "No pages selected for import"}, status_code=400)
+                
+                confluence_config = self.config.get("confluence", {})
+                if not confluence_config.get("server_url"):
+                    return JSONResponse({"error": "Confluence not configured"}, status_code=400)
+                
+                from confluence_integration import ConfluenceIntegration
+                
+                integration = ConfluenceIntegration(
+                    server_url=confluence_config["server_url"],
+                    username=confluence_config["username"],
+                    api_token=confluence_config["api_token"]
+                )
+                
+                results = []
+                for page_id in page_ids:
+                    try:
+                        result = await integration.import_page(page_id, self.storage)
+                        results.append(result)
+                    except Exception as e:
+                        results.append({
+                            "page_id": page_id,
+                            "success": False,
+                            "error": str(e)
+                        })
+                
+                return JSONResponse({
+                    "results": results,
+                    "total_processed": len(results),
+                    "successful": len([r for r in results if r.get("success", False)]),
+                    "failed": len([r for r in results if not r.get("success", False)])
+                })
+                
+            except Exception as e:
+                logger.error(f"Error importing Confluence pages: {e}")
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # Get sync status and statistics
+        @self.mcp.custom_route("/admin/api/confluence/status", methods=["GET"])
+        async def get_confluence_status(request):
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            
+            try:
+                confluence_config = self.config.get("confluence", {})
+                
+                # Count imported pages from hAIveMind memory
+                try:
+                    confluence_memories = await self.storage.search_memories(
+                        query="", 
+                        category="confluence",
+                        limit=1000
+                    )
+                    synced_pages_count = len(confluence_memories) if isinstance(confluence_memories, list) else len(confluence_memories.get("memories", []))
+                except Exception as e:
+                    logger.warning(f"Error counting Confluence memories: {e}")
+                    synced_pages_count = 0
+                
+                status = {
+                    "connection_status": confluence_config.get("connection_status", "not_configured"),
+                    "last_tested": confluence_config.get("last_tested"),
+                    "last_sync": confluence_config.get("last_sync"),
+                    "monitored_spaces": len(confluence_config.get("monitored_spaces", [])),
+                    "synced_pages": synced_pages_count,
+                    "total_pages": confluence_config.get("total_pages", 0),
+                    "sync_enabled": confluence_config.get("sync_enabled", False)
+                }
+                
+                return JSONResponse(status)
+                
+            except Exception as e:
+                logger.error(f"Error getting Confluence status: {e}")
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # Trigger manual sync
+        @self.mcp.custom_route("/admin/api/confluence/sync", methods=["POST"])
+        async def trigger_confluence_sync(request):
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            
+            try:
+                confluence_config = self.config.get("confluence", {})
+                if not confluence_config.get("server_url"):
+                    return JSONResponse({"error": "Confluence not configured"}, status_code=400)
+                
+                # Trigger manual sync (for now, just update last_sync timestamp)
+                self.config["confluence"]["last_sync"] = time.time()
+                await self._save_config()
+                
+                return JSONResponse({
+                    "message": "Manual sync triggered",
+                    "timestamp": time.time(),
+                    "status": "in_progress"
+                })
+                
+            except Exception as e:
+                logger.error(f"Error triggering Confluence sync: {e}")
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # ===== END CONFLUENCE INTEGRATION APIs =====
         
         # Login redirect endpoint (for compatibility)
         @self.mcp.custom_route("/login", methods=["GET"])
@@ -1696,119 +2089,6 @@ The agent is now synchronized with the hAIveMind collective. All commands and co
             except Exception as e:
                 logger.error(f"Error serving rules dashboard: {e}")
                 return JSONResponse({"error": "Rules dashboard unavailable"}, status_code=500)
-        
-        # Confluence integration dashboard endpoint
-        @self.mcp.custom_route("/admin/confluence", methods=["GET"])
-        async def confluence_dashboard(request):
-            """Serve the Confluence integration dashboard interface"""
-            try:
-                return HTMLResponse("""
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <title>Confluence Integration - hAIveMind</title>
-                    <link rel="stylesheet" href="/admin/static/admin.css">
-                    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-                </head>
-                <body class="dashboard">
-                    <nav class="nav-header">
-                        <div class="nav-brand">
-                            <img src="/assets/logo.png" alt="hAIveMind" class="nav-logo">
-                            <h1>hAIveMind Confluence Integration</h1>
-                        </div>
-                        <div class="nav-links">
-                            <a href="/admin/dashboard.html">Dashboard</a>
-                            <a href="/admin/memory.html">Memory Browser</a>
-                            <a href="/admin/mcp_servers.html">MCP Servers</a>
-                            <a href="/admin/vault">Vault Management</a>
-                            <a href="/admin/rules-dashboard">Rules & Governance</a>
-                            <a href="/admin/playbooks">Playbook Management</a>
-                            <a href="/admin/executions">Execution Monitoring</a>
-                            <a href="/admin/confluence" class="active">Confluence Integration</a>
-                            <a href="/admin/help-dashboard">Help System</a>
-                        </div>
-                        <button class="logout-btn" onclick="logout()">Logout</button>
-                    </nav>
-                    <main class="main-content">
-                        <div class="card">
-                            <h2><i class="fab fa-confluence"></i> Confluence Integration</h2>
-                            <p>Sync documentation and runbooks from Confluence spaces into hAIveMind knowledge base.</p>
-                            
-                            <div class="feature-grid">
-                                <div class="feature-card">
-                                    <h3><i class="fas fa-cog"></i> Configuration</h3>
-                                    <p>Configure Confluence API connection and authentication</p>
-                                    <button class="btn btn-primary" onclick="showConfig()">Configure Connection</button>
-                                </div>
-                                <div class="feature-card">
-                                    <h3><i class="fas fa-sync"></i> Sync Management</h3>
-                                    <p>Manage automatic sync schedules and manual imports</p>
-                                    <button class="btn btn-secondary" onclick="showSyncManager()">Manage Sync</button>
-                                </div>
-                                <div class="feature-card">
-                                    <h3><i class="fas fa-sitemap"></i> Space Mapping</h3>
-                                    <p>Map Confluence spaces to hAIveMind categories</p>
-                                    <button class="btn btn-info" onclick="showSpaceMapping()">Configure Spaces</button>
-                                </div>
-                                <div class="feature-card">
-                                    <h3><i class="fas fa-history"></i> Import History</h3>
-                                    <p>View sync history and resolve conflicts</p>
-                                    <button class="btn btn-warning" onclick="showImportHistory()">View History</button>
-                                </div>
-                            </div>
-
-                            <div class="sync-status">
-                                <h3>Sync Status</h3>
-                                <div class="status-grid">
-                                    <div class="status-item">
-                                        <span class="status-label">Connection Status</span>
-                                        <span class="status-value status-warning">Not Configured</span>
-                                    </div>
-                                    <div class="status-item">
-                                        <span class="status-label">Last Sync</span>
-                                        <span class="status-value">Never</span>
-                                    </div>
-                                    <div class="status-item">
-                                        <span class="status-label">Monitored Spaces</span>
-                                        <span class="status-value">0</span>
-                                    </div>
-                                    <div class="status-item">
-                                        <span class="status-label">Synced Pages</span>
-                                        <span class="status-value">0</span>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div class="quick-actions">
-                                <h3>Quick Actions</h3>
-                                <button class="btn btn-success" onclick="triggerManualSync()">
-                                    <i class="fas fa-download"></i> Manual Sync Now
-                                </button>
-                                <button class="btn btn-info" onclick="testConnection()">
-                                    <i class="fas fa-plug"></i> Test Connection
-                                </button>
-                                <button class="btn btn-secondary" onclick="viewLogs()">
-                                    <i class="fas fa-file-text"></i> View Sync Logs
-                                </button>
-                            </div>
-                        </div>
-                    </main>
-                    <script src="/admin/static/admin.js"></script>
-                    <script>
-                        function showConfig() { alert('Confluence configuration coming soon!'); }
-                        function showSyncManager() { alert('Sync manager coming soon!'); }
-                        function showSpaceMapping() { alert('Space mapping coming soon!'); }
-                        function showImportHistory() { alert('Import history coming soon!'); }
-                        function triggerManualSync() { alert('Manual sync coming soon!'); }
-                        function testConnection() { alert('Connection test coming soon!'); }
-                        function viewLogs() { alert('Sync logs coming soon!'); }
-                    </script>
-                </body>
-                </html>
-                """)
-            except Exception as e:
-                logger.error(f"Error serving Confluence dashboard: {e}")
-                return JSONResponse({"error": "Confluence dashboard unavailable"}, status_code=500)
         
         # Playbook management dashboard endpoint
         @self.mcp.custom_route("/admin/playbooks", methods=["GET"])
@@ -2090,6 +2370,37 @@ The agent is now synchronized with the hAIveMind collective. All commands and co
         token = auth_header.split(' ')[1]
         valid, payload = self.auth.validate_jwt_token(token)
         return valid and payload.get('role') == 'admin'
+    
+    async def _get_available_tools(self):
+        """Get list of available MCP tools"""
+        try:
+            # Get tools from the MCP server
+            if hasattr(self.mcp, '_tools'):
+                return list(self.mcp._tools.keys())
+            else:
+                # Fallback to common hAIveMind tools
+                return [
+                    "store_memory", "retrieve_memory", "search_memories", 
+                    "get_recent_memories", "get_memory_stats", "get_project_memories",
+                    "register_agent", "get_agent_roster", "delegate_task",
+                    "broadcast_discovery", "sync_infrastructure_config"
+                ]
+        except Exception as e:
+            logger.warning(f"Could not get available tools: {e}")
+            return []
+    
+    async def _save_config(self):
+        """Save configuration to file"""
+        try:
+            import json
+            config_path = Path(__file__).parent.parent / "config" / "config.json"
+            config_path.parent.mkdir(exist_ok=True)
+            
+            with open(config_path, 'w') as f:
+                json.dump(self.config, f, indent=2)
+                
+        except Exception as e:
+            logger.error(f"Error saving configuration: {e}")
     
     def run(self):
         """Run the remote MCP server"""

@@ -24,7 +24,7 @@ function checkAuth() {
     
     // If we have a token and not on login page, verify it's still valid
     if (token && !currentPage.includes('login.html')) {
-        fetch('/api/v1/auth/verify', {
+        fetch('/admin/api/verify', {
             headers: { 'Authorization': `Bearer ${token}` }
         }).then(response => {
             if (!response.ok) {
@@ -82,6 +82,9 @@ async function fetchWithAuth(url, options = {}) {
         headers
     });
 }
+
+// Alias for compatibility
+const authenticatedFetch = fetchWithAuth;
 
 // Utility Functions
 function formatDateTime(isoString) {
@@ -296,6 +299,10 @@ class AdminWebSocket {
             console.log('No authentication token available for WebSocket connection');
             return;
         }
+        
+        // WebSocket temporarily disabled - endpoint not available in remote_mcp_server.py
+        console.log('WebSocket functionality temporarily disabled');
+        return;
         
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${protocol}//${window.location.host}/admin/ws?token=${token}`;
