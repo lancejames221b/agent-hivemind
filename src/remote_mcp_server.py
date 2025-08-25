@@ -1042,6 +1042,7 @@ The agent is now synchronized with the hAIveMind collective. All commands and co
                 if page == "" or page == "/":
                     page = "dashboard.html"
 
+
                 # Only allow simple filenames without path separators
                 if not re.fullmatch(r"[A-Za-z0-9_-]+(?:\.html)?", page):
                     return JSONResponse({"error": "Invalid page"}, status_code=400)
