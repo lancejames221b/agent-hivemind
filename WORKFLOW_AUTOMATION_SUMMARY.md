@@ -52,7 +52,7 @@ Successfully implemented a comprehensive Command Workflow Automation system for 
 
 ### 🎨 Visual Dashboard
 - **File**: `src/workflow_dashboard.py`
-- **Interface**: Web dashboard at `http://localhost:8901`
+- **Interface**: Web dashboard at `http://localhost:8900/admin/`
 - **Features**:
   - Visual workflow library and execution
   - Real-time execution monitoring

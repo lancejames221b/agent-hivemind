@@ -32,7 +32,7 @@ def main():
         if cursor.rowcount > 0:
             print("✅ Admin password updated successfully!")
             print("\n🌐 Dashboard Access:")
-            print("   URL: http://localhost:8901/admin/dashboard.html")
+            print("   URL: http://localhost:8900/admin/dashboard.html")
             print("   Username: admin")
             print("   Password: [your new password]")
         else:

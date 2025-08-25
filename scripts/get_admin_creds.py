@@ -12,7 +12,7 @@ def main():
     db = ControlDatabase()
     # Database will show admin credentials during initialization if needed
     print("\nTo access the dashboard:")
-    print("🌐 URL: http://localhost:8901/admin/dashboard.html")
+    print("🌐 URL: http://localhost:8900/admin/dashboard.html")
     print("👤 Default username: admin")
     print("🔑 Check server startup logs for password")
     

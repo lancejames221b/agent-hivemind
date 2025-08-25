@@ -159,7 +159,7 @@ rollback = await workflow_rollback(
 
 ### 📊 Visual Dashboard
 
-Access the web dashboard at `http://localhost:8901`:
+Access the web dashboard at `http://localhost:8900/admin/`:
 
 - **Workflow Library**: Browse and execute templates
 - **Real-time Monitoring**: Track active executions
@@ -354,7 +354,7 @@ workflow_execute incident_response '{"issue_type": "database", "severity": "crit
 {
   "workflow_dashboard": {
     "host": "0.0.0.0",
-    "port": 8901,
+    "port": 8900,
     "enable_designer": true,
     "enable_analytics": true,
     "real_time_updates": true

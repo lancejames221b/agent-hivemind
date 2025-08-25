@@ -91,7 +91,7 @@ class WorkflowAutomationSystem:
         
         dashboard_config = self.config.get('workflow_dashboard', {})
         host = host or dashboard_config.get('host', '0.0.0.0')
-        port = port or dashboard_config.get('port', 8901)
+        port = port or dashboard_config.get('port', 8900)
         
         logger.info(f"Starting workflow dashboard on {host}:{port}")
         self.dashboard.run(host, port)
@@ -154,7 +154,7 @@ async def setup_workflow_mcp_tools(server, storage, config: Dict[str, Any]):
     return await system.register_mcp_tools(server)
 
 async def setup_workflow_dashboard(storage, config: Dict[str, Any], 
-                                 host: str = '0.0.0.0', port: int = 8901):
+                                 host: str = '0.0.0.0', port: int = 8900):
     """Quick setup for dashboard only"""
     system = await create_workflow_automation_system(storage, config)
     system.start_dashboard(host, port)
@@ -196,7 +196,7 @@ DEFAULT_CONFIG = {
     "workflow_dashboard": {
         "enabled": True,
         "host": "0.0.0.0",
-        "port": 8901,
+        "port": 8900,
         "enable_designer": True,
         "enable_analytics": True,
         "real_time_updates": True
