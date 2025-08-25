@@ -1273,7 +1273,7 @@ class WorkflowDashboard:
         for websocket in disconnected:
             self.websocket_connections.remove(websocket)
     
-    def run(self, host: str = "0.0.0.0", port: int = 8901):
+    def run(self, host: str = "0.0.0.0", port: int = 8900):
         """Run the dashboard server"""
         logger.info(f"Starting workflow dashboard on {host}:{port}")
         uvicorn.run(self.app, host=host, port=port)

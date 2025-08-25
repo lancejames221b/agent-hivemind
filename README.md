@@ -37,13 +37,18 @@ pip install -r requirements.txt
 
 # 2. Start hAIveMind services
 python src/memory_server.py &
-python src/remote_mcp_server.py &
+python src/remote_mcp_server.py &  # Now includes dashboard on port 8900
 python src/sync_service.py &
 
-# 3. Install MCP client
+# 3. Access the dashboard
+# Dashboard: http://localhost:8900/admin/
+# MCP SSE:   http://localhost:8900/sse
+# Health:    http://localhost:8900/health
+
+# 4. Install MCP client
 cd mcp-client && ./install.sh
 
-# 4. Test integration
+# 5. Test integration
 cursor-agent mcp list-tools haivemind
 ```
 

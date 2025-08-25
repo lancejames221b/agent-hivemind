@@ -39,7 +39,7 @@ The **MCP Server Registry** is a centralized multi-server SSE aggregator that pr
 │                 MCP SERVER POOL                             │
 ├─────────────────────────────────────────────────────────────┤
 │ Memory Server │ File Server │ Web Server │ Custom Servers   │
-│ Port: 8900   │ Port: 8901  │ Port: 8902 │ Port: 89XX       │
+│ Port: 8900   │ Port: 8900  │ Port: 8902 │ Port: 89XX       │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -149,7 +149,7 @@ interface ToolNamespace {
     "tailscale_enabled": true,
     "mdns_enabled": true,
     "network_scan": "10.0.0.0/8",
-    "discovery_ports": [8900, 8901, 8902, 8903, 8904],
+    "discovery_ports": [8900, 8902, 8903, 8904, 8905],
     "discovery_interval": 60
   }
 }

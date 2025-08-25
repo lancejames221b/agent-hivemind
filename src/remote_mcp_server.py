@@ -77,6 +77,9 @@ class RemoteMemoryMCPServer:
         # Add admin interface routes
         self._add_admin_routes()
         
+        # Initialize dashboard functionality
+        self._init_dashboard_functionality()
+        
         logger.info(f"🌐 hAIveMind network portal initialized on {self.host}:{self.port} - remote access enabled")
     
     def _add_context_resources(self):
@@ -1031,6 +1034,10 @@ The agent is now synchronized with the hAIveMind collective. All commands and co
         async def admin_pages(request):
             try:
                 page = request.path_params.get("page", "")
+                
+                # Handle root admin access
+                if page == "" or page == "/":
+                    page = "dashboard.html"
 
                 # Only allow simple filenames without path separators
                 if not re.fullmatch(r"[A-Za-z0-9_-]+(?:\.html)?", page):
@@ -1052,6 +1059,12 @@ The agent is now synchronized with the hAIveMind collective. All commands and co
                 return JSONResponse({"error": "Page not found"}, status_code=404)
             except Exception:
                 return JSONResponse({"error": "Page not found"}, status_code=404)
+        
+        # Root admin route - redirect to dashboard
+        @self.mcp.custom_route("/admin/", methods=["GET"])
+        @self.mcp.custom_route("/admin", methods=["GET"])
+        async def admin_root(request):
+            return FileResponse(str(Path(admin_dir) / "dashboard.html"))
         
         # Admin login endpoint
         @self.mcp.custom_route("/admin/api/login", methods=["POST"])
@@ -1165,6 +1178,150 @@ The agent is now synchronized with the hAIveMind collective. All commands and co
                 return JSONResponse({"error": str(e)}, status_code=500)
         
         logger.info("🔧 Admin web interface routes registered")
+    
+    def _init_dashboard_functionality(self):
+        """Initialize enhanced dashboard functionality from dashboard_server"""
+        try:
+            # Import dashboard components
+            from database import ControlDatabase, UserRole, DeviceStatus, KeyStatus
+            from config_generator import ConfigGenerator, ConfigFormat
+            
+            # Initialize dashboard database
+            self.dashboard_db = ControlDatabase("database/haivemind.db")
+            
+            # Initialize configuration generator
+            self._config_generator = None
+            try:
+                self._config_generator = ConfigGenerator(self.config, self.storage)
+            except Exception as e:
+                logger.warning(f"Configuration generator not available: {e}")
+            
+            # Add dashboard-specific routes
+            self._add_dashboard_routes()
+            
+            logger.info("📊 Enhanced dashboard functionality initialized")
+            
+        except Exception as e:
+            logger.warning(f"Dashboard functionality not available: {e}")
+    
+    def _add_dashboard_routes(self):
+        """Add enhanced dashboard routes"""
+        from starlette.responses import JSONResponse
+        import jwt
+        from datetime import datetime, timedelta
+        
+        # Dashboard stats endpoint
+        @self.mcp.custom_route("/admin/api/dashboard-stats", methods=["GET"])
+        async def dashboard_stats(request):
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            
+            try:
+                # Get enhanced stats from dashboard database
+                stats = self.dashboard_db.get_dashboard_stats()
+                
+                # Add MCP server stats
+                agent_roster = await self.storage.get_agent_roster()
+                memory_stats = self.storage.get_collection_info()
+                
+                enhanced_stats = {
+                    **stats,
+                    "mcp_agents": len(agent_roster.get('agents', [])),
+                    "memory_collections": len(memory_stats),
+                    "total_memories": sum(collection.get('count', 0) for collection in memory_stats.values()),
+                    "server_status": "running",
+                    "port": self.port
+                }
+                
+                return JSONResponse(enhanced_stats)
+            except Exception as e:
+                logger.error(f"Error getting dashboard stats: {e}")
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # Device management endpoints
+        @self.mcp.custom_route("/admin/api/devices", methods=["GET", "POST"])
+        async def manage_devices(request):
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            
+            try:
+                if request.method == "GET":
+                    devices = self.dashboard_db.list_devices()
+                    return JSONResponse([{
+                        "id": d.id,
+                        "device_id": d.device_id,
+                        "machine_id": d.machine_id,
+                        "hostname": d.hostname,
+                        "status": d.status.value,
+                        "created_at": d.created_at.isoformat(),
+                        "last_seen": d.last_seen.isoformat() if d.last_seen else None
+                    } for d in devices])
+                
+                elif request.method == "POST":
+                    data = await request.json()
+                    device_id = self.dashboard_db.register_device(
+                        data['device_id'],
+                        data['machine_id'], 
+                        data['hostname'],
+                        1,  # Default user ID
+                        data.get('metadata', {}),
+                        request.client.host
+                    )
+                    return JSONResponse({"device_id": device_id, "status": "registered"})
+                    
+            except Exception as e:
+                logger.error(f"Error managing devices: {e}")
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # Configuration generation endpoints
+        @self.mcp.custom_route("/admin/api/config/generate", methods=["POST"])
+        async def generate_config(request):
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            
+            try:
+                if not self._config_generator:
+                    return JSONResponse({"error": "Configuration generator not available"}, status_code=500)
+                
+                data = await request.json()
+                device_id = data.get('device_id')
+                format_str = data.get('format', 'claude_desktop')
+                
+                # Map format string to enum
+                format_map = {
+                    "claude_desktop": ConfigFormat.CLAUDE_DESKTOP,
+                    "claude_code": ConfigFormat.CLAUDE_CODE,
+                    "custom": ConfigFormat.CUSTOM_JSON,
+                    "mcp_json": ConfigFormat.MCP_JSON,
+                    "yaml": ConfigFormat.YAML,
+                    "shell_script": ConfigFormat.SHELL_SCRIPT,
+                    "docker_compose": ConfigFormat.DOCKER_COMPOSE
+                }
+                
+                config_format = format_map.get(format_str, ConfigFormat.CLAUDE_DESKTOP)
+                
+                # Generate configuration
+                client_config = self._config_generator.generate_client_config(
+                    user_id="admin",
+                    device_id=device_id,
+                    format=config_format,
+                    include_auth=data.get('include_auth', True)
+                )
+                
+                config_string = self._config_generator.template_engine.generate(client_config)
+                
+                return JSONResponse({
+                    "config": config_string,
+                    "format": format_str,
+                    "device_id": device_id,
+                    "generated_at": datetime.utcnow().isoformat()
+                })
+                
+            except Exception as e:
+                logger.error(f"Error generating config: {e}")
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        logger.info("📊 Enhanced dashboard routes registered")
     
     async def _check_admin_auth(self, request):
         """Check if request has valid admin authentication"""

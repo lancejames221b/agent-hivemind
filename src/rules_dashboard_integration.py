@@ -346,12 +346,12 @@ def main():
     dashboard = EnhancedDashboardServer()
     
     print("🚀 Starting Enhanced hAIveMind Dashboard with Rules Management...")
-    print("📊 Main Dashboard: http://localhost:8901/admin/dashboard.html")
-    print("⚙️  Rules Dashboard: http://localhost:8901/admin/rules")
-    print("🔧 API Documentation: http://localhost:8901/docs")
-    print("📈 Rules API: http://localhost:8901/api/v1/rules/")
+    print("📊 Main Dashboard: http://localhost:8900/admin/dashboard.html")
+    print("⚙️  Rules Dashboard: http://localhost:8900/admin/rules")
+    print("🔧 API Documentation: http://localhost:8900/docs")
+    print("📈 Rules API: http://localhost:8900/api/v1/rules/")
     
-    uvicorn.run(dashboard.app, host="0.0.0.0", port=8901)
+    uvicorn.run(dashboard.app, host="0.0.0.0", port=8900)
 
 if __name__ == "__main__":
     main()

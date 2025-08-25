@@ -1238,10 +1238,10 @@ def main():
     
     dashboard = DashboardServer()
     print("🚀 Starting hAIveMind Control Dashboard...")
-    print("📊 Dashboard: http://localhost:8901/admin/dashboard.html")
-    print("🔑 API Docs: http://localhost:8901/docs")
+    print("📊 Dashboard: http://localhost:8900/admin/dashboard.html")
+    print("🔑 API Docs: http://localhost:8900/docs")
     
-    uvicorn.run(dashboard.app, host="0.0.0.0", port=8901)
+    uvicorn.run(dashboard.app, host="0.0.0.0", port=8900)
 
 if __name__ == "__main__":
     main()

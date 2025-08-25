@@ -248,7 +248,7 @@ Successfully implemented a comprehensive Client Configuration Generator for hAIv
 
 ### Generate Claude Desktop Configuration
 ```bash
-curl -X POST http://localhost:8901/api/v1/config/generate \
+curl -X POST http://localhost:8900/api/v1/config/generate \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{
@@ -261,7 +261,7 @@ curl -X POST http://localhost:8901/api/v1/config/generate \
 
 ### Generate Multiple Formats
 ```bash
-curl -X POST http://localhost:8901/api/v1/config/generate-multiple \
+curl -X POST http://localhost:8900/api/v1/config/generate-multiple \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{
@@ -274,7 +274,7 @@ curl -X POST http://localhost:8901/api/v1/config/generate-multiple \
 
 ### Download Configuration
 ```bash
-curl -O http://localhost:8901/api/v1/config/download/claude_desktop?device_id=my-device \
+curl -O http://localhost:8900/api/v1/config/download/claude_desktop?device_id=my-device \
   -H "Authorization: Bearer <token>"
 ```
 
@@ -307,7 +307,7 @@ curl -O http://localhost:8901/api/v1/config/download/claude_desktop?device_id=my
 ### Startup
 1. Start hAIveMind core services
 2. Start dashboard server: `python src/dashboard_server.py`
-3. Access configuration generator: `http://localhost:8901/admin/client_configs.html`
+3. Access configuration generator: `http://localhost:8900/admin/client_configs.html`
 
 ### Configuration
 - Server discovery via aggregator configuration
