@@ -1,0 +1,262 @@
+{
+  "vault": {
+    "database_path": "data/vault.db",
+    "encryption": {
+      "default_algorithm": "AES-256-GCM",
+      "key_derivation_method": "scrypt",
+      "pbkdf2_iterations": 100000,
+      "scrypt_n": 16384,
+      "scrypt_r": 8,
+      "scrypt_p": 1,
+      "key_rotation_days": 90,
+      "backup_encryption": true
+    },
+    "security_policies": {
+      "standard": {
+        "min_security_level": "standard",
+        "require_multi_auth": false,
+        "max_access_attempts": 5,
+        "session_timeout": 28800,
+        "audit_required": false,
+        "encryption_algorithm": "AES-256-GCM",
+        "key_rotation_days": 90,
+        "backup_encryption": true,
+        "geographic_restrictions": []
+      },
+      "high": {
+        "min_security_level": "high",
+        "require_multi_auth": true,
+        "max_access_attempts": 3,
+        "session_timeout": 14400,
+        "audit_required": true,
+        "encryption_algorithm": "AES-256-GCM",
+        "key_rotation_days": 30,
+        "backup_encryption": true,
+        "geographic_restrictions": []
+      },
+      "critical": {
+        "min_security_level": "critical",
+        "require_multi_auth": true,
+        "max_access_attempts": 2,
+        "session_timeout": 3600,
+        "audit_required": true,
+        "encryption_algorithm": "AES-256-GCM",
+        "key_rotation_days": 14,
+        "backup_encryption": true,
+        "geographic_restrictions": ["US", "CA", "EU"]
+      },
+      "top_secret": {
+        "min_security_level": "top_secret",
+        "require_multi_auth": true,
+        "max_access_attempts": 1,
+        "session_timeout": 1800,
+        "audit_required": true,
+        "encryption_algorithm": "AES-256-GCM",
+        "key_rotation_days": 7,
+        "backup_encryption": true,
+        "geographic_restrictions": ["US"]
+      }
+    },
+    "hsm": {
+      "aws_cloudhsm": {
+        "provider": "aws_cloudhsm",
+        "endpoint": "${AWS_CLOUDHSM_ENDPOINT}",
+        "auth_token": "${AWS_CLOUDHSM_TOKEN}",
+        "key_label": "haivemind_vault_master",
+        "ca_cert_path": "/etc/ssl/certs/aws-cloudhsm-ca.pem"
+      },
+      "azure_hsm": {
+        "provider": "azure_hsm",
+        "endpoint": "${AZURE_HSM_ENDPOINT}",
+        "auth_token": "${AZURE_HSM_TOKEN}",
+        "key_label": "haivemind-vault-master"
+      },
+      "yubihsm2": {
+        "provider": "yubihsm2",
+        "endpoint": "http://localhost:12345",
+        "auth_token": "${YUBIHSM2_AUTH_KEY}",
+        "key_label": "haivemind_vault",
+        "slot_id": 1
+      }
+    },
+    "access_control": {
+      "default_access_level": "viewer",
+      "owner_permissions": ["read", "write", "delete", "grant_access", "revoke_access"],
+      "admin_permissions": ["read", "write", "grant_access", "revoke_access"],
+      "operator_permissions": ["read", "write"],
+      "viewer_permissions": ["read"],
+      "emergency_permissions": ["read", "write", "delete", "grant_access", "revoke_access", "emergency_override"],
+      "session_management": {
+        "max_concurrent_sessions": 5,
+        "idle_timeout_minutes": 30,
+        "absolute_timeout_hours": 8,
+        "require_mfa_for_sensitive": true
+      }
+    },
+    "compliance": {
+      "retention_policies": {
+        "audit_logs": {
+          "retention_days": 2555,
+          "archive_after_days": 365,
+          "encryption_required": true
+        },
+        "credential_history": {
+          "retention_days": 1095,
+          "archive_after_days": 180,
+          "encryption_required": true
+        },
+        "access_logs": {
+          "retention_days": 365,
+          "archive_after_days": 90,
+          "encryption_required": true
+        }
+      },
+      "frameworks": {
+        "soc2": {
+          "enabled": true,
+          "controls": ["access_control", "encryption", "audit_logging", "data_retention"],
+          "reporting_frequency": "quarterly"
+        },
+        "hipaa": {
+          "enabled": false,
+          "controls": ["encryption", "access_control", "audit_logging", "data_integrity"],
+          "reporting_frequency": "annual"
+        },
+        "pci_dss": {
+          "enabled": true,
+          "controls": ["encryption", "access_control", "vulnerability_management", "monitoring"],
+          "reporting_frequency": "quarterly"
+        },
+        "gdpr": {
+          "enabled": true,
+          "controls": ["data_protection", "access_control", "data_retention", "breach_notification"],
+          "reporting_frequency": "annual"
+        }
+      }
+    },
+    "backup_and_recovery": {
+      "backup_schedule": "0 2 * * *",
+      "backup_retention_days": 90,
+      "backup_encryption": true,
+      "backup_locations": [
+        {
+          "type": "local",
+          "path": "data/backups/vault"
+        },
+        {
+          "type": "s3",
+          "bucket": "${VAULT_BACKUP_S3_BUCKET}",
+          "prefix": "vault-backups/",
+          "encryption": "AES256"
+        }
+      ],
+      "disaster_recovery": {
+        "rpo_minutes": 60,
+        "rto_minutes": 240,
+        "backup_verification": true,
+        "automated_failover": false
+      }
+    },
+    "monitoring": {
+      "metrics": {
+        "enabled": true,
+        "collection_interval": 60,
+        "retention_days": 30
+      },
+      "alerts": {
+        "failed_authentication_threshold": 5,
+        "unusual_access_pattern_threshold": 10,
+        "credential_expiry_warning_days": 30,
+        "high_privilege_access_alert": true,
+        "emergency_access_alert": true
+      },
+      "dashboards": {
+        "grafana_enabled": true,
+        "prometheus_metrics": true,
+        "custom_dashboards": [
+          "vault_overview",
+          "security_metrics",
+          "compliance_status",
+          "performance_metrics"
+        ]
+      }
+    },
+    "integration": {
+      "ldap": {
+        "enabled": false,
+        "server": "${LDAP_SERVER}",
+        "bind_dn": "${LDAP_BIND_DN}",
+        "bind_password": "${LDAP_BIND_PASSWORD}",
+        "user_base_dn": "${LDAP_USER_BASE_DN}",
+        "group_base_dn": "${LDAP_GROUP_BASE_DN}",
+        "user_filter": "(objectClass=person)",
+        "group_filter": "(objectClass=group)"
+      },
+      "active_directory": {
+        "enabled": false,
+        "domain": "${AD_DOMAIN}",
+        "server": "${AD_SERVER}",
+        "bind_user": "${AD_BIND_USER}",
+        "bind_password": "${AD_BIND_PASSWORD}",
+        "user_search_base": "${AD_USER_SEARCH_BASE}",
+        "group_search_base": "${AD_GROUP_SEARCH_BASE}"
+      },
+      "saml": {
+        "enabled": false,
+        "idp_metadata_url": "${SAML_IDP_METADATA_URL}",
+        "sp_entity_id": "haivemind-vault",
+        "sp_acs_url": "${VAULT_BASE_URL}/auth/saml/callback",
+        "attribute_mapping": {
+          "email": "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress",
+          "name": "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name",
+          "groups": "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/groups"
+        }
+      },
+      "oauth2": {
+        "enabled": false,
+        "providers": {
+          "google": {
+            "client_id": "${GOOGLE_OAUTH_CLIENT_ID}",
+            "client_secret": "${GOOGLE_OAUTH_CLIENT_SECRET}",
+            "scopes": ["openid", "email", "profile"]
+          },
+          "microsoft": {
+            "client_id": "${MICROSOFT_OAUTH_CLIENT_ID}",
+            "client_secret": "${MICROSOFT_OAUTH_CLIENT_SECRET}",
+            "tenant_id": "${MICROSOFT_TENANT_ID}",
+            "scopes": ["openid", "email", "profile"]
+          }
+        }
+      }
+    },
+    "haivemind_integration": {
+      "enabled": true,
+      "memory_categories": [
+        "vault_operations",
+        "security_events",
+        "access_patterns",
+        "threat_intelligence",
+        "compliance_events"
+      ],
+      "analytics": {
+        "access_pattern_analysis": true,
+        "anomaly_detection": true,
+        "threat_correlation": true,
+        "compliance_monitoring": true,
+        "performance_optimization": true
+      },
+      "collaboration": {
+        "threat_sharing": true,
+        "incident_coordination": true,
+        "best_practice_sharing": true,
+        "automated_responses": true
+      },
+      "learning": {
+        "usage_patterns": true,
+        "security_effectiveness": true,
+        "operational_efficiency": true,
+        "user_behavior_analysis": true
+      }
+    }
+  }
+}
