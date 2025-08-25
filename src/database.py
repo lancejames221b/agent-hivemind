@@ -341,8 +341,8 @@ class ControlDatabase:
             user_count = cursor.fetchone()[0]
             
             if user_count == 0:
-                # Create default admin
-                admin_password = secrets.token_urlsafe(16)
+                # Create default admin with standard credentials
+                admin_password = "admin123"
                 password_hash = bcrypt.hashpw(admin_password.encode(), bcrypt.gensalt()).decode()
                 
                 conn.execute("""
