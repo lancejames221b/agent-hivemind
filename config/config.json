@@ -28,7 +28,12 @@
     "conflict_resolution": "timestamp",
     "discovery": {
       "tailscale_enabled": true,
-      "machines": ["lance-dev", "ljs-macbook-pro", "m2", "max"]
+      "machines": [
+        "lance-dev",
+        "ljs-macbook-pro",
+        "m2",
+        "max"
+      ]
     }
   },
   "rules": {
@@ -39,7 +44,10 @@
     "enable_haivemind_integration": true,
     "backup_interval": 86400,
     "backup_path": "data/backups/rules",
-    "export_formats": ["yaml", "json"],
+    "export_formats": [
+      "yaml",
+      "json"
+    ],
     "import_validation": "strict",
     "performance": {
       "cache_size": 1000,
@@ -49,7 +57,21 @@
     }
   },
   "memory": {
-    "categories": ["project", "conversation", "agent", "global", "infrastructure", "incidents", "deployments", "monitoring", "runbooks", "security", "rules", "patterns", "playbook_suggestions"],
+    "categories": [
+      "project",
+      "conversation",
+      "agent",
+      "global",
+      "infrastructure",
+      "incidents",
+      "deployments",
+      "monitoring",
+      "runbooks",
+      "security",
+      "rules",
+      "patterns",
+      "playbook_suggestions"
+    ],
     "max_age_days": 365,
     "auto_consolidate": true,
     "consolidate_interval": 86400,
@@ -59,22 +81,71 @@
       "scope_default": "auto"
     },
     "machine_groups": {
-      "orchestrators": ["lance-dev"],
-      "elasticsearch": ["elastic1", "elastic2", "elastic3", "elastic4", "elastic5"],
-      "databases": ["mysql", "mongodb", "kafka"],
-      "scrapers": ["telegram-scraper", "discord-scraper", "proxy0", "proxy1", "proxy2", "proxy3", "proxy4", "proxy5", "proxy6", "proxy7", "proxy8", "proxy9"],
-      "dev_environments": ["tony-dev", "mike-dev", "oleg-dev", "chris-dev"],
-      "monitoring": ["grafana", "auth-server"],
-      "edge": ["frontend"],
-      "personal": ["ljs-macbook-pro", "m2", "max"]
+      "orchestrators": [
+        "lance-dev"
+      ],
+      "elasticsearch": [
+        "elastic1",
+        "elastic2",
+        "elastic3",
+        "elastic4",
+        "elastic5"
+      ],
+      "databases": [
+        "mysql",
+        "mongodb",
+        "kafka"
+      ],
+      "scrapers": [
+        "telegram-scraper",
+        "discord-scraper",
+        "proxy0",
+        "proxy1",
+        "proxy2",
+        "proxy3",
+        "proxy4",
+        "proxy5",
+        "proxy6",
+        "proxy7",
+        "proxy8",
+        "proxy9"
+      ],
+      "dev_environments": [
+        "tony-dev",
+        "mike-dev",
+        "oleg-dev",
+        "chris-dev"
+      ],
+      "monitoring": [
+        "grafana",
+        "auth-server"
+      ],
+      "edge": [
+        "frontend"
+      ],
+      "personal": [
+        "ljs-macbook-pro",
+        "m2",
+        "max"
+      ]
     },
     "sharing_rules": {
       "default_scope": "project-shared",
-      "sync_with_groups": ["personal"],
+      "sync_with_groups": [
+        "personal"
+      ],
       "exclude_machines": [],
-      "private_categories": ["agent"],
-      "encryption_required": ["production", "infrastructure"],
-      "audit_categories": ["global", "conversation"]
+      "private_categories": [
+        "agent"
+      ],
+      "encryption_required": [
+        "production",
+        "infrastructure"
+      ],
+      "audit_categories": [
+        "global",
+        "conversation"
+      ]
     }
   },
   "remote_server": {
@@ -82,7 +153,9 @@
     "host": "0.0.0.0",
     "port": 8900,
     "cors_enabled": true,
-    "allowed_origins": ["*"],
+    "allowed_origins": [
+      "*"
+    ],
     "mount_paths": {
       "sse": "/sse",
       "streamable_http": "/mcp"
@@ -145,11 +218,16 @@
         "username": "lancejames@unit221b.com",
         "token": "${CONFLUENCE_API_TOKEN}"
       },
-      "spaces": ["INFRA", "DEVOPS", "DOCS", "EWITNESS"],
+      "spaces": [
+        "INFRA",
+        "DEVOPS",
+        "DOCS",
+        "EWITNESS"
+      ],
       "enabled": false,
       "space_category_mapping": {
         "INFRA": "infrastructure",
-        "DEVOPS": "devops", 
+        "DEVOPS": "devops",
         "DOCS": "documentation",
         "EWITNESS": "monitoring"
       },
@@ -161,10 +239,15 @@
     "jira": {
       "url": "https://unit221b.atlassian.net",
       "credentials": {
-        "username": "lancejames@unit221b.com", 
+        "username": "lancejames@unit221b.com",
         "token": "${JIRA_API_TOKEN}"
       },
-      "projects": ["INFRA", "DEVOPS", "SUPPORT", "EWITNESS"],
+      "projects": [
+        "INFRA",
+        "DEVOPS",
+        "SUPPORT",
+        "EWITNESS"
+      ],
       "enabled": false
     }
   },
@@ -176,8 +259,15 @@
     "namespace": {
       "auto_prefix": true,
       "conflict_resolution": "priority",
-      "allow_unprefixed": ["high_priority_tools"],
-      "reserved_prefixes": ["mcp__", "registry__", "system__", "aggregator__"]
+      "allow_unprefixed": [
+        "high_priority_tools"
+      ],
+      "reserved_prefixes": [
+        "mcp__",
+        "registry__",
+        "system__",
+        "aggregator__"
+      ]
     },
     "static_servers": [
       {
@@ -191,11 +281,24 @@
       }
     ],
     "discovery": {
-      "methods": ["static", "network", "api"],
+      "methods": [
+        "static",
+        "network",
+        "api"
+      ],
       "network_discovery": {
         "enabled": true,
-        "scan_ranges": ["10.0.0.0/8", "192.168.0.0/16"],
-        "ports": [8900, 8902, 8903, 8904, 8905],
+        "scan_ranges": [
+          "10.0.0.0/8",
+          "192.168.0.0/16"
+        ],
+        "ports": [
+          8900,
+          8902,
+          8903,
+          8904,
+          8905
+        ],
         "interval": 60
       }
     },
@@ -222,7 +325,10 @@
     },
     "auth": {
       "enabled": true,
-      "methods": ["jwt", "api_key"],
+      "methods": [
+        "jwt",
+        "api_key"
+      ],
       "propagate_user_context": true
     }
   },
@@ -238,7 +344,7 @@
   "mcp_hosting": {
     "enabled": true,
     "servers_dir": "data/mcp_servers",
-    "uploads_dir": "data/mcp_uploads", 
+    "uploads_dir": "data/mcp_uploads",
     "logs_dir": "data/mcp_logs",
     "max_servers": 10,
     "health_check_interval": 30,
@@ -251,7 +357,11 @@
       "debug": false
     },
     "security": {
-      "allowed_languages": ["python", "node", "bash"],
+      "allowed_languages": [
+        "python",
+        "node",
+        "bash"
+      ],
       "sandbox_by_default": true,
       "max_upload_size_mb": 100,
       "scan_uploads": true
@@ -269,8 +379,20 @@
       "read_only_token": "${HAIVEMIND_READONLY_TOKEN}",
       "agent_token": "${HAIVEMIND_AGENT_TOKEN}"
     },
-    "allowed_origins": ["localhost", "127.0.0.1", "lance-dev", "ljs-macbook-pro", "m2", "max"],
-    "ip_whitelist": ["127.0.0.1", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"],
+    "allowed_origins": [
+      "localhost",
+      "127.0.0.1",
+      "lance-dev",
+      "ljs-macbook-pro",
+      "m2",
+      "max"
+    ],
+    "ip_whitelist": [
+      "127.0.0.1",
+      "10.0.0.0/8",
+      "172.16.0.0/12",
+      "192.168.0.0/16"
+    ],
     "rate_limiting": {
       "enabled": true,
       "requests_per_minute": 120,
@@ -280,7 +402,13 @@
       "enabled": true,
       "retention_days": 90,
       "log_sensitive_data": false,
-      "high_risk_events": ["delete_memory", "bulk_delete_memories", "gdpr_delete_user_data", "create_user_account", "create_api_key"]
+      "high_risk_events": [
+        "delete_memory",
+        "bulk_delete_memories",
+        "gdpr_delete_user_data",
+        "create_user_account",
+        "create_api_key"
+      ]
     },
     "password_policy": {
       "min_length": 8,
@@ -295,20 +423,12 @@
       "key_file": "/etc/ssl/private/haivemind.key"
     }
   },
-  "storage": {
-    "chromadb": {
-      "path": "/home/lj/memory-mcp/data/chroma",
-      "embedding_model": "all-MiniLM-L6-v2",
-      "anonymized_telemetry": false
-    },
-    "redis": {
-      "host": "localhost",
-      "port": 6379,
-      "db": 0,
-      "password": null,
-      "enable_cache": true
-    },
-    "registry_db": "data/registry.db",
-    "auth_db": "data/auth.db"
+  "confluence": {
+    "server_url": "https://updated.atlassian.net",
+    "username": "updated@example.com",
+    "api_token": "updated456",
+    "connection_status": "configured",
+    "last_updated": 1756123042.4734287,
+    "last_sync": 1756123052.151765
   }
 }

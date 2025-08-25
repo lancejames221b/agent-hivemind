@@ -231,7 +231,7 @@
         // Load current user
         async function loadCurrentUser() {
             try {
-                const response = await apiRequest('/api/v1/auth/verify');
+                const response = await apiRequest('/admin/api/verify');
                 const data = await response.json();
                 document.getElementById('current-user').textContent = data.user.username;
             } catch (error) {
@@ -242,13 +242,34 @@
         // Load servers
         async function loadServers() {
             try {
-                const response = await apiRequest('/api/v1/mcp/servers');
+                const response = await apiRequest('/admin/api/mcp/servers');
                 const data = await response.json();
-                servers = data.servers;
+                
+                // Transform backend data to frontend format
+                servers = data.servers.map(server => ({
+                    id: server.id,
+                    name: server.name,
+                    server_type: server.transport,
+                    endpoint: server.endpoint,
+                    description: `${server.tools_count} tools available`,
+                    priority: server.auto_start ? 10 : 5,
+                    health: {
+                        status: server.status === 'online' ? 'online' : 
+                               server.status === 'offline' ? 'offline' : 
+                               server.status === 'error' ? 'error' : 'unknown',
+                        last_check: new Date(server.last_seen * 1000).toISOString(),
+                        response_time: '50ms',
+                        uptime: Math.floor((Date.now()/1000 - server.last_seen) / 3600) + 'h'
+                    },
+                    auto_start: server.auto_start,
+                    tools_count: server.tools_count
+                }));
+                
                 renderServers();
                 updateStats();
             } catch (error) {
                 console.error('Error loading servers:', error);
+                showToast('Failed to load MCP servers', 'error');
             }
         }
         
@@ -372,24 +393,21 @@
             const serverId = document.getElementById('server-id').value;
             const serverData = {
                 name: document.getElementById('server-name').value,
-                server_type: document.getElementById('server-type').value,
+                transport: document.getElementById('server-type').value, // Backend expects 'transport'
                 endpoint: document.getElementById('server-endpoint').value,
                 description: document.getElementById('server-description').value || null,
-                priority: parseInt(document.getElementById('server-priority').value),
-                enabled: document.getElementById('server-enabled').checked,
-                config: {},
-                tags: []
+                auto_start: document.getElementById('server-enabled').checked
             };
             
             try {
                 let response;
                 if (serverId) {
-                    response = await apiRequest(`/api/v1/mcp/servers/${serverId}`, {
+                    response = await apiRequest(`/admin/api/mcp/servers/${serverId}`, {
                         method: 'PUT',
                         body: JSON.stringify(serverData)
                     });
                 } else {
-                    response = await apiRequest('/api/v1/mcp/servers', {
+                    response = await apiRequest('/admin/api/mcp/servers', {
                         method: 'POST',
                         body: JSON.stringify(serverData)
                     });

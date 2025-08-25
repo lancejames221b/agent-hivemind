@@ -888,3 +888,227 @@ table tr:hover {
         padding: 4px 8px;
     }
 }
+
+/* Enhanced Mobile and Touch-Friendly Styles */
+@media (max-width: 480px) {
+    /* Login page mobile improvements */
+    .login-container {
+        padding: 15px;
+        margin: 10px;
+        width: calc(100% - 20px);
+    }
+    
+    .login-header img {
+        height: 100px !important;
+    }
+    
+    .form-group input {
+        font-size: 16px; /* Prevent iOS zoom */
+        height: 44px; /* Touch-friendly height */
+    }
+    
+    .login-btn {
+        height: 44px;
+        font-size: 16px;
+        margin-top: 20px;
+    }
+    
+    /* Navigation improvements */
+    .nav-header {
+        padding: 10px;
+        flex-direction: column;
+    }
+    
+    .nav-links {
+        width: 100%;
+        justify-content: space-around;
+        flex-wrap: wrap;
+    }
+    
+    .nav-links a {
+        padding: 10px 8px;
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+    }
+    
+    /* Main content mobile */
+    .main-content {
+        padding: 10px;
+    }
+    
+    .page-header h1 {
+        font-size: 1.5em;
+    }
+    
+    /* Forms mobile */
+    .form-container {
+        padding: 15px;
+    }
+    
+    .form-group label {
+        font-size: 14px;
+        font-weight: bold;
+    }
+    
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+        font-size: 16px; /* Prevent iOS zoom */
+        min-height: 44px; /* Touch-friendly */
+        padding: 12px;
+    }
+    
+    /* Buttons mobile */
+    .btn, button {
+        min-height: 44px;
+        font-size: 16px;
+        padding: 12px 20px;
+        margin: 5px;
+    }
+    
+    .btn-group {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .btn-group .btn {
+        width: 100%;
+        margin: 3px 0;
+    }
+    
+    /* Tables mobile */
+    .table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    table {
+        min-width: 300px;
+        font-size: 12px;
+    }
+    
+    th, td {
+        padding: 8px 4px;
+        white-space: nowrap;
+    }
+    
+    .actions {
+        min-width: 80px;
+    }
+    
+    /* Modal mobile */
+    .modal-content {
+        width: 98%;
+        margin: 1% auto;
+        max-height: 98vh;
+        padding: 15px;
+    }
+    
+    .modal-header h2 {
+        font-size: 1.2em;
+    }
+    
+    /* Stats cards mobile */
+    .stats-card {
+        padding: 15px;
+        text-align: center;
+    }
+    
+    .stats-card h3 {
+        font-size: 1.1em;
+    }
+    
+    /* Error and success messages mobile */
+    .error-message,
+    .success-message,
+    .info-message {
+        font-size: 14px;
+        padding: 10px;
+        word-wrap: break-word;
+    }
+    
+    /* Search and filter mobile */
+    .search-container {
+        flex-direction: column;
+    }
+    
+    .search-input {
+        width: 100%;
+        font-size: 16px; /* Prevent iOS zoom */
+        margin-bottom: 10px;
+    }
+    
+    .filters {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .filters select {
+        width: 100%;
+        font-size: 16px; /* Prevent iOS zoom */
+    }
+}
+
+/* Touch-friendly improvements for all screen sizes */
+@media (hover: none) and (pointer: coarse) {
+    /* Touch device specific styles */
+    .btn:hover {
+        background-color: var(--primary-color);
+    }
+    
+    .nav-links a:hover {
+        background-color: rgba(255, 255, 255, 0.1);
+    }
+    
+    /* Larger touch targets */
+    .close {
+        min-width: 44px;
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    /* Remove hover effects that don't work on touch */
+    .stats-card:hover {
+        transform: none;
+    }
+    
+    /* Better scroll indicators */
+    .table-container::-webkit-scrollbar {
+        height: 8px;
+    }
+    
+    .table-container::-webkit-scrollbar-thumb {
+        background-color: rgba(255, 255, 255, 0.3);
+        border-radius: 4px;
+    }
+}
+
+/* Landscape mobile improvements */
+@media (max-width: 768px) and (orientation: landscape) {
+    .nav-header {
+        flex-direction: row;
+        padding: 5px 10px;
+    }
+    
+    .nav-logo {
+        height: 35px;
+    }
+    
+    .nav-links {
+        flex-direction: row;
+        gap: 10px;
+    }
+    
+    .main-content {
+        padding: 10px;
+    }
+    
+    .modal-content {
+        max-height: 85vh;
+    }
+}
