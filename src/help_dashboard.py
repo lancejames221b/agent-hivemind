@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional
 from pathlib import Path
 import logging
 
+from fastapi.responses import HTMLResponse
 from .interactive_help_system import InteractiveHelpSystem
 
 logger = logging.getLogger(__name__)
@@ -596,31 +597,31 @@ class HelpSystemDashboard:
         return html
 
 # Integration with existing dashboard server
-async def add_help_dashboard_routes(app, storage, config):
-    """Add help system dashboard routes to existing dashboard"""
+def add_help_dashboard_routes(app, storage, config):
+    """Add help system dashboard routes to existing FastAPI dashboard"""
     
     dashboard = HelpSystemDashboard(storage, config)
     
-    @app.route('/help-dashboard')
+    @app.get('/admin/help-dashboard', response_class=HTMLResponse)
     async def help_dashboard():
         """Help system analytics dashboard"""
         try:
             dashboard_data = await dashboard.get_dashboard_data()
             html = dashboard.generate_dashboard_html(dashboard_data)
-            return html, 200, {'Content-Type': 'text/html'}
+            return html
         except Exception as e:
             logger.error(f"Error generating help dashboard: {e}")
-            return f"Dashboard error: {str(e)}", 500
+            return f"<html><body><h1>Dashboard Error</h1><p>{str(e)}</p></body></html>"
     
-    @app.route('/api/help-analytics')
+    @app.get('/api/v1/help-analytics')
     async def help_analytics_api():
         """Help system analytics API endpoint"""
         try:
             dashboard_data = await dashboard.get_dashboard_data()
-            return json.dumps(dashboard_data, indent=2), 200, {'Content-Type': 'application/json'}
+            return dashboard_data
         except Exception as e:
             logger.error(f"Error getting help analytics: {e}")
-            return json.dumps({'error': str(e)}), 500, {'Content-Type': 'application/json'}
+            return {"error": str(e)}
     
-    logger.info("Help system dashboard routes added")
+    logger.info("Help system dashboard routes added to FastAPI")
     return dashboard
