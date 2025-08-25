@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rules Dashboard - hAIveMind</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f8f9fa;
+            color: #333;
+            line-height: 1.6;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1.5rem 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+        
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .header h1 {
+            font-size: 1.8rem;
+            font-weight: 600;
+        }
+        
+        .header-actions {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+        
+        .btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+        
+        .btn-primary { background: #007bff; color: white; }
+        .btn-secondary { background: #6c757d; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-warning { background: #ffc107; color: #212529; }
+        .btn-danger { background: #dc3545; color: white; }
+        .btn-light { background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3); }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        .dashboard-nav {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+            overflow: hidden;
+        }
+        
+        .nav-tabs {
+            display: flex;
+            border-bottom: 1px solid #e9ecef;
+        }
+        
+        .nav-tab {
+            padding: 1rem 1.5rem;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: #666;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .nav-tab:hover {
+            background: #f8f9fa;
+            color: #333;
+        }
+        
+        .nav-tab.active {
+            background: #667eea;
+            color: white;
+            border-bottom: 3px solid #5a67d8;
+        }
+        
+        .tab-content {
+            display: none;
+            padding: 2rem;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        
+        .stat-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+            transition: transform 0.2s ease;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-2px);
+        }
+        
+        .stat-card h3 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+            color: #667eea;
+        }
+        
+        .stat-card p {
+            color: #666;
+            font-weight: 500;
+        }
+        
+        .rules-grid {
+            display: grid;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        
+        .rule-card {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+            transition: all 0.2s ease;
+        }
+        
+        .rule-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        }
+        
+        .rule-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid #e9ecef;
+        }
+        
+        .rule-title {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 0.5rem;
+        }
+        
+        .rule-title h4 {
+            font-size: 1.1rem;
+            color: #333;
+            margin: 0;
+        }
+        
+        .rule-status {
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .status-active { background: #d4edda; color: #155724; }
+        .status-inactive { background: #f8d7da; color: #721c24; }
+        .status-testing { background: #fff3cd; color: #856404; }
+        .status-deprecated { background: #e2e3e5; color: #383d41; }
+        
+        .rule-meta {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.85rem;
+            color: #666;
+            margin-bottom: 1rem;
+        }
+        
+        .rule-description {
+            color: #555;
+            margin-bottom: 1rem;
+        }
+        
+        .rule-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        
+        .tag {
+            background: #e9ecef;
+            color: #495057;
+            padding: 0.25rem 0.5rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+        }
+        
+        .rule-actions {
+            padding: 1rem 1.5rem;
+            background: #f8f9fa;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .rule-actions-left {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .rule-actions-right {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .btn-sm {
+            padding: 0.375rem 0.75rem;
+            font-size: 0.8rem;
+        }
+        
+        .filters-section {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+        
+        .filters-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .form-group label {
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            color: #333;
+        }
+        
+        .form-control {
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            transition: border-color 0.2s ease;
+        }
+        
+        .form-control:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+        }
+        
+        .search-section {
+            display: flex;
+            gap: 1rem;
+            align-items: end;
+        }
+        
+        .search-group {
+            flex: 1;
+        }
+        
+        .visual-builder {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .builder-header {
+            background: #f8f9fa;
+            padding: 1.5rem;
+            border-bottom: 1px solid #e9ecef;
+        }
+        
+        .builder-content {
+            padding: 2rem;
+        }
+        
+        .builder-section {
+            margin-bottom: 2rem;
+            padding: 1.5rem;
+            border: 2px dashed #e9ecef;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+        }
+        
+        .builder-section:hover {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.05);
+        }
+        
+        .builder-section h5 {
+            margin-bottom: 1rem;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .condition-item, .action-item {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 6px;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .condition-item:last-child, .action-item:last-child {
+            margin-bottom: 0;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 3rem;
+            color: #666;
+        }
+        
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(102, 126, 234, 0.3);
+            border-radius: 50%;
+            border-top-color: #667eea;
+            animation: spin 1s ease-in-out infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: #666;
+        }
+        
+        .empty-state h3 {
+            margin-bottom: 1rem;
+            color: #333;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+        
+        .modal.show {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal-content {
+            background: white;
+            border-radius: 10px;
+            max-width: 800px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        
+        .modal-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid #e9ecef;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .modal-header h4 {
+            margin: 0;
+            color: #333;
+        }
+        
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #666;
+        }
+        
+        .modal-body {
+            padding: 2rem;
+        }
+        
+        .modal-footer {
+            padding: 1.5rem;
+            border-top: 1px solid #e9ecef;
+            display: flex;
+            justify-content: flex-end;
+            gap: 1rem;
+        }
+        
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .form-row.full {
+            grid-template-columns: 1fr;
+        }
+        
+        .analytics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+        
+        .analytics-card {
+            background: white;
+            padding: 2rem;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .analytics-card h4 {
+            margin-bottom: 1rem;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .chart-placeholder {
+            height: 200px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+            font-style: italic;
+        }
+        
+        .conflict-item {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 6px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .conflict-item:last-child {
+            margin-bottom: 0;
+        }
+        
+        .conflict-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+        
+        .conflict-type {
+            background: #856404;
+            color: white;
+            padding: 0.25rem 0.5rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        
+        .template-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        
+        .template-card {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        
+        .template-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        }
+        
+        .template-header {
+            padding: 1.5rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .template-body {
+            padding: 1.5rem;
+        }
+        
+        .template-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.85rem;
+            color: #666;
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-content">
+            <h1><i class="fas fa-cogs"></i> Rules Dashboard</h1>
+            <div class="header-actions">
+                <button class="btn btn-light" onclick="refreshDashboard()">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+                <button class="btn btn-light" onclick="showCreateRuleModal()">
+                    <i class="fas fa-plus"></i> New Rule
+                </button>
+                <button class="btn btn-light" onclick="showImportModal()">
+                    <i class="fas fa-upload"></i> Import
+                </button>
+                <button class="btn btn-light" onclick="exportRules()">
+                    <i class="fas fa-download"></i> Export
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="container">
+        <!-- Dashboard Statistics -->
+        <div class="stats-grid" id="statsGrid">
+            <!-- Stats will be populated by JavaScript -->
+        </div>
+        
+        <!-- Navigation Tabs -->
+        <div class="dashboard-nav">
+            <div class="nav-tabs">
+                <button class="nav-tab active" onclick="showTab('overview')">
+                    <i class="fas fa-chart-bar"></i> Overview
+                </button>
+                <button class="nav-tab" onclick="showTab('rules')">
+                    <i class="fas fa-list"></i> Rules Catalog
+                </button>
+                <button class="nav-tab" onclick="showTab('builder')">
+                    <i class="fas fa-tools"></i> Visual Builder
+                </button>
+                <button class="nav-tab" onclick="showTab('templates')">
+                    <i class="fas fa-copy"></i> Templates
+                </button>
+                <button class="nav-tab" onclick="showTab('analytics')">
+                    <i class="fas fa-analytics"></i> Analytics
+                </button>
+                <button class="nav-tab" onclick="showTab('conflicts')">
+                    <i class="fas fa-exclamation-triangle"></i> Conflicts
+                </button>
+            </div>
+            
+            <!-- Overview Tab -->
+            <div id="overview" class="tab-content active">
+                <div class="analytics-grid">
+                    <div class="analytics-card">
+                        <h4><i class="fas fa-chart-line"></i> Rule Performance</h4>
+                        <div class="chart-placeholder">Performance Chart</div>
+                    </div>
+                    <div class="analytics-card">
+                        <h4><i class="fas fa-clock"></i> Recent Activity</h4>
+                        <div id="recentActivity">
+                            <div class="loading">
+                                <div class="spinner"></div>
+                                <p>Loading recent activity...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Rules Catalog Tab -->
+            <div id="rules" class="tab-content">
+                <div class="filters-section">
+                    <div class="filters-grid">
+                        <div class="form-group">
+                            <label>Rule Type</label>
+                            <select class="form-control" id="filterRuleType">
+                                <option value="">All Types</option>
+                                <option value="authorship">Authorship</option>
+                                <option value="coding_style">Coding Style</option>
+                                <option value="security">Security</option>
+                                <option value="compliance">Compliance</option>
+                                <option value="operational">Operational</option>
+                                <option value="communication">Communication</option>
+                                <option value="workflow">Workflow</option>
+                                <option value="integration">Integration</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Scope</label>
+                            <select class="form-control" id="filterScope">
+                                <option value="">All Scopes</option>
+                                <option value="global">Global</option>
+                                <option value="project">Project</option>
+                                <option value="agent">Agent</option>
+                                <option value="machine">Machine</option>
+                                <option value="session">Session</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Status</label>
+                            <select class="form-control" id="filterStatus">
+                                <option value="">All Statuses</option>
+                                <option value="active">Active</option>
+                                <option value="inactive">Inactive</option>
+                                <option value="testing">Testing</option>
+                                <option value="deprecated">Deprecated</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Tags</label>
+                            <input type="text" class="form-control" id="filterTags" placeholder="Enter tags (comma-separated)">
+                        </div>
+                    </div>
+                    <div class="search-section">
+                        <div class="search-group">
+                            <label>Search Rules</label>
+                            <input type="text" class="form-control" id="searchQuery" placeholder="Search by name, description, or content...">
+                        </div>
+                        <button class="btn btn-primary" onclick="applyFilters()">
+                            <i class="fas fa-search"></i> Search
+                        </button>
+                        <button class="btn btn-secondary" onclick="clearFilters()">
+                            <i class="fas fa-times"></i> Clear
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="rules-grid" id="rulesGrid">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p>Loading rules...</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Visual Builder Tab -->
+            <div id="builder" class="tab-content">
+                <div class="visual-builder">
+                    <div class="builder-header">
+                        <h3><i class="fas fa-tools"></i> Visual Rule Builder</h3>
+                        <p>Drag and drop components to build your rule</p>
+                    </div>
+                    <div class="builder-content">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Rule Name</label>
+                                <input type="text" class="form-control" id="builderRuleName" placeholder="Enter rule name">
+                            </div>
+                            <div class="form-group">
+                                <label>Rule Type</label>
+                                <select class="form-control" id="builderRuleType">
+                                    <option value="authorship">Authorship</option>
+                                    <option value="coding_style">Coding Style</option>
+                                    <option value="security">Security</option>
+                                    <option value="compliance">Compliance</option>
+                                    <option value="operational">Operational</option>
+                                    <option value="communication">Communication</option>
+                                    <option value="workflow">Workflow</option>
+                                    <option value="integration">Integration</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="form-row full">
+                            <div class="form-group">
+                                <label>Description</label>
+                                <textarea class="form-control" id="builderDescription" rows="3" placeholder="Describe what this rule does"></textarea>
+                            </div>
+                        </div>
+                        
+                        <div class="builder-section">
+                            <h5><i class="fas fa-filter"></i> Conditions</h5>
+                            <div id="conditionsContainer">
+                                <p class="text-muted">No conditions added. Click "Add Condition" to start.</p>
+                            </div>
+                            <button class="btn btn-secondary btn-sm" onclick="addCondition()">
+                                <i class="fas fa-plus"></i> Add Condition
+                            </button>
+                        </div>
+                        
+                        <div class="builder-section">
+                            <h5><i class="fas fa-play"></i> Actions</h5>
+                            <div id="actionsContainer">
+                                <p class="text-muted">No actions added. Click "Add Action" to start.</p>
+                            </div>
+                            <button class="btn btn-secondary btn-sm" onclick="addAction()">
+                                <i class="fas fa-plus"></i> Add Action
+                            </button>
+                        </div>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Priority</label>
+                                <select class="form-control" id="builderPriority">
+                                    <option value="1000">Critical (1000)</option>
+                                    <option value="750">High (750)</option>
+                                    <option value="500" selected>Normal (500)</option>
+                                    <option value="250">Low (250)</option>
+                                    <option value="100">Advisory (100)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Scope</label>
+                                <select class="form-control" id="builderScope">
+                                    <option value="global" selected>Global</option>
+                                    <option value="project">Project</option>
+                                    <option value="agent">Agent</option>
+                                    <option value="machine">Machine</option>
+                                    <option value="session">Session</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="form-row full">
+                            <div class="form-group">
+                                <label>Tags (comma-separated)</label>
+                                <input type="text" class="form-control" id="builderTags" placeholder="tag1, tag2, tag3">
+                            </div>
+                        </div>
+                        
+                        <div style="text-align: center; margin-top: 2rem;">
+                            <button class="btn btn-success" onclick="saveBuiltRule()">
+                                <i class="fas fa-save"></i> Save Rule
+                            </button>
+                            <button class="btn btn-secondary" onclick="clearBuilder()">
+                                <i class="fas fa-trash"></i> Clear
+                            </button>
+                            <button class="btn btn-warning" onclick="validateBuiltRule()">
+                                <i class="fas fa-check"></i> Validate
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Templates Tab -->
+            <div id="templates" class="tab-content">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+                    <h3>Rule Templates</h3>
+                    <button class="btn btn-primary" onclick="showCreateTemplateModal()">
+                        <i class="fas fa-plus"></i> New Template
+                    </button>
+                </div>
+                
+                <div class="template-grid" id="templatesGrid">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p>Loading templates...</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Analytics Tab -->
+            <div id="analytics" class="tab-content">
+                <div class="analytics-grid">
+                    <div class="analytics-card">
+                        <h4><i class="fas fa-chart-pie"></i> Rule Distribution</h4>
+                        <div class="chart-placeholder">Rule Type Distribution Chart</div>
+                    </div>
+                    <div class="analytics-card">
+                        <h4><i class="fas fa-tachometer-alt"></i> Performance Metrics</h4>
+                        <div class="chart-placeholder">Performance Metrics Chart</div>
+                    </div>
+                    <div class="analytics-card">
+                        <h4><i class="fas fa-users"></i> Usage Patterns</h4>
+                        <div class="chart-placeholder">Usage Patterns Chart</div>
+                    </div>
+                    <div class="analytics-card">
+                        <h4><i class="fas fa-history"></i> Activity Timeline</h4>
+                        <div class="chart-placeholder">Activity Timeline Chart</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Conflicts Tab -->
+            <div id="conflicts" class="tab-content">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+                    <h3>Rule Conflicts</h3>
+                    <button class="btn btn-warning" onclick="detectAllConflicts()">
+                        <i class="fas fa-search"></i> Detect Conflicts
+                    </button>
+                </div>
+                
+                <div id="conflictsContainer">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p>Loading conflicts...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Create Rule Modal -->
+    <div id="createRuleModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4>Create New Rule</h4>
+                <button class="modal-close" onclick="hideModal('createRuleModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Rule creation form will be populated here -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideModal('createRuleModal')">Cancel</button>
+                <button class="btn btn-primary" onclick="createRule()">Create Rule</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Import Rules Modal -->
+    <div id="importModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4>Import Rules</h4>
+                <button class="modal-close" onclick="hideModal('importModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Format</label>
+                    <select class="form-control" id="importFormat">
+                        <option value="yaml">YAML</option>
+                        <option value="json">JSON</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Rules Content</label>
+                    <textarea class="form-control" id="importContent" rows="10" placeholder="Paste your rules content here..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="importOverwrite"> Overwrite existing rules
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideModal('importModal')">Cancel</button>
+                <button class="btn btn-primary" onclick="importRules()">Import Rules</button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="/static/js/rules-dashboard.js"></script>
+</body>
+</html>
