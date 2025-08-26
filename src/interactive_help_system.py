@@ -1121,3 +1121,334 @@ class InteractiveHelpSystem:
             explanations.append(explanation)
         
         return explanations
+
+    async def search_help_content(self, query: str) -> List[Dict[str, Any]]:
+        """Search help content across all documentation"""
+        results = []
+        query_lower = query.lower()
+        
+        # Search through command documentation
+        for cmd_name, cmd_data in self._command_cache.items():
+            content = cmd_data.get('content', '').lower()
+            metadata = cmd_data.get('metadata', {})
+            
+            if query_lower in content or query_lower in cmd_name.lower():
+                # Calculate relevance score
+                score = 0
+                if query_lower in cmd_name.lower():
+                    score += 10
+                if query_lower in content:
+                    score += content.count(query_lower)
+                
+                results.append({
+                    'type': 'command',
+                    'title': f"{cmd_name} Command",
+                    'description': metadata.get('description', f'Help for {cmd_name} command'),
+                    'score': score,
+                    'url': f'/admin/help/command/{cmd_name}',
+                    'content_preview': content[:200] + '...' if len(content) > 200 else content
+                })
+        
+        # Search through examples (nested structure: category -> list of examples)
+        for category, examples_list in self._examples_cache.items():
+            if isinstance(examples_list, list):
+                for example in examples_list:
+                    if isinstance(example, dict):
+                        example_name = example.get('name', '')
+                        content = example.get('content', '').lower()
+                        
+                        if query_lower in content or query_lower in example_name.lower():
+                            score = 0
+                            if query_lower in example_name.lower():
+                                score += 8
+                            if query_lower in content:
+                                score += content.count(query_lower)
+                            
+                            results.append({
+                                'type': 'example',
+                                'title': f"{example_name} Example",
+                                'description': f'Example from {category} category',
+                                'score': score,
+                                'url': f'/admin/help/example/{category}/{example_name}',
+                                'content_preview': content[:200] + '...' if len(content) > 200 else content
+                            })
+        
+        # Sort by relevance score
+        results.sort(key=lambda x: x['score'], reverse=True)
+        return results[:20]  # Return top 20 results
+
+    async def get_help_categories(self) -> List[Dict[str, Any]]:
+        """Get organized help categories"""
+        categories = [
+            {
+                'id': 'getting-started',
+                'name': 'Getting Started',
+                'description': 'Basic tutorials and introductory guides',
+                'icon': 'fas fa-rocket',
+                'articles': [
+                    {'id': 'introduction', 'title': 'Introduction to hAIveMind'},
+                    {'id': 'installation', 'title': 'Installation Guide'},
+                    {'id': 'first-steps', 'title': 'First Steps'},
+                ]
+            },
+            {
+                'id': 'commands',
+                'name': 'Command Reference',
+                'description': 'Complete reference for all hAIveMind commands',
+                'icon': 'fas fa-terminal',
+                'articles': [
+                    {'id': cmd_name, 'title': f'{cmd_name} Command'} 
+                    for cmd_name in self._command_cache.keys()
+                ]
+            },
+            {
+                'id': 'admin-interface',
+                'name': 'Admin Interface',
+                'description': 'Using the web-based admin interface',
+                'icon': 'fas fa-cog',
+                'articles': [
+                    {'id': 'dashboard', 'title': 'Dashboard Overview'},
+                    {'id': 'memory-browser', 'title': 'Memory Browser'},
+                    {'id': 'mcp-servers', 'title': 'MCP Server Management'},
+                    {'id': 'vault', 'title': 'Credential Vault'},
+                    {'id': 'playbooks', 'title': 'Playbook Management'},
+                ]
+            },
+            {
+                'id': 'troubleshooting',
+                'name': 'Troubleshooting',
+                'description': 'Common issues and solutions',
+                'icon': 'fas fa-tools',
+                'articles': [
+                    {'id': 'common-issues', 'title': 'Common Issues'},
+                    {'id': 'error-codes', 'title': 'Error Code Reference'},
+                    {'id': 'performance', 'title': 'Performance Optimization'},
+                ]
+            },
+            {
+                'id': 'api-reference',
+                'name': 'API Reference',
+                'description': 'REST API documentation',
+                'icon': 'fas fa-code',
+                'articles': [
+                    {'id': 'authentication', 'title': 'Authentication'},
+                    {'id': 'memory-api', 'title': 'Memory API'},
+                    {'id': 'vault-api', 'title': 'Vault API'},
+                    {'id': 'help-api', 'title': 'Help System API'},
+                ]
+            }
+        ]
+        return categories
+
+    async def get_help_article(self, article_id: str) -> Optional[Dict[str, Any]]:
+        """Get specific help article content"""
+        # Check if it's a command article
+        if article_id in self._command_cache:
+            cmd_data = self._command_cache[article_id]
+            return {
+                'id': article_id,
+                'title': f'{article_id} Command',
+                'type': 'command',
+                'content': cmd_data.get('content', ''),
+                'metadata': cmd_data.get('metadata', {}),
+                'last_updated': time.time()
+            }
+        
+        # Check if it's an example
+        if article_id in self._examples_cache:
+            example_data = self._examples_cache[article_id]
+            return {
+                'id': article_id,
+                'title': f'{article_id} Example',
+                'type': 'example',
+                'content': example_data.get('content', ''),
+                'last_updated': time.time()
+            }
+        
+        # Static help articles
+        static_articles = {
+            'introduction': {
+                'title': 'Introduction to hAIveMind',
+                'content': """
+# Introduction to hAIveMind
+
+hAIveMind is a distributed AI coordination system that enables multiple Claude agents to collaborate on DevOps tasks across your entire infrastructure. The system provides persistent memory storage, real-time synchronization, agent coordination, and infrastructure management capabilities.
+
+## Key Features
+
+- **Collective Intelligence**: Claude agents share knowledge and coordinate responses
+- **Infrastructure Sync**: SSH configs, service configs automatically synchronized
+- **DevOps Memory**: Specialized storage for infrastructure, incidents, deployments
+- **Real-Time Collaboration**: Agents broadcast discoveries and coordinate tasks
+- **Distributed Storage**: ChromaDB for vectors, Redis for caching, with conflict resolution
+
+## Architecture
+
+The hAIveMind system consists of several key components:
+- Memory Server: Core MCP server for Claude Code integration
+- Remote Server: HTTP/SSE access for web interfaces
+- Sync Service: Machine-to-machine synchronization
+- Admin Interface: Web-based management dashboard
+
+Get started by exploring the command reference and admin interface guides.
+                """,
+                'type': 'guide'
+            },
+            'installation': {
+                'title': 'Installation Guide',
+                'content': """
+# Installation Guide
+
+## Prerequisites
+- Python 3.8+
+- Redis server
+- Git access to the repository
+
+## Installation Steps
+
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd memory-mcp
+```
+
+2. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+3. Install Redis:
+```bash
+# Ubuntu/Debian
+sudo apt-get install redis-server
+
+# macOS
+brew install redis
+```
+
+4. Start services:
+```bash
+# Start Redis
+sudo systemctl start redis-server
+
+# Start hAIveMind services
+python src/memory_server.py
+python src/remote_mcp_server.py
+python src/sync_service.py
+```
+
+5. Access the admin interface:
+Navigate to http://localhost:8900 and log in with admin/admin123.
+                """,
+                'type': 'guide'
+            },
+            'dashboard': {
+                'title': 'Dashboard Overview',
+                'content': """
+# Dashboard Overview
+
+The hAIveMind admin dashboard provides centralized management for all system components.
+
+## Main Features
+
+### Memory Browser
+Search and manage collective memories across all agents and projects.
+
+### MCP Server Management
+Monitor and control MCP servers with health checks and configuration management.
+
+### Credential Vault
+Secure storage and management of passwords, API keys, and certificates.
+
+### Playbook Management
+Create and execute automation playbooks for common DevOps tasks.
+
+### Agent Coordination
+View active agents, delegate tasks, and monitor collective health.
+
+## Navigation
+Use the sidebar to navigate between different sections. Each section provides specialized tools for managing that aspect of the hAIveMind system.
+                """,
+                'type': 'guide'
+            }
+        }
+        
+        if article_id in static_articles:
+            article = static_articles[article_id]
+            return {
+                'id': article_id,
+                'title': article['title'],
+                'type': article['type'],
+                'content': article['content'],
+                'last_updated': time.time()
+            }
+        
+        return None
+
+    async def get_contextual_help(self, page: str) -> Dict[str, Any]:
+        """Get contextual help for specific admin interface page"""
+        context_help = {
+            'dashboard': {
+                'title': 'Dashboard Help',
+                'tips': [
+                    'Use the status cards to quickly assess system health',
+                    'Recent activity shows the latest hAIveMind operations',
+                    'Click on agent status to view detailed information'
+                ],
+                'shortcuts': [
+                    {'key': 'Ctrl+R', 'action': 'Refresh dashboard data'},
+                    {'key': 'Ctrl+H', 'action': 'Open help system'}
+                ]
+            },
+            'memory': {
+                'title': 'Memory Browser Help',
+                'tips': [
+                    'Use filters to narrow down search results',
+                    'Advanced search supports semantic queries',
+                    'Click on memories to view full content and metadata'
+                ],
+                'shortcuts': [
+                    {'key': 'Ctrl+F', 'action': 'Focus search box'},
+                    {'key': 'Ctrl+N', 'action': 'Create new memory'}
+                ]
+            },
+            'vault': {
+                'title': 'Credential Vault Help',
+                'tips': [
+                    'Always use strong master passwords',
+                    'Regularly rotate credentials using the rotation manager',
+                    'Use tags to organize credentials by project or environment'
+                ],
+                'shortcuts': [
+                    {'key': 'Ctrl+N', 'action': 'Create new credential'},
+                    {'key': 'Ctrl+L', 'action': 'Lock vault'}
+                ]
+            }
+        }
+        
+        return context_help.get(page, {
+            'title': f'{page.title()} Help',
+            'tips': ['Use the navigation menu to access different features'],
+            'shortcuts': []
+        })
+
+    async def store_feedback(self, feedback_data: Dict[str, Any]) -> bool:
+        """Store user feedback about help system"""
+        try:
+            # Store feedback as a memory for analysis
+            await self.storage.store_memory(
+                content=f"Help system feedback: {feedback_data.get('message', '')}",
+                category="agent",
+                context="help_system_feedback",
+                metadata={
+                    'rating': feedback_data.get('rating'),
+                    'page': feedback_data.get('page'),
+                    'helpful': feedback_data.get('helpful'),
+                    'suggestions': feedback_data.get('suggestions'),
+                    'timestamp': time.time()
+                }
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Failed to store help feedback: {e}")
+            return False

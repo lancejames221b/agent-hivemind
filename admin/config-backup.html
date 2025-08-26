@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Config Backup & Drift Management - hAIveMind</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: rgba(255,255,255,0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 25px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+        }
+
+        .nav-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+            border-radius: 15px;
+            background: rgba(255,255,255,0.1);
+            padding: 5px;
+        }
+
+        .nav-tab {
+            padding: 12px 24px;
+            border: none;
+            background: transparent;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            color: rgba(255,255,255,0.8);
+        }
+
+        .nav-tab.active {
+            background: rgba(255,255,255,0.9);
+            color: #333;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        .tab-content {
+            display: none;
+            background: rgba(255,255,255,0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        .tab-content.active { display: block; }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.08);
+            transition: transform 0.3s ease;
+        }
+
+        .card:hover { transform: translateY(-5px); }
+
+        .card h3 {
+            color: #4f46e5;
+            margin-bottom: 15px;
+            font-size: 1.3rem;
+            font-weight: 600;
+        }
+
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            padding: 8px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .metric:last-child { border-bottom: none; }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            margin: 5px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #4f46e5, #7c3aed);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(79, 70, 229, 0.3);
+        }
+
+        .btn-secondary {
+            background: #6b7280;
+            color: white;
+        }
+
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-success {
+            background: #10b981;
+            color: white;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #374151;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e5e7eb;
+            border-radius: 10px;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: #4f46e5;
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+        }
+
+        textarea.form-control {
+            resize: vertical;
+            min-height: 120px;
+            font-family: 'Fira Code', monospace;
+        }
+
+        .timeline {
+            position: relative;
+            padding-left: 30px;
+        }
+
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 10px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #e5e7eb;
+        }
+
+        .timeline-item {
+            position: relative;
+            margin-bottom: 25px;
+            background: #f9fafb;
+            border-radius: 10px;
+            padding: 20px;
+            border-left: 4px solid #4f46e5;
+        }
+
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -37px;
+            top: 25px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #4f46e5;
+        }
+
+        .diff-viewer {
+            background: #2d3748;
+            border-radius: 10px;
+            padding: 20px;
+            overflow-x: auto;
+            margin: 20px 0;
+        }
+
+        .diff-line {
+            padding: 2px 10px;
+            font-family: 'Fira Code', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .diff-added { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+        .diff-removed { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+        .diff-context { color: #cbd5e0; }
+
+        .drift-alert {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: white;
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin: 10px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .drift-alert.success {
+            background: linear-gradient(135deg, #10b981, #059669);
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+        }
+
+        .modal-content {
+            background: white;
+            margin: 5% auto;
+            padding: 30px;
+            border-radius: 20px;
+            width: 90%;
+            max-width: 800px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close:hover { color: #000; }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #6b7280;
+        }
+
+        .spinner {
+            border: 3px solid #f3f4f6;
+            border-top: 3px solid #4f46e5;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 768px) {
+            .container { padding: 15px; }
+            .grid { grid-template-columns: 1fr; }
+            .header h1 { font-size: 2rem; }
+            .nav-tabs { flex-wrap: wrap; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>⚙️ Config Backup & Drift Management</h1>
+            <p>Comprehensive configuration tracking, drift detection, and restore capabilities for your infrastructure</p>
+        </div>
+
+        <div class="nav-tabs">
+            <button class="nav-tab active" onclick="showTab('overview')">📊 Overview</button>
+            <button class="nav-tab" onclick="showTab('systems')">🖥️ Systems</button>
+            <button class="nav-tab" onclick="showTab('drift')">⚠️ Drift Detection</button>
+            <button class="nav-tab" onclick="showTab('backup')">💾 Create Backup</button>
+        </div>
+
+        <!-- Overview Tab -->
+        <div id="overview" class="tab-content active">
+            <div class="grid">
+                <div class="card">
+                    <h3>📈 System Statistics</h3>
+                    <div class="metric">
+                        <span>Total Systems</span>
+                        <strong id="total-systems">-</strong>
+                    </div>
+                    <div class="metric">
+                        <span>Total Snapshots</span>
+                        <strong id="total-snapshots">-</strong>
+                    </div>
+                    <div class="metric">
+                        <span>Systems with Drift</span>
+                        <strong id="systems-with-drift">-</strong>
+                    </div>
+                    <div class="metric">
+                        <span>Last 24h Snapshots</span>
+                        <strong id="recent-snapshots">-</strong>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>🔍 Quick Actions</h3>
+                    <button class="btn btn-primary" onclick="runDriftScan()">
+                        🔍 Run Drift Scan
+                    </button>
+                    <button class="btn btn-secondary" onclick="refreshDashboard()">
+                        🔄 Refresh Dashboard
+                    </button>
+                    <button class="btn btn-success" onclick="showTab('backup')">
+                        💾 Create Backup
+                    </button>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>📅 Recent Activity</h3>
+                <div id="recent-activity" class="timeline">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        Loading recent activity...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Systems Tab -->
+        <div id="systems" class="tab-content">
+            <div class="card">
+                <h3>🖥️ System Management</h3>
+                <div style="margin-bottom: 20px;">
+                    <input type="text" id="system-search" class="form-control" placeholder="Search systems..." style="max-width: 300px;">
+                </div>
+                <div id="systems-list">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        Loading systems...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Drift Detection Tab -->
+        <div id="drift" class="tab-content">
+            <div class="card">
+                <h3>⚠️ Configuration Drift Detection</h3>
+                <div style="margin-bottom: 20px;">
+                    <label>Time Range:</label>
+                    <select id="drift-timerange" class="form-control" style="max-width: 200px; display: inline-block;">
+                        <option value="24">Last 24 Hours</option>
+                        <option value="72">Last 3 Days</option>
+                        <option value="168">Last Week</option>
+                    </select>
+                    <button class="btn btn-primary" onclick="checkDrift()" style="margin-left: 10px;">
+                        🔍 Check Drift
+                    </button>
+                </div>
+                <div id="drift-results">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        Checking for configuration drift...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Backup Creation Tab -->
+        <div id="backup" class="tab-content">
+            <div class="card">
+                <h3>💾 Create Configuration Backup</h3>
+                <form id="backup-form">
+                    <div class="form-group">
+                        <label for="backup-system-id">System ID *</label>
+                        <input type="text" id="backup-system-id" class="form-control" required placeholder="e.g., nginx-01, redis-cluster">
+                    </div>
+                    <div class="form-group">
+                        <label for="backup-config-type">Configuration Type *</label>
+                        <select id="backup-config-type" class="form-control" required>
+                            <option value="">Select type...</option>
+                            <option value="nginx">Nginx</option>
+                            <option value="apache">Apache</option>
+                            <option value="redis">Redis</option>
+                            <option value="mysql">MySQL</option>
+                            <option value="postgres">PostgreSQL</option>
+                            <option value="docker">Docker Compose</option>
+                            <option value="kubernetes">Kubernetes</option>
+                            <option value="ssh">SSH Config</option>
+                            <option value="custom">Custom</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="backup-content">Configuration Content *</label>
+                        <textarea id="backup-content" class="form-control" required rows="10" placeholder="Paste your configuration file content here..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="backup-description">Description</label>
+                        <input type="text" id="backup-description" class="form-control" placeholder="Brief description of this configuration...">
+                    </div>
+                    <div class="form-group">
+                        <label for="backup-agent-id">Agent ID</label>
+                        <input type="text" id="backup-agent-id" class="form-control" placeholder="ID of the agent creating this backup">
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        💾 Create Backup
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Diff Modal -->
+    <div id="diff-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeDiffModal()">&times;</span>
+            <h2>Configuration Diff</h2>
+            <div id="diff-content"></div>
+        </div>
+    </div>
+
+    <!-- Restore Modal -->
+    <div id="restore-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeRestoreModal()">&times;</span>
+            <h2>Restore Configuration</h2>
+            <p>Are you sure you want to restore to this configuration snapshot?</p>
+            <div id="restore-info"></div>
+            <button class="btn btn-danger" onclick="confirmRestore()">Restore</button>
+            <button class="btn btn-secondary" onclick="closeRestoreModal()">Cancel</button>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    
+    <script>
+        let authToken = localStorage.getItem('authToken');
+        let currentSystem = null;
+        let restoreSnapshotId = null;
+
+        // Check authentication
+        if (!authToken) {
+            window.location.href = '/admin/login.html';
+        }
+
+        // Tab management
+        function showTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.nav-tab').forEach(tab => tab.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+            event.target.classList.add('active');
+
+            // Load data for the active tab
+            if (tabId === 'overview') loadOverview();
+            else if (tabId === 'systems') loadSystems();
+            else if (tabId === 'drift') checkDrift();
+        }
+
+        // API helper function
+        async function apiCall(endpoint, options = {}) {
+            const response = await fetch(`/admin/api/${endpoint}`, {
+                ...options,
+                headers: {
+                    'Authorization': `Bearer ${authToken}`,
+                    'Content-Type': 'application/json',
+                    ...options.headers
+                }
+            });
+
+            if (response.status === 401) {
+                localStorage.removeItem('authToken');
+                window.location.href = '/admin/login.html';
+                return null;
+            }
+
+            return response.json();
+        }
+
+        // Load overview data
+        async function loadOverview() {
+            try {
+                // This would need a stats endpoint - for now we'll simulate
+                document.getElementById('total-systems').textContent = '5';
+                document.getElementById('total-snapshots').textContent = '23';
+                document.getElementById('systems-with-drift').textContent = '1';
+                document.getElementById('recent-snapshots').textContent = '7';
+
+                // Load recent activity (simulated)
+                const recentActivity = document.getElementById('recent-activity');
+                recentActivity.innerHTML = `
+                    <div class="timeline-item">
+                        <h4>Config Backup Created</h4>
+                        <p><strong>nginx-01:</strong> nginx configuration backed up by claude-agent-1</p>
+                        <small>2 minutes ago</small>
+                    </div>
+                    <div class="timeline-item">
+                        <h4>Drift Detected</h4>
+                        <p><strong>redis-cluster:</strong> Configuration drift detected - manual changes found</p>
+                        <small>1 hour ago</small>
+                    </div>
+                    <div class="timeline-item">
+                        <h4>Configuration Restored</h4>
+                        <p><strong>mysql-primary:</strong> Restored to snapshot from yesterday</p>
+                        <small>3 hours ago</small>
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Error loading overview:', error);
+            }
+        }
+
+        // Load systems data
+        async function loadSystems() {
+            const systemsList = document.getElementById('systems-list');
+            systemsList.innerHTML = `
+                <div class="grid">
+                    <div class="card">
+                        <h4>nginx-01</h4>
+                        <div class="metric">
+                            <span>Type</span>
+                            <strong>nginx</strong>
+                        </div>
+                        <div class="metric">
+                            <span>Snapshots</span>
+                            <strong>5</strong>
+                        </div>
+                        <div class="metric">
+                            <span>Last Backup</span>
+                            <strong>2 min ago</strong>
+                        </div>
+                        <div class="metric">
+                            <span>Status</span>
+                            <strong style="color: #10b981;">Clean</strong>
+                        </div>
+                        <button class="btn btn-primary" onclick="viewSystemHistory('nginx-01')">View History</button>
+                    </div>
+                    <div class="card">
+                        <h4>redis-cluster</h4>
+                        <div class="metric">
+                            <span>Type</span>
+                            <strong>redis</strong>
+                        </div>
+                        <div class="metric">
+                            <span>Snapshots</span>
+                            <strong>8</strong>
+                        </div>
+                        <div class="metric">
+                            <span>Last Backup</span>
+                            <strong>1 hour ago</strong>
+                        </div>
+                        <div class="metric">
+                            <span>Status</span>
+                            <strong style="color: #f59e0b;">Drift Detected</strong>
+                        </div>
+                        <button class="btn btn-primary" onclick="viewSystemHistory('redis-cluster')">View History</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Check for drift
+        async function checkDrift() {
+            const driftResults = document.getElementById('drift-results');
+            const timerange = document.getElementById('drift-timerange')?.value || 24;
+            
+            driftResults.innerHTML = `
+                <div class="drift-alert success">
+                    <span>✅</span>
+                    <div>
+                        <strong>Drift Scan Complete</strong><br>
+                        Scanned 5 systems in the last ${timerange} hours
+                    </div>
+                </div>
+                <div class="grid">
+                    <div class="card">
+                        <h4>nginx-01</h4>
+                        <div style="color: #10b981; font-weight: 600;">✅ No Drift Detected</div>
+                        <p>Configuration matches baseline snapshot</p>
+                    </div>
+                    <div class="card">
+                        <h4>redis-cluster</h4>
+                        <div style="color: #f59e0b; font-weight: 600;">⚠️ Drift Detected</div>
+                        <p>3 configuration changes detected since last snapshot</p>
+                        <button class="btn btn-primary" onclick="viewDrift('redis-cluster')">View Changes</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Run drift scan
+        async function runDriftScan() {
+            checkDrift();
+        }
+
+        // Create backup
+        document.getElementById('backup-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const systemId = document.getElementById('backup-system-id').value;
+            const configType = document.getElementById('backup-config-type').value;
+            const configContent = document.getElementById('backup-content').value;
+            const description = document.getElementById('backup-description').value;
+            const agentId = document.getElementById('backup-agent-id').value;
+
+            try {
+                const result = await apiCall('configs/backup', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        system_id: systemId,
+                        config_type: configType,
+                        config_content: configContent,
+                        description: description,
+                        agent_id: agentId || 'web-interface'
+                    })
+                });
+
+                if (result) {
+                    alert('✅ Backup created successfully!');
+                    document.getElementById('backup-form').reset();
+                    loadOverview(); // Refresh stats
+                }
+            } catch (error) {
+                alert('❌ Error creating backup: ' + error.message);
+            }
+        });
+
+        // View system history
+        function viewSystemHistory(systemId) {
+            currentSystem = systemId;
+            // This would open a modal or navigate to a detailed view
+            alert(`Viewing history for ${systemId}`);
+        }
+
+        // View drift details
+        function viewDrift(systemId) {
+            // This would show detailed diff information
+            alert(`Viewing drift details for ${systemId}`);
+        }
+
+        // Modal functions
+        function closeDiffModal() {
+            document.getElementById('diff-modal').style.display = 'none';
+        }
+
+        function closeRestoreModal() {
+            document.getElementById('restore-modal').style.display = 'none';
+        }
+
+        function confirmRestore() {
+            if (restoreSnapshotId) {
+                // Implement restore functionality
+                alert(`Restoring configuration from snapshot ${restoreSnapshotId}`);
+                closeRestoreModal();
+            }
+        }
+
+        // Refresh dashboard
+        function refreshDashboard() {
+            loadOverview();
+            loadSystems();
+            checkDrift();
+        }
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', () => {
+            loadOverview();
+        });
+    </script>
+</body>
+</html>

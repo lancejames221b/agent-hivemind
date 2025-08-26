@@ -13,7 +13,7 @@ from pathlib import Path
 import logging
 
 from fastapi.responses import HTMLResponse
-from .interactive_help_system import InteractiveHelpSystem
+from interactive_help_system import InteractiveHelpSystem
 
 logger = logging.getLogger(__name__)
 

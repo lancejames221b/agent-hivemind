@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>hAIveMind Help System</title>
+    <link rel="stylesheet" href="/admin/static/admin.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .help-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 30px;
+            min-height: calc(100vh - 120px);
+        }
+        
+        .help-sidebar {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            height: fit-content;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            position: sticky;
+            top: 20px;
+        }
+        
+        .help-search {
+            position: relative;
+            margin-bottom: 20px;
+        }
+        
+        .help-search input {
+            width: 100%;
+            padding: 12px 40px 12px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        
+        .help-search input:focus {
+            outline: none;
+            border-color: #4299e1;
+        }
+        
+        .help-search i {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #a0aec0;
+        }
+        
+        .help-categories {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .help-category {
+            margin-bottom: 10px;
+        }
+        
+        .category-header {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            color: #4a5568;
+            font-weight: 600;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: background-color 0.3s;
+        }
+        
+        .category-header:hover {
+            background: #f7fafc;
+        }
+        
+        .category-header.active {
+            background: #ebf8ff;
+            color: #2b6cb0;
+        }
+        
+        .category-icon {
+            margin-right: 10px;
+            width: 16px;
+            text-align: center;
+        }
+        
+        .category-articles {
+            display: none;
+            padding-left: 26px;
+            margin-top: 5px;
+        }
+        
+        .category-articles.expanded {
+            display: block;
+        }
+        
+        .article-link {
+            display: block;
+            padding: 6px 10px;
+            color: #718096;
+            text-decoration: none;
+            border-radius: 4px;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+        
+        .article-link:hover {
+            background: #f7fafc;
+            color: #2d3748;
+        }
+        
+        .article-link.active {
+            background: #4299e1;
+            color: white;
+        }
+        
+        .help-content {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .help-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+        
+        .help-title {
+            display: flex;
+            align-items: center;
+            margin: 0;
+            color: #2d3748;
+        }
+        
+        .help-title i {
+            margin-right: 12px;
+            color: #4299e1;
+        }
+        
+        .help-actions {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .help-btn {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 16px;
+            background: #4299e1;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            text-decoration: none;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+        
+        .help-btn:hover {
+            background: #3182ce;
+        }
+        
+        .help-btn.secondary {
+            background: #e2e8f0;
+            color: #4a5568;
+        }
+        
+        .help-btn.secondary:hover {
+            background: #cbd5e0;
+        }
+        
+        .help-article {
+            line-height: 1.7;
+        }
+        
+        .help-article h1, .help-article h2, .help-article h3 {
+            color: #2d3748;
+            margin-top: 30px;
+            margin-bottom: 15px;
+        }
+        
+        .help-article h1 {
+            font-size: 2rem;
+            margin-top: 0;
+        }
+        
+        .help-article h2 {
+            font-size: 1.5rem;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .help-article h3 {
+            font-size: 1.25rem;
+        }
+        
+        .help-article p {
+            margin-bottom: 16px;
+            color: #4a5568;
+        }
+        
+        .help-article ul, .help-article ol {
+            margin: 16px 0;
+            padding-left: 24px;
+        }
+        
+        .help-article li {
+            margin-bottom: 8px;
+            color: #4a5568;
+        }
+        
+        .help-article pre {
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 16px;
+            overflow-x: auto;
+            margin: 16px 0;
+        }
+        
+        .help-article code {
+            background: #edf2f7;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 0.9em;
+        }
+        
+        .help-article pre code {
+            background: none;
+            padding: 0;
+        }
+        
+        .search-results {
+            display: none;
+        }
+        
+        .search-results.active {
+            display: block;
+        }
+        
+        .search-result {
+            padding: 16px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            margin-bottom: 12px;
+            cursor: pointer;
+            transition: border-color 0.3s;
+        }
+        
+        .search-result:hover {
+            border-color: #4299e1;
+        }
+        
+        .search-result-title {
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 4px;
+        }
+        
+        .search-result-description {
+            color: #718096;
+            font-size: 14px;
+            margin-bottom: 8px;
+        }
+        
+        .search-result-preview {
+            color: #a0aec0;
+            font-size: 13px;
+            font-style: italic;
+        }
+        
+        .contextual-help {
+            background: #f0f9ff;
+            border: 1px solid #7dd3fc;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 20px;
+        }
+        
+        .contextual-help h4 {
+            margin: 0 0 12px 0;
+            color: #0369a1;
+            display: flex;
+            align-items: center;
+        }
+        
+        .contextual-help h4 i {
+            margin-right: 8px;
+        }
+        
+        .contextual-help ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+        
+        .contextual-help li {
+            margin-bottom: 6px;
+            color: #0c4a6e;
+        }
+        
+        .feedback-section {
+            margin-top: 40px;
+            padding: 20px;
+            background: #f9fafb;
+            border-radius: 8px;
+            border: 1px solid #e5e7eb;
+        }
+        
+        .feedback-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        
+        .feedback-header i {
+            margin-right: 8px;
+            color: #6b7280;
+        }
+        
+        .feedback-form {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+        
+        .feedback-rating {
+            display: flex;
+            gap: 4px;
+        }
+        
+        .feedback-star {
+            color: #d1d5db;
+            cursor: pointer;
+            font-size: 18px;
+            transition: color 0.2s;
+        }
+        
+        .feedback-star:hover,
+        .feedback-star.active {
+            color: #f59e0b;
+        }
+        
+        .loading-spinner {
+            display: none;
+            text-align: center;
+            padding: 40px;
+            color: #718096;
+        }
+        
+        .loading-spinner i {
+            font-size: 24px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        
+        .error-message {
+            display: none;
+            background: #fed7d7;
+            color: #c53030;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+        
+        .success-message {
+            display: none;
+            background: #c6f6d5;
+            color: #25543e;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+        
+        @media (max-width: 768px) {
+            .help-container {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+            
+            .help-sidebar {
+                position: static;
+                order: 2;
+            }
+            
+            .help-content {
+                order: 1;
+            }
+            
+            .help-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 15px;
+            }
+            
+            .help-actions {
+                width: 100%;
+                justify-content: flex-start;
+            }
+        }
+    </style>
+</head>
+<body class="dashboard">
+    <nav class="nav-header">
+        <div class="nav-brand">
+            <img src="/assets/logo.png" alt="hAIveMind" class="nav-logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';">
+            <span style="display:none;">hAIveMind</span>
+            <h1>Help System</h1>
+        </div>
+        <div class="nav-links">
+            <a href="/admin/dashboard.html">Dashboard</a>
+            <a href="/admin/vault.html">Credential Vault</a>
+            <a href="/admin/memory.html">Memory Browser</a>
+            <a href="/admin/mcp_servers.html">MCP Servers</a>
+            <a href="/admin/help.html" class="active">Help System</a>
+        </div>
+        <div class="nav-actions">
+            <button class="dark-mode-toggle" onclick="toggleDarkMode()" title="Toggle Dark Mode">
+                <i class="fas fa-moon"></i>
+            </button>
+            <button class="logout-btn" onclick="logout()">Logout</button>
+        </div>
+    </nav>
+
+    <main class="help-container">
+        <!-- Sidebar Navigation -->
+        <aside class="help-sidebar">
+            <div class="help-search">
+                <input type="text" id="helpSearchInput" placeholder="Search help articles..." onkeyup="searchHelp()">
+                <i class="fas fa-search"></i>
+            </div>
+            
+            <ul class="help-categories" id="helpCategories">
+                <!-- Categories will be loaded here -->
+            </ul>
+        </aside>
+
+        <!-- Main Content Area -->
+        <section class="help-content">
+            <div class="error-message" id="errorMessage"></div>
+            <div class="success-message" id="successMessage"></div>
+            
+            <header class="help-header">
+                <h1 class="help-title" id="helpTitle">
+                    <i class="fas fa-question-circle"></i>
+                    Welcome to hAIveMind Help
+                </h1>
+                <div class="help-actions">
+                    <button class="help-btn secondary" onclick="printArticle()">
+                        <i class="fas fa-print"></i> Print
+                    </button>
+                    <button class="help-btn secondary" onclick="shareArticle()">
+                        <i class="fas fa-share"></i> Share
+                    </button>
+                    <button class="help-btn" onclick="showFeedback()">
+                        <i class="fas fa-comment"></i> Feedback
+                    </button>
+                </div>
+            </header>
+
+            <!-- Contextual Help -->
+            <div class="contextual-help" id="contextualHelp" style="display: none;">
+                <h4><i class="fas fa-lightbulb"></i> Quick Tips</h4>
+                <ul id="contextualTips"></ul>
+            </div>
+
+            <!-- Loading Spinner -->
+            <div class="loading-spinner" id="loadingSpinner">
+                <i class="fas fa-spinner"></i>
+                <p>Loading help content...</p>
+            </div>
+
+            <!-- Search Results -->
+            <div class="search-results" id="searchResults">
+                <!-- Search results will be shown here -->
+            </div>
+
+            <!-- Article Content -->
+            <article class="help-article" id="helpArticle">
+                <h1>🎯 hAIveMind Interactive Help System</h1>
+                <p>Welcome to the comprehensive help system for hAIveMind. This interactive documentation provides guidance, tutorials, and reference materials for all system features.</p>
+                
+                <h2>Quick Start</h2>
+                <ul>
+                    <li><strong>Getting Started</strong> - Learn the basics of hAIveMind</li>
+                    <li><strong>Command Reference</strong> - Complete list of all available commands</li>
+                    <li><strong>Admin Interface</strong> - Guide to the web-based management interface</li>
+                    <li><strong>API Reference</strong> - Documentation for REST API endpoints</li>
+                </ul>
+                
+                <h2>Features</h2>
+                <ul>
+                    <li><strong>Context-Aware Help</strong> - Get relevant suggestions based on your current page</li>
+                    <li><strong>Interactive Search</strong> - Find information quickly with full-text search</li>
+                    <li><strong>Tutorials & Examples</strong> - Step-by-step guides and real-world examples</li>
+                    <li><strong>Troubleshooting</strong> - Common issues and solutions</li>
+                </ul>
+                
+                <h2>Navigation</h2>
+                <p>Use the sidebar to browse help categories or use the search box to find specific information. Each article includes related topics and practical examples.</p>
+            </article>
+
+            <!-- Feedback Section -->
+            <section class="feedback-section" id="feedbackSection" style="display: none;">
+                <div class="feedback-header">
+                    <i class="fas fa-star"></i>
+                    <h3>Was this helpful?</h3>
+                </div>
+                <div class="feedback-form">
+                    <div class="feedback-rating" id="feedbackRating">
+                        <span class="feedback-star" data-rating="1">★</span>
+                        <span class="feedback-star" data-rating="2">★</span>
+                        <span class="feedback-star" data-rating="3">★</span>
+                        <span class="feedback-star" data-rating="4">★</span>
+                        <span class="feedback-star" data-rating="5">★</span>
+                    </div>
+                    <input type="text" id="feedbackText" placeholder="Optional feedback..." style="margin-left: 16px; padding: 6px 12px; border: 1px solid #d1d5db; border-radius: 4px; flex: 1;">
+                    <button class="help-btn" onclick="submitFeedback()">Submit</button>
+                </div>
+            </section>
+        </section>
+    </main>
+
+    <script src="/admin/static/admin.js"></script>
+    <script>
+        let currentArticle = null;
+        let helpCategories = [];
+        let searchTimeout = null;
+        let currentRating = 0;
+
+        // Initialize help system
+        document.addEventListener('DOMContentLoaded', async function() {
+            await loadHelpCategories();
+            await loadContextualHelp();
+            
+            // Load article from URL hash
+            const hash = window.location.hash.substring(1);
+            if (hash) {
+                await loadArticle(hash);
+            }
+        });
+
+        // Load help categories from API
+        async function loadHelpCategories() {
+            try {
+                showLoading(true);
+                const token = localStorage.getItem('token');
+                const response = await fetch('/admin/api/help/categories', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to load help categories');
+                }
+
+                const data = await response.json();
+                helpCategories = data.categories;
+                renderCategories();
+            } catch (error) {
+                showError('Failed to load help categories: ' + error.message);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // Render help categories in sidebar
+        function renderCategories() {
+            const container = document.getElementById('helpCategories');
+            container.innerHTML = '';
+
+            helpCategories.forEach(category => {
+                const categoryEl = document.createElement('li');
+                categoryEl.className = 'help-category';
+                
+                categoryEl.innerHTML = `
+                    <div class="category-header" onclick="toggleCategory('${category.id}')">
+                        <i class="${category.icon} category-icon"></i>
+                        <span>${category.name}</span>
+                    </div>
+                    <div class="category-articles" id="articles-${category.id}">
+                        ${category.articles.map(article => `
+                            <a href="#${article.id}" class="article-link" onclick="loadArticle('${article.id}')">${article.title}</a>
+                        `).join('')}
+                    </div>
+                `;
+                
+                container.appendChild(categoryEl);
+            });
+        }
+
+        // Toggle category expansion
+        function toggleCategory(categoryId) {
+            const articlesEl = document.getElementById(`articles-${categoryId}`);
+            const headerEl = articlesEl.previousElementSibling;
+            
+            articlesEl.classList.toggle('expanded');
+            headerEl.classList.toggle('active');
+        }
+
+        // Load contextual help for current page
+        async function loadContextualHelp() {
+            try {
+                const token = localStorage.getItem('token');
+                const response = await fetch('/admin/api/help/context/help', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.context_help && data.context_help.tips && data.context_help.tips.length > 0) {
+                        renderContextualHelp(data.context_help);
+                    }
+                }
+            } catch (error) {
+                console.warn('Failed to load contextual help:', error);
+            }
+        }
+
+        // Render contextual help
+        function renderContextualHelp(contextHelp) {
+            const container = document.getElementById('contextualHelp');
+            const tipsContainer = document.getElementById('contextualTips');
+            
+            tipsContainer.innerHTML = contextHelp.tips.map(tip => `<li>${tip}</li>`).join('');
+            container.style.display = 'block';
+        }
+
+        // Load specific help article
+        async function loadArticle(articleId) {
+            try {
+                showLoading(true);
+                hideSearchResults();
+                
+                const token = localStorage.getItem('token');
+                const response = await fetch(`/admin/api/help/article/${articleId}`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error('Article not found');
+                }
+
+                const data = await response.json();
+                renderArticle(data.article);
+                
+                // Update URL hash
+                window.location.hash = articleId;
+                
+                // Highlight active article link
+                document.querySelectorAll('.article-link').forEach(link => {
+                    link.classList.remove('active');
+                });
+                document.querySelector(`a[href="#${articleId}"]`)?.classList.add('active');
+                
+            } catch (error) {
+                showError('Failed to load article: ' + error.message);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // Render article content
+        function renderArticle(article) {
+            currentArticle = article;
+            document.getElementById('helpTitle').innerHTML = `
+                <i class="fas fa-book"></i>
+                ${article.title}
+            `;
+            
+            // Convert markdown-style content to HTML (simple conversion)
+            let content = article.content;
+            content = content.replace(/^### (.*$)/gm, '<h3>$1</h3>');
+            content = content.replace(/^## (.*$)/gm, '<h2>$1</h2>');
+            content = content.replace(/^# (.*$)/gm, '<h1>$1</h1>');
+            content = content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            content = content.replace(/\*(.*?)\*/g, '<em>$1</em>');
+            content = content.replace(/`([^`]+)`/g, '<code>$1</code>');
+            content = content.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
+            content = content.replace(/\n\n/g, '</p><p>');
+            content = content.replace(/^(.)/gm, '<p>$1');
+            content = content.replace(/(.)\n$/gm, '$1</p>');
+            
+            document.getElementById('helpArticle').innerHTML = content;
+        }
+
+        // Search help content
+        async function searchHelp() {
+            const query = document.getElementById('helpSearchInput').value.trim();
+            
+            if (searchTimeout) {
+                clearTimeout(searchTimeout);
+            }
+
+            if (query.length < 2) {
+                hideSearchResults();
+                return;
+            }
+
+            searchTimeout = setTimeout(async () => {
+                try {
+                    showLoading(true);
+                    
+                    const token = localStorage.getItem('token');
+                    const response = await fetch(`/admin/api/help/search?q=${encodeURIComponent(query)}`, {
+                        headers: {
+                            'Authorization': `Bearer ${token}`
+                        }
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Search failed');
+                    }
+
+                    const data = await response.json();
+                    renderSearchResults(data.results);
+                    
+                } catch (error) {
+                    showError('Search failed: ' + error.message);
+                } finally {
+                    showLoading(false);
+                }
+            }, 300);
+        }
+
+        // Render search results
+        function renderSearchResults(results) {
+            const container = document.getElementById('searchResults');
+            const articleContainer = document.getElementById('helpArticle');
+            
+            if (results.length === 0) {
+                container.innerHTML = '<p>No results found.</p>';
+            } else {
+                container.innerHTML = results.map(result => `
+                    <div class="search-result" onclick="loadArticle('${result.url.split('/').pop()}')">
+                        <div class="search-result-title">${result.title}</div>
+                        <div class="search-result-description">${result.description}</div>
+                        <div class="search-result-preview">${result.content_preview}</div>
+                    </div>
+                `).join('');
+            }
+            
+            container.classList.add('active');
+            articleContainer.style.display = 'none';
+        }
+
+        // Hide search results
+        function hideSearchResults() {
+            document.getElementById('searchResults').classList.remove('active');
+            document.getElementById('helpArticle').style.display = 'block';
+        }
+
+        // Show/hide loading spinner
+        function showLoading(show) {
+            document.getElementById('loadingSpinner').style.display = show ? 'block' : 'none';
+        }
+
+        // Show error message
+        function showError(message) {
+            const errorEl = document.getElementById('errorMessage');
+            errorEl.textContent = message;
+            errorEl.style.display = 'block';
+            setTimeout(() => {
+                errorEl.style.display = 'none';
+            }, 5000);
+        }
+
+        // Show success message
+        function showSuccess(message) {
+            const successEl = document.getElementById('successMessage');
+            successEl.textContent = message;
+            successEl.style.display = 'block';
+            setTimeout(() => {
+                successEl.style.display = 'none';
+            }, 3000);
+        }
+
+        // Show feedback section
+        function showFeedback() {
+            const feedbackSection = document.getElementById('feedbackSection');
+            feedbackSection.style.display = feedbackSection.style.display === 'none' ? 'block' : 'none';
+        }
+
+        // Handle feedback star ratings
+        document.addEventListener('click', function(e) {
+            if (e.target.classList.contains('feedback-star')) {
+                const rating = parseInt(e.target.dataset.rating);
+                currentRating = rating;
+                
+                document.querySelectorAll('.feedback-star').forEach((star, index) => {
+                    if (index < rating) {
+                        star.classList.add('active');
+                    } else {
+                        star.classList.remove('active');
+                    }
+                });
+            }
+        });
+
+        // Submit feedback
+        async function submitFeedback() {
+            try {
+                const feedback = document.getElementById('feedbackText').value;
+                const token = localStorage.getItem('token');
+                
+                const response = await fetch('/admin/api/help/feedback', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        rating: currentRating,
+                        message: feedback,
+                        article_id: currentArticle?.id,
+                        page: 'help'
+                    })
+                });
+
+                if (response.ok) {
+                    showSuccess('Thank you for your feedback!');
+                    document.getElementById('feedbackSection').style.display = 'none';
+                    document.getElementById('feedbackText').value = '';
+                    currentRating = 0;
+                    document.querySelectorAll('.feedback-star').forEach(star => {
+                        star.classList.remove('active');
+                    });
+                } else {
+                    throw new Error('Failed to submit feedback');
+                }
+                
+            } catch (error) {
+                showError('Failed to submit feedback: ' + error.message);
+            }
+        }
+
+        // Print article
+        function printArticle() {
+            window.print();
+        }
+
+        // Share article
+        function shareArticle() {
+            if (navigator.share && currentArticle) {
+                navigator.share({
+                    title: currentArticle.title,
+                    url: window.location.href
+                });
+            } else {
+                // Fallback: copy URL to clipboard
+                navigator.clipboard.writeText(window.location.href);
+                showSuccess('Article URL copied to clipboard!');
+            }
+        }
+
+        // Clear search on escape
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                document.getElementById('helpSearchInput').value = '';
+                hideSearchResults();
+            }
+        });
+    </script>
+</body>
+</html>

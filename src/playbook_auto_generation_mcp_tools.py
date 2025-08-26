@@ -16,7 +16,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
-from playbook_auto_generator import PlaybookAutoGenerator, IncidentContext
+from playbook_auto_generator import PlaybookAutoGenerator, IncidentPattern
 from playbook_recommendation_engine import PlaybookRecommendationEngine
 
 logger = logging.getLogger(__name__)
@@ -299,7 +299,7 @@ class PlaybookAutoGenerationMCPTools:
         """
         try:
             # Create incident context
-            incident_context = IncidentContext(
+            incident_context = IncidentPattern(
                 incident_id=f"incident_{int(datetime.now().timestamp())}",
                 title=incident_title,
                 description=incident_description,
