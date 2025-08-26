@@ -134,6 +134,9 @@ class RemoteMemoryMCPServer:
         # Register deployment pipeline tools
         self._register_deployment_pipeline_tools()
         
+        # Register config backup system tools
+        self._register_config_backup_system_tools()
+        
         # Add admin interface routes
         self._add_admin_routes()
         
@@ -7864,6 +7867,706 @@ server {
 
         logger.info("🚀 Deployment pipeline tools registered - CI/CD automation enabled")
 
+    def _register_config_backup_system_tools(self):
+        """Register comprehensive configuration backup and tracking tools"""
+        from config_backup_system import ConfigBackupSystem, ConfigSnapshot
+        import json
+        
+        # Initialize config backup system
+        self.config_backup = ConfigBackupSystem()
+        
+        @self.mcp.tool()
+        async def register_config_system(
+            system_id: str,
+            system_name: str,
+            system_type: str,
+            agent_id: str = "",
+            description: str = "",
+            backup_frequency: int = 3600,
+            metadata: Optional[Dict[str, Any]] = None
+        ) -> str:
+            """Register a new system for configuration tracking and backup"""
+            try:
+                if metadata is None:
+                    metadata = {}
+                    
+                success = self.config_backup.register_system(
+                    system_id=system_id,
+                    system_name=system_name,
+                    system_type=system_type,
+                    agent_id=agent_id,
+                    description=description,
+                    backup_frequency=backup_frequency,
+                    metadata=metadata
+                )
+                
+                if success:
+                    # Store in hAIveMind memory
+                    await self.storage.store_memory(
+                        category='infrastructure',
+                        content=f"Registered config system {system_name} ({system_type})",
+                        metadata={
+                            'system_id': system_id,
+                            'system_type': system_type,
+                            'agent_id': agent_id,
+                            'backup_frequency': backup_frequency
+                        }
+                    )
+                    
+                    return f"✅ Successfully registered config system: {system_name} ({system_type})\nSystem ID: {system_id}\nBackup frequency: {backup_frequency}s"
+                else:
+                    return f"❌ Failed to register config system: {system_name}"
+                    
+            except Exception as e:
+                return f"❌ Error registering config system: {str(e)}"
+        
+        @self.mcp.tool()
+        async def create_config_snapshot(
+            system_id: str,
+            config_content: str,
+            config_type: str = "config",
+            file_path: Optional[str] = None,
+            agent_id: str = "",
+            metadata: Optional[Dict[str, Any]] = None
+        ) -> str:
+            """Create a configuration snapshot with automatic deduplication"""
+            try:
+                if metadata is None:
+                    metadata = {}
+                    
+                snapshot = ConfigSnapshot(
+                    system_id=system_id,
+                    config_type=config_type,
+                    config_content=config_content,
+                    file_path=file_path,
+                    agent_id=agent_id,
+                    metadata=metadata
+                )
+                
+                snapshot_id = self.config_backup.create_snapshot(snapshot)
+                
+                if snapshot_id:
+                    # Store in hAIveMind memory
+                    await self.storage.store_memory(
+                        category='infrastructure',
+                        content=f"Created config snapshot for {system_id}",
+                        metadata={
+                            'snapshot_id': snapshot_id,
+                            'system_id': system_id,
+                            'config_type': config_type,
+                            'config_size': len(config_content),
+                            'config_hash': snapshot.config_hash
+                        }
+                    )
+                    
+                    return f"📸 Configuration snapshot created successfully\nSnapshot ID: {snapshot_id}\nSystem: {system_id}\nType: {config_type}\nSize: {len(config_content)} bytes\nHash: {snapshot.config_hash[:12]}..."
+                else:
+                    return f"❌ Failed to create configuration snapshot for {system_id}"
+                    
+            except Exception as e:
+                return f"❌ Error creating config snapshot: {str(e)}"
+        
+        @self.mcp.tool()
+        async def get_config_history(
+            system_id: str,
+            limit: int = 20
+        ) -> str:
+            """Get configuration history for a system with change tracking"""
+            try:
+                history = self.config_backup.get_system_history(system_id, limit)
+                
+                if not history:
+                    return f"📋 No configuration history found for system: {system_id}"
+                
+                result = [f"📋 Configuration History for {system_id}"]
+                result.append(f"{'='*60}")
+                
+                for i, entry in enumerate(history):
+                    timestamp = entry.get('timestamp', 'Unknown')
+                    config_type = entry.get('config_type', 'config')
+                    size = entry.get('size', 0)
+                    snapshot_id = entry.get('id', 'N/A')
+                    
+                    # Change information
+                    change_type = entry.get('change_type')
+                    risk_score = entry.get('risk_score', 0.0)
+                    lines_added = entry.get('lines_added', 0)
+                    lines_removed = entry.get('lines_removed', 0)
+                    
+                    result.append(f"\n{i+1}. Snapshot ID: {snapshot_id}")
+                    result.append(f"   📅 Time: {timestamp}")
+                    result.append(f"   📄 Type: {config_type}")
+                    result.append(f"   📊 Size: {size} bytes")
+                    
+                    if change_type:
+                        risk_emoji = "🔴" if risk_score > 0.7 else "🟡" if risk_score > 0.3 else "🟢"
+                        result.append(f"   {risk_emoji} Change: {change_type} (risk: {risk_score:.2f})")
+                        if lines_added or lines_removed:
+                            result.append(f"   📈 Lines: +{lines_added}/-{lines_removed}")
+                
+                # Store query in hAIveMind memory  
+                await self.storage.store_memory(
+                    category='infrastructure',
+                    content=f"Retrieved config history for {system_id}",
+                    metadata={
+                        'system_id': system_id,
+                        'history_count': len(history),
+                        'query_limit': limit
+                    }
+                )
+                
+                return "\n".join(result)
+                
+            except Exception as e:
+                return f"❌ Error retrieving config history: {str(e)}"
+        
+        @self.mcp.tool()
+        async def get_current_config(
+            system_id: str
+        ) -> str:
+            """Get the current configuration for a system"""
+            try:
+                current_config = self.config_backup.get_current_config(system_id)
+                
+                if not current_config:
+                    return f"📋 No current configuration found for system: {system_id}"
+                
+                config_content = current_config.get('config_content', '')
+                config_type = current_config.get('config_type', 'config')
+                timestamp = current_config.get('timestamp', 'Unknown')
+                config_hash = current_config.get('config_hash', '')
+                size = current_config.get('size', len(config_content))
+                
+                result = [
+                    f"📄 Current Configuration for {system_id}",
+                    f"{'='*50}",
+                    f"📅 Last Updated: {timestamp}",
+                    f"📄 Type: {config_type}",
+                    f"📊 Size: {size} bytes",
+                    f"🔐 Hash: {config_hash[:16]}...",
+                    f"",
+                    f"📝 Configuration Content:",
+                    f"{'─'*30}",
+                    config_content[:2000] + ("..." if len(config_content) > 2000 else "")
+                ]
+                
+                return "\n".join(result)
+                
+            except Exception as e:
+                return f"❌ Error retrieving current config: {str(e)}"
+        
+        @self.mcp.tool()
+        async def detect_config_drift(
+            system_id: Optional[str] = None,
+            hours_back: int = 24
+        ) -> str:
+            """Detect configuration drift and analyze changes"""
+            try:
+                drift_issues = self.config_backup.detect_drift(system_id, hours_back)
+                
+                if not drift_issues:
+                    scope = f"system {system_id}" if system_id else "all systems"
+                    return f"✅ No configuration drift detected in {scope} (last {hours_back}h)"
+                
+                result = [f"🔍 Configuration Drift Analysis"]
+                if system_id:
+                    result.append(f"🎯 System: {system_id}")
+                result.append(f"⏰ Time Range: Last {hours_back} hours")
+                result.append(f"{'='*60}")
+                
+                # Group by severity
+                critical_issues = [i for i in drift_issues if i.get('analysis', {}).get('severity') == 'critical']
+                high_issues = [i for i in drift_issues if i.get('analysis', {}).get('severity') == 'high']  
+                medium_issues = [i for i in drift_issues if i.get('analysis', {}).get('severity') == 'medium']
+                low_issues = [i for i in drift_issues if i.get('analysis', {}).get('severity') == 'low']
+                
+                if critical_issues:
+                    result.append(f"\n🔴 CRITICAL ISSUES ({len(critical_issues)}):")
+                    for issue in critical_issues[:5]:  # Show top 5
+                        self._format_drift_issue(result, issue)
+                
+                if high_issues:
+                    result.append(f"\n🟡 HIGH PRIORITY ({len(high_issues)}):")
+                    for issue in high_issues[:3]:  # Show top 3
+                        self._format_drift_issue(result, issue)
+                
+                if medium_issues:
+                    result.append(f"\n🟠 MEDIUM PRIORITY ({len(medium_issues)}):")
+                    for issue in medium_issues[:2]:  # Show top 2
+                        self._format_drift_issue(result, issue)
+                        
+                if low_issues:
+                    result.append(f"\n🟢 LOW PRIORITY: {len(low_issues)} items")
+                
+                # Store drift analysis in hAIveMind memory
+                await self.storage.store_memory(
+                    category='infrastructure',
+                    content=f"Config drift analysis: {len(drift_issues)} issues detected",
+                    metadata={
+                        'system_id': system_id,
+                        'hours_back': hours_back,
+                        'total_issues': len(drift_issues),
+                        'critical': len(critical_issues),
+                        'high': len(high_issues),
+                        'medium': len(medium_issues),
+                        'low': len(low_issues)
+                    }
+                )
+                
+                return "\n".join(result)
+                
+            except Exception as e:
+                return f"❌ Error detecting config drift: {str(e)}"
+        
+        def _format_drift_issue(self, result: List[str], issue: Dict):
+            """Format a drift issue for display"""
+            system_id = issue.get('system_id', 'Unknown')
+            system_name = issue.get('system_name', system_id)
+            change_type = issue.get('change_type', 'unknown')
+            risk_score = issue.get('risk_score', 0.0)
+            lines_added = issue.get('lines_added', 0)
+            lines_removed = issue.get('lines_removed', 0)
+            timestamp = issue.get('timestamp', 'Unknown')
+            analysis = issue.get('analysis', {})
+            
+            result.append(f"  📍 {system_name} ({system_id})")
+            result.append(f"     🔄 Change: {change_type} | Risk: {risk_score:.2f}")
+            result.append(f"     📈 Lines: +{lines_added}/-{lines_removed}")
+            result.append(f"     📅 Time: {timestamp}")
+            
+            if analysis.get('recommendations'):
+                result.append(f"     💡 Actions: {', '.join(analysis['recommendations'][:2])}")
+        
+        @self.mcp.tool()
+        async def list_config_systems(self) -> str:
+            """List all registered configuration systems"""
+            try:
+                systems = self.config_backup.get_systems()
+                
+                if not systems:
+                    return "📋 No configuration systems registered yet"
+                
+                result = [
+                    f"📋 Registered Configuration Systems ({len(systems)})",
+                    f"{'='*60}"
+                ]
+                
+                for system in systems:
+                    system_id = system.get('system_id', 'Unknown')
+                    system_name = system.get('system_name', 'Unnamed')
+                    system_type = system.get('system_type', 'unknown')
+                    snapshot_count = system.get('snapshot_count', 0)
+                    last_snapshot = system.get('last_snapshot', 'Never')
+                    backup_frequency = system.get('backup_frequency', 3600)
+                    
+                    result.append(f"\n🖥️  {system_name} ({system_type})")
+                    result.append(f"    🆔 ID: {system_id}")
+                    result.append(f"    📸 Snapshots: {snapshot_count}")
+                    result.append(f"    📅 Last Backup: {last_snapshot}")
+                    result.append(f"    ⏰ Frequency: {backup_frequency}s")
+                
+                return "\n".join(result)
+                
+            except Exception as e:
+                return f"❌ Error listing config systems: {str(e)}"
+        
+        @self.mcp.tool() 
+        async def get_config_alerts(
+            system_id: Optional[str] = None
+        ) -> str:
+            """Get active configuration drift alerts"""
+            try:
+                alerts = self.config_backup.get_active_alerts(system_id)
+                
+                if not alerts:
+                    scope = f"system {system_id}" if system_id else "all systems"
+                    return f"✅ No active configuration alerts for {scope}"
+                
+                result = [f"🚨 Active Configuration Alerts ({len(alerts)})"]
+                if system_id:
+                    result.append(f"🎯 System: {system_id}")
+                result.append(f"{'='*60}")
+                
+                # Group by severity
+                critical_alerts = [a for a in alerts if a.get('severity') == 'critical']
+                high_alerts = [a for a in alerts if a.get('severity') == 'high']
+                medium_alerts = [a for a in alerts if a.get('severity') == 'medium']
+                low_alerts = [a for a in alerts if a.get('severity') == 'low']
+                
+                for severity, alert_list, emoji in [
+                    ('CRITICAL', critical_alerts, '🔴'),
+                    ('HIGH', high_alerts, '🟡'),
+                    ('MEDIUM', medium_alerts, '🟠'),
+                    ('LOW', low_alerts, '🟢')
+                ]:
+                    if alert_list:
+                        result.append(f"\n{emoji} {severity} ALERTS ({len(alert_list)}):")
+                        for alert in alert_list:
+                            system_name = alert.get('system_name', alert.get('system_id', 'Unknown'))
+                            drift_type = alert.get('drift_type', 'unknown')
+                            description = alert.get('description', 'No description')
+                            timestamp = alert.get('timestamp', 'Unknown')
+                            
+                            result.append(f"  📍 {system_name}")
+                            result.append(f"     🔍 Type: {drift_type}")
+                            result.append(f"     📝 {description}")
+                            result.append(f"     📅 {timestamp}")
+                
+                return "\n".join(result)
+                
+            except Exception as e:
+                return f"❌ Error retrieving config alerts: {str(e)}"
+
+        @self.mcp.tool()
+        async def analyze_config_drift_patterns(
+            system_id: Optional[str] = None,
+            hours_back: int = 24,
+            include_trends: bool = True
+        ) -> str:
+            """Advanced configuration drift analysis with pattern recognition and ML insights"""
+            try:
+                drift_issues = self.config_backup.detect_drift(system_id, hours_back)
+                
+                if not drift_issues:
+                    scope = f"system {system_id}" if system_id else "all systems"
+                    return f"✅ No configuration drift detected in {scope} (last {hours_back}h)"
+                
+                result = [f"🔍 Advanced Configuration Drift Analysis"]
+                if system_id:
+                    result.append(f"🎯 System: {system_id}")
+                result.append(f"⏰ Analysis Period: Last {hours_back} hours")
+                result.append(f"🧠 Pattern Recognition: ENABLED")
+                result.append(f"{'='*70}")
+                
+                # Enhanced analysis with patterns
+                total_patterns = 0
+                security_issues = 0
+                service_issues = 0
+                network_issues = 0
+                confidence_scores = []
+                
+                for issue in drift_issues:
+                    analysis = self.config_backup._analyze_drift(issue)
+                    issue['analysis'] = analysis
+                    
+                    patterns = analysis.get('patterns_detected', [])
+                    total_patterns += len(patterns)
+                    confidence_scores.append(analysis.get('confidence', 0.0))
+                    
+                    for pattern in patterns:
+                        if pattern['type'] == 'security_change':
+                            security_issues += 1
+                        elif pattern['type'] in ['service_disable', 'service_change']:
+                            service_issues += 1
+                        elif pattern['type'] in ['port_change', 'network_change']:
+                            network_issues += 1
+                
+                # Summary statistics
+                avg_confidence = sum(confidence_scores) / len(confidence_scores) if confidence_scores else 0.0
+                result.append(f"\n📊 ANALYSIS SUMMARY:")
+                result.append(f"   🔢 Total Issues: {len(drift_issues)}")
+                result.append(f"   🧩 Patterns Detected: {total_patterns}")
+                result.append(f"   🎯 Analysis Confidence: {avg_confidence:.1%}")
+                result.append(f"   🔒 Security Issues: {security_issues}")
+                result.append(f"   ⚙️  Service Issues: {service_issues}")
+                result.append(f"   🌐 Network Issues: {network_issues}")
+                
+                # Categorized issues with enhanced details
+                critical_issues = [i for i in drift_issues if i.get('analysis', {}).get('severity') == 'critical']
+                high_issues = [i for i in drift_issues if i.get('analysis', {}).get('severity') == 'high']
+                
+                if critical_issues:
+                    result.append(f"\n🔴 CRITICAL ISSUES ({len(critical_issues)}) - IMMEDIATE ACTION REQUIRED:")
+                    for issue in critical_issues[:3]:  # Show top 3
+                        self._format_enhanced_drift_issue(result, issue)
+                
+                if high_issues:
+                    result.append(f"\n🟡 HIGH PRIORITY ISSUES ({len(high_issues)}):")
+                    for issue in high_issues[:3]:  # Show top 3
+                        self._format_enhanced_drift_issue(result, issue)
+                
+                # Trend analysis
+                if include_trends:
+                    trends = self.config_backup.get_drift_trends(system_id, days_back=7)
+                    if 'error' not in trends:
+                        result.append(f"\n📈 DRIFT TRENDS (7 Days):")
+                        result.append(f"   📊 Total Changes: {trends['total_changes']}")
+                        
+                        if trends.get('most_active_systems'):
+                            result.append(f"   🔥 Most Active Systems:")
+                            for sys_name, count in trends['most_active_systems'][:3]:
+                                result.append(f"      • {sys_name}: {count} changes")
+                        
+                        if trends.get('highest_risk_systems'):
+                            result.append(f"   ⚠️  Highest Risk Systems:")
+                            for sys_name, risk in trends['highest_risk_systems'][:3]:
+                                result.append(f"      • {sys_name}: {risk:.2f} avg risk")
+                
+                # Store enhanced analysis in hAIveMind memory
+                await self.storage.store_memory(
+                    category='infrastructure',
+                    content=f"Advanced config drift analysis: {len(drift_issues)} issues, {total_patterns} patterns detected",
+                    metadata={
+                        'system_id': system_id,
+                        'hours_back': hours_back,
+                        'total_issues': len(drift_issues),
+                        'patterns_detected': total_patterns,
+                        'confidence': avg_confidence,
+                        'security_issues': security_issues,
+                        'service_issues': service_issues,
+                        'network_issues': network_issues
+                    }
+                )
+                
+                return "\n".join(result)
+                
+            except Exception as e:
+                return f"❌ Error in advanced drift analysis: {str(e)}"
+        
+        def _format_enhanced_drift_issue(self, result: List[str], issue: Dict):
+            """Format drift issue with enhanced pattern information"""
+            system_id = issue.get('system_id', 'Unknown')
+            system_name = issue.get('system_name', system_id)
+            analysis = issue.get('analysis', {})
+            patterns = analysis.get('patterns_detected', [])
+            confidence = analysis.get('confidence', 0.0)
+            
+            result.append(f"  📍 {system_name} ({system_id})")
+            result.append(f"     🎯 Confidence: {confidence:.1%}")
+            
+            if patterns:
+                result.append(f"     🧩 Patterns:")
+                for pattern in patterns[:2]:  # Show top 2 patterns
+                    result.append(f"        • {pattern['detail']}")
+            
+            recommendations = analysis.get('recommendations', [])
+            if recommendations:
+                result.append(f"     💡 Actions: {recommendations[0]}")
+        
+        @self.mcp.tool()
+        async def create_intelligent_config_alert(
+            system_id: str,
+            snapshot_id: str,
+            auto_analyze: bool = True
+        ) -> str:
+            """Create intelligent configuration alert with automated analysis"""
+            try:
+                # Get snapshot and diff data
+                with sqlite3.connect(self.config_backup.db_path) as conn:
+                    conn.row_factory = sqlite3.Row
+                    
+                    # Get snapshot
+                    snapshot = conn.execute("""
+                        SELECT s.*, sys.system_name, sys.system_type
+                        FROM config_snapshots s
+                        JOIN config_systems sys ON s.system_id = sys.system_id
+                        WHERE s.id = ?
+                    """, (snapshot_id,)).fetchone()
+                    
+                    if not snapshot:
+                        return f"❌ Snapshot {snapshot_id} not found"
+                    
+                    # Get associated diff
+                    diff = conn.execute("""
+                        SELECT * FROM config_diffs WHERE snapshot_id_after = ?
+                    """, (snapshot_id,)).fetchone()
+                    
+                    if not diff:
+                        return f"ℹ️ No drift detected for snapshot {snapshot_id}"
+                
+                # Convert to dict and add system info
+                drift_data = dict(diff)
+                drift_data.update({
+                    'system_id': snapshot['system_id'],
+                    'system_name': snapshot['system_name'],
+                    'system_type': snapshot['system_type']
+                })
+                
+                # Create intelligent alert
+                if auto_analyze:
+                    alert_created = self.config_backup.create_drift_alert_with_analysis(system_id, drift_data)
+                else:
+                    alert_created = self.config_backup.create_drift_alert(
+                        system_id=system_id,
+                        drift_type='configuration_change',
+                        severity='medium',
+                        description=f"Configuration change detected in {snapshot['system_name']}",
+                        snapshot_id=snapshot_id
+                    )
+                
+                if alert_created:
+                    # Get analysis for display
+                    analysis = self.config_backup._analyze_drift(drift_data) if auto_analyze else {}
+                    
+                    result = [
+                        f"🚨 Intelligent Configuration Alert Created",
+                        f"{'='*50}",
+                        f"🎯 System: {snapshot['system_name']} ({system_id})",
+                        f"📸 Snapshot: {snapshot_id}",
+                        f"📅 Timestamp: {snapshot['timestamp']}"
+                    ]
+                    
+                    if auto_analyze:
+                        severity = analysis.get('severity', 'unknown')
+                        confidence = analysis.get('confidence', 0.0)
+                        patterns = analysis.get('patterns_detected', [])
+                        
+                        severity_emoji = {"critical": "🔴", "high": "🟡", "medium": "🟠", "low": "🟢"}.get(severity, "⚪")
+                        result.extend([
+                            f"{severity_emoji} Severity: {severity.upper()}",
+                            f"🎯 Confidence: {confidence:.1%}",
+                            f"🧩 Patterns Detected: {len(patterns)}"
+                        ])
+                        
+                        if patterns:
+                            result.append(f"📋 Key Patterns:")
+                            for pattern in patterns[:3]:
+                                result.append(f"   • {pattern['detail']}")
+                        
+                        recommendations = analysis.get('recommendations', [])
+                        if recommendations:
+                            result.append(f"💡 Recommendations:")
+                            for rec in recommendations[:3]:
+                                result.append(f"   • {rec}")
+                    
+                    # Store alert in hAIveMind memory
+                    await self.storage.store_memory(
+                        category='infrastructure',
+                        content=f"Created intelligent config alert for {snapshot['system_name']}",
+                        metadata={
+                            'system_id': system_id,
+                            'snapshot_id': snapshot_id,
+                            'alert_type': 'intelligent_config_drift',
+                            'auto_analyzed': auto_analyze,
+                            'severity': analysis.get('severity', 'unknown') if auto_analyze else 'medium'
+                        }
+                    )
+                    
+                    return "\n".join(result)
+                else:
+                    return f"❌ Failed to create alert for system {system_id}"
+                    
+            except Exception as e:
+                return f"❌ Error creating intelligent alert: {str(e)}"
+        
+        @self.mcp.tool()
+        async def get_drift_trend_analysis(
+            system_id: Optional[str] = None,
+            days_back: int = 7
+        ) -> str:
+            """Get comprehensive drift trend analysis with predictive insights"""
+            try:
+                trends = self.config_backup.get_drift_trends(system_id, days_back)
+                
+                if 'error' in trends:
+                    return f"❌ Error analyzing trends: {trends['error']}"
+                
+                if trends['total_changes'] == 0:
+                    scope = f"system {system_id}" if system_id else "all systems"
+                    return f"📊 No configuration changes detected in {scope} over the last {days_back} days"
+                
+                result = [
+                    f"📈 Configuration Drift Trend Analysis",
+                    f"{'='*50}",
+                    f"📊 Analysis Period: {days_back} days"
+                ]
+                
+                if system_id:
+                    result.append(f"🎯 System: {system_id}")
+                
+                result.extend([
+                    f"🔢 Total Changes: {trends['total_changes']}",
+                    f"📅 Daily Average: {trends['total_changes'] / days_back:.1f} changes/day"
+                ])
+                
+                # Daily activity pattern
+                daily_drift = trends.get('daily_drift', {})
+                if daily_drift:
+                    result.append(f"\n📅 DAILY ACTIVITY PATTERN:")
+                    for date, count in sorted(daily_drift.items())[-7:]:  # Last 7 days
+                        activity_bar = "█" * min(count, 20)  # Visual bar
+                        result.append(f"   {date}: {count:2d} changes {activity_bar}")
+                
+                # Severity distribution
+                severity_dist = trends.get('severity_distribution', {})
+                if severity_dist:
+                    result.append(f"\n🚨 SEVERITY BREAKDOWN:")
+                    total = sum(severity_dist.values())
+                    for severity in ['critical', 'high', 'medium', 'low']:
+                        count = severity_dist.get(severity, 0)
+                        percentage = (count / total * 100) if total > 0 else 0
+                        emoji = {"critical": "🔴", "high": "🟡", "medium": "🟠", "low": "🟢"}.get(severity, "⚪")
+                        result.append(f"   {emoji} {severity.title()}: {count} ({percentage:.1f}%)")
+                
+                # Most active systems
+                most_active = trends.get('most_active_systems', [])
+                if most_active:
+                    result.append(f"\n🔥 MOST ACTIVE SYSTEMS:")
+                    for i, (sys_name, count) in enumerate(most_active[:5], 1):
+                        result.append(f"   {i}. {sys_name}: {count} changes")
+                
+                # Highest risk systems
+                highest_risk = trends.get('highest_risk_systems', [])
+                if highest_risk:
+                    result.append(f"\n⚠️  HIGHEST RISK SYSTEMS:")
+                    for i, (sys_name, risk) in enumerate(highest_risk[:5], 1):
+                        risk_level = "CRITICAL" if risk > 0.7 else "HIGH" if risk > 0.4 else "MEDIUM" if risk > 0.2 else "LOW"
+                        result.append(f"   {i}. {sys_name}: {risk:.2f} ({risk_level})")
+                
+                # Predictive insights
+                result.append(f"\n🔮 PREDICTIVE INSIGHTS:")
+                
+                # Calculate trend direction
+                daily_values = list(daily_drift.values()) if daily_drift else []
+                if len(daily_values) >= 3:
+                    recent_avg = sum(daily_values[-3:]) / 3
+                    older_avg = sum(daily_values[:-3]) / len(daily_values[:-3]) if len(daily_values) > 3 else recent_avg
+                    
+                    if recent_avg > older_avg * 1.2:
+                        result.append("   📈 Drift activity is INCREASING")
+                        result.append("   💡 Recommendation: Investigate recent infrastructure changes")
+                    elif recent_avg < older_avg * 0.8:
+                        result.append("   📉 Drift activity is DECREASING")
+                        result.append("   ✅ Configuration stability is improving")
+                    else:
+                        result.append("   ➡️  Drift activity is STABLE")
+                
+                # Risk assessment
+                total_critical = severity_dist.get('critical', 0)
+                total_high = severity_dist.get('high', 0)
+                high_risk_percentage = ((total_critical + total_high) / trends['total_changes'] * 100) if trends['total_changes'] > 0 else 0
+                
+                if high_risk_percentage > 30:
+                    result.append("   🚨 HIGH RISK: >30% of changes are critical/high severity")
+                    result.append("   💡 Recommendation: Implement stricter change controls")
+                elif high_risk_percentage > 15:
+                    result.append("   ⚠️  MODERATE RISK: 15-30% of changes are critical/high severity")
+                    result.append("   💡 Recommendation: Increase configuration monitoring")
+                else:
+                    result.append("   ✅ LOW RISK: <15% of changes are critical/high severity")
+                
+                # Store trend analysis in hAIveMind memory
+                await self.storage.store_memory(
+                    category='infrastructure',
+                    content=f"Config drift trend analysis: {trends['total_changes']} changes over {days_back} days",
+                    metadata={
+                        'system_id': system_id,
+                        'days_analyzed': days_back,
+                        'total_changes': trends['total_changes'],
+                        'daily_average': trends['total_changes'] / days_back,
+                        'high_risk_percentage': high_risk_percentage,
+                        'most_active_system': most_active[0][0] if most_active else None,
+                        'severity_distribution': severity_dist
+                    }
+                )
+                
+                return "\n".join(result)
+                
+            except Exception as e:
+                return f"❌ Error analyzing drift trends: {str(e)}"
+
+        logger.info("📊 Config backup system tools registered - comprehensive configuration tracking enabled")
+
     def _add_admin_routes(self):
         """Add admin web interface routes"""
         from starlette.responses import HTMLResponse, JSONResponse, FileResponse
@@ -9534,8 +10237,643 @@ server {
             except Exception as e:
                 return JSONResponse({"error": str(e)}, status_code=500)
         
+        # ===== CONFIG BACKUP SYSTEM API ENDPOINTS =====
+        
+        @self.mcp.custom_route("/api/config/backup/systems", methods=["GET"])
+        async def list_config_systems(request):
+            """List all registered configuration systems"""
+            try:
+                from config_backup_system import ConfigBackupSystem
+                config_backup = ConfigBackupSystem()
+                systems = config_backup.list_systems()
+                return JSONResponse({"systems": systems})
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        @self.mcp.custom_route("/api/config/backup/snapshot", methods=["POST"])
+        async def create_config_snapshot(request):
+            """Create a configuration snapshot"""
+            try:
+                from config_backup_system import ConfigBackupSystem
+                body = await request.json()
+                config_backup = ConfigBackupSystem()
+                snapshot_id = config_backup.create_snapshot(
+                    system_id=body["system_id"],
+                    config_content=body["config_content"],
+                    config_type=body.get("config_type", "unknown"),
+                    tags=body.get("tags", [])
+                )
+                return JSONResponse({"snapshot_id": snapshot_id, "status": "created"})
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        @self.mcp.custom_route("/api/config/backup/snapshots/{system_id}", methods=["GET"])
+        async def get_config_snapshots(request):
+            """Get configuration snapshots for a system"""
+            try:
+                system_id = request.path_params["system_id"]
+                query_params = dict(request.query_params)
+                limit = int(query_params.get("limit", 20))
+                offset = int(query_params.get("offset", 0))
+                
+                from config_backup_system import ConfigBackupSystem
+                config_backup = ConfigBackupSystem()
+                snapshots = config_backup.get_snapshots(system_id, limit, offset)
+                return JSONResponse({"snapshots": snapshots})
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        @self.mcp.custom_route("/api/config/backup/snapshot/{snapshot_id}", methods=["GET"])
+        async def get_config_snapshot_content(request):
+            """Get specific snapshot content"""
+            try:
+                snapshot_id = request.path_params["snapshot_id"]
+                from config_backup_system import ConfigBackupSystem
+                config_backup = ConfigBackupSystem()
+                snapshot = config_backup.get_snapshot_by_id(snapshot_id)
+                if not snapshot:
+                    return JSONResponse({"error": "Snapshot not found"}, status_code=404)
+                return JSONResponse({"snapshot": snapshot})
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        @self.mcp.custom_route("/api/config/backup/restore", methods=["POST"])
+        async def restore_config_snapshot(request):
+            """Restore configuration from snapshot"""
+            try:
+                body = await request.json()
+                from config_backup_system import ConfigBackupSystem
+                config_backup = ConfigBackupSystem()
+                result = config_backup.restore_snapshot(
+                    snapshot_id=body["snapshot_id"],
+                    target_path=body.get("target_path")
+                )
+                return JSONResponse({"status": "restored", "result": result})
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        @self.mcp.custom_route("/api/config/backup/diff/{snapshot1_id}/{snapshot2_id}", methods=["GET"])
+        async def get_config_diff(request):
+            """Get difference between two snapshots"""
+            try:
+                snapshot1_id = request.path_params["snapshot1_id"]
+                snapshot2_id = request.path_params["snapshot2_id"]
+                from config_backup_system import ConfigBackupSystem
+                config_backup = ConfigBackupSystem()
+                diff = config_backup.compare_snapshots(snapshot1_id, snapshot2_id)
+                return JSONResponse({"diff": diff})
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        @self.mcp.custom_route("/api/config/backup/history/{system_id}", methods=["GET"])
+        async def get_config_history(request):
+            """Get configuration change history for a system"""
+            try:
+                system_id = request.path_params["system_id"]
+                query_params = dict(request.query_params)
+                limit = int(query_params.get("limit", 50))
+                
+                from config_backup_system import ConfigBackupSystem
+                config_backup = ConfigBackupSystem()
+                history = config_backup.get_change_history(system_id, limit)
+                return JSONResponse({"history": history})
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        @self.mcp.custom_route("/api/config/backup/drift/{system_id}", methods=["GET"])
+        async def detect_config_drift(request):
+            """Detect configuration drift for a system"""
+            try:
+                system_id = request.path_params["system_id"]
+                query_params = dict(request.query_params)
+                hours = int(query_params.get("hours", 24))
+                
+                from config_backup_system import ConfigBackupSystem
+                config_backup = ConfigBackupSystem()
+                drift = config_backup.detect_drift(system_id, hours)
+                return JSONResponse({"drift": drift})
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        @self.mcp.custom_route("/api/config/backup/alert", methods=["POST"])
+        async def create_drift_alert(request):
+            """Create configuration drift alert"""
+            try:
+                body = await request.json()
+                from config_backup_system import ConfigBackupSystem
+                config_backup = ConfigBackupSystem()
+                alert_id = config_backup.create_drift_alert(
+                    system_id=body["system_id"],
+                    drift_type=body["drift_type"],
+                    severity=body.get("severity", "medium"),
+                    description=body["description"],
+                    affected_keys=body.get("affected_keys", [])
+                )
+                return JSONResponse({"alert_id": alert_id, "status": "created"})
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        @self.mcp.custom_route("/api/config/backup/alerts/{system_id}", methods=["GET"])
+        async def get_drift_alerts(request):
+            """Get drift alerts for a system"""
+            try:
+                system_id = request.path_params["system_id"]
+                query_params = dict(request.query_params)
+                limit = int(query_params.get("limit", 20))
+                
+                from config_backup_system import ConfigBackupSystem
+                config_backup = ConfigBackupSystem()
+                alerts = config_backup.get_drift_alerts(system_id, limit)
+                return JSONResponse({"alerts": alerts})
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # ===== AGENT KANBAN TASK MANAGEMENT API ENDPOINTS =====
+        
+        @self.mcp.custom_route("/api/kanban/agents/register", methods=["POST"])
+        async def register_kanban_agent(request):
+            """Register new agent with capabilities"""
+            try:
+                from agent_kanban_system import AgentKanbanSystem
+                body = await request.json()
+                kanban = AgentKanbanSystem()
+                
+                success = kanban.register_agent(
+                    agent_id=body["agent_id"],
+                    name=body["name"],
+                    machine_id=body["machine_id"],
+                    capabilities=body["capabilities"],
+                    max_workload=body.get("max_workload", 5),
+                    metadata=body.get("metadata", {})
+                )
+                
+                return JSONResponse({"success": success, "message": "Agent registered" if success else "Registration failed"})
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        @self.mcp.custom_route("/api/kanban/agents", methods=["GET"])
+        async def get_available_agents(request):
+            """Get available agents with optional capability filtering"""
+            try:
+                from agent_kanban_system import AgentKanbanSystem
+                query_params = dict(request.query_params)
+                required_capabilities = query_params.get("capabilities", "").split(",") if query_params.get("capabilities") else None
+                min_level = int(query_params.get("min_level", 1))
+                
+                kanban = AgentKanbanSystem()
+                agents = kanban.get_available_agents(required_capabilities, min_level)
+                
+                return JSONResponse({"agents": agents})
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        @self.mcp.custom_route("/api/kanban/agents/{agent_id}/status", methods=["PUT"])
+        async def update_agent_status(request):
+            """Update agent status and workload"""
+            try:
+                from agent_kanban_system import AgentKanbanSystem, AgentStatus
+                agent_id = request.path_params["agent_id"]
+                body = await request.json()
+                
+                kanban = AgentKanbanSystem()
+                success = kanban.update_agent_status(
+                    agent_id=agent_id,
+                    status=AgentStatus(body["status"]),
+                    current_workload=body.get("current_workload")
+                )
+                
+                return JSONResponse({"success": success})
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        @self.mcp.custom_route("/api/kanban/tasks", methods=["POST"])
+        async def create_kanban_task(request):
+            """Create a new kanban task"""
+            try:
+                from agent_kanban_system import AgentKanbanSystem, TaskPriority
+                body = await request.json()
+                kanban = AgentKanbanSystem()
+                
+                task_id = kanban.create_task(
+                    title=body["title"],
+                    description=body["description"], 
+                    created_by=body["created_by"],
+                    priority=TaskPriority(body.get("priority", "medium")),
+                    board_id=body.get("board_id", "default"),
+                    dependencies=body.get("dependencies", []),
+                    estimated_hours=body.get("estimated_hours"),
+                    due_date=body.get("due_date"),
+                    tags=body.get("tags", []),
+                    metadata=body.get("metadata", {})
+                )
+                
+                return JSONResponse({"task_id": task_id, "success": True})
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        @self.mcp.custom_route("/api/kanban/tasks/{task_id}/assign", methods=["PUT"])
+        async def assign_kanban_task(request):
+            """Assign task to agent"""
+            try:
+                from agent_kanban_system import AgentKanbanSystem
+                task_id = request.path_params["task_id"]
+                body = await request.json()
+                
+                kanban = AgentKanbanSystem()
+                success = kanban.assign_task(
+                    task_id=task_id,
+                    agent_id=body.get("agent_id"),
+                    auto_assign=body.get("auto_assign", True)
+                )
+                
+                return JSONResponse({"success": success})
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        @self.mcp.custom_route("/api/kanban/tasks/{task_id}/move", methods=["PUT"])
+        async def move_kanban_task(request):
+            """Move task between kanban columns"""
+            try:
+                from agent_kanban_system import AgentKanbanSystem, TaskStatus
+                task_id = request.path_params["task_id"]
+                body = await request.json()
+                
+                kanban = AgentKanbanSystem()
+                success = kanban.move_task(
+                    task_id=task_id,
+                    new_status=TaskStatus(body["status"]),
+                    moved_by=body["moved_by"]
+                )
+                
+                return JSONResponse({"success": success})
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        @self.mcp.custom_route("/api/kanban/boards/{board_id}", methods=["GET"])
+        async def get_kanban_board(request):
+            """Get complete kanban board state"""
+            try:
+                from agent_kanban_system import AgentKanbanSystem
+                board_id = request.path_params["board_id"]
+                query_params = dict(request.query_params)
+                include_metrics = query_params.get("metrics", "true").lower() == "true"
+                
+                kanban = AgentKanbanSystem()
+                board_data = kanban.get_kanban_board(board_id, include_metrics)
+                
+                return JSONResponse({"board": board_data})
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        @self.mcp.custom_route("/api/kanban/agents/workload", methods=["GET"])
+        async def get_agent_workload_report(request):
+            """Get agent workload and performance report"""
+            try:
+                from agent_kanban_system import AgentKanbanSystem
+                kanban = AgentKanbanSystem()
+                report = kanban.get_agent_workload_report()
+                
+                return JSONResponse({"report": report})
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        @self.mcp.custom_route("/api/kanban/analytics", methods=["GET"])
+        async def get_task_analytics(request):
+            """Get task analytics for specified time period"""
+            try:
+                from agent_kanban_system import AgentKanbanSystem
+                query_params = dict(request.query_params)
+                days = int(query_params.get("days", 30))
+                
+                kanban = AgentKanbanSystem()
+                analytics = kanban.get_task_analytics(days)
+                
+                return JSONResponse({"analytics": analytics})
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
         logger.info("💾 Config Backup API endpoints registered")
         logger.info("📋 Agent Kanban Task Management API endpoints registered")
+        
+        # Config Backup API - Create snapshot
+        @self.mcp.custom_route("/admin/api/configs/backup", methods=["POST"])
+        async def api_create_config_backup(request):
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+                
+            try:
+                data = await request.json()
+                system_id = data.get('system_id')
+                config_content = data.get('config_content')
+                config_type = data.get('config_type', 'config')
+                file_path = data.get('file_path')
+                agent_id = data.get('agent_id', '')
+                metadata = data.get('metadata', {})
+                
+                if not system_id or not config_content:
+                    return JSONResponse({"error": "system_id and config_content required"}, status_code=400)
+                
+                from config_backup_system import ConfigSnapshot
+                snapshot = ConfigSnapshot(
+                    system_id=system_id,
+                    config_type=config_type,
+                    config_content=config_content,
+                    file_path=file_path,
+                    agent_id=agent_id,
+                    metadata=metadata
+                )
+                
+                snapshot_id = self.config_backup.create_snapshot(snapshot)
+                
+                if snapshot_id:
+                    return JSONResponse({
+                        "success": True,
+                        "snapshot_id": snapshot_id,
+                        "system_id": system_id,
+                        "config_hash": snapshot.config_hash,
+                        "size": len(config_content),
+                        "message": "Configuration snapshot created successfully"
+                    })
+                else:
+                    return JSONResponse({"error": "Failed to create snapshot"}, status_code=500)
+                    
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # Config History API 
+        @self.mcp.custom_route("/admin/api/configs/{system_id}/history", methods=["GET"])
+        async def api_get_config_history(request):
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+                
+            try:
+                system_id = request.path_params.get('system_id')
+                limit = int(request.query_params.get('limit', 20))
+                
+                history = self.config_backup.get_system_history(system_id, limit)
+                
+                return JSONResponse({
+                    "success": True,
+                    "system_id": system_id,
+                    "history": history,
+                    "count": len(history)
+                })
+                
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # Current Config API
+        @self.mcp.custom_route("/admin/api/configs/{system_id}/current", methods=["GET"])
+        async def api_get_current_config(request):
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+                
+            try:
+                system_id = request.path_params.get('system_id')
+                include_content = request.query_params.get('include_content', 'false').lower() == 'true'
+                
+                current_config = self.config_backup.get_current_config(system_id)
+                
+                if not current_config:
+                    return JSONResponse({"error": "No configuration found"}, status_code=404)
+                
+                # Optionally exclude large content from response
+                if not include_content:
+                    current_config = {k: v for k, v in current_config.items() if k != 'config_content'}
+                    current_config['content_size'] = current_config.get('size', 0)
+                
+                return JSONResponse({
+                    "success": True,
+                    "system_id": system_id,
+                    "config": current_config
+                })
+                
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # Config Restore API
+        @self.mcp.custom_route("/admin/api/configs/restore", methods=["POST"])
+        async def api_restore_config(request):
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+                
+            try:
+                data = await request.json()
+                snapshot_id = data.get('snapshot_id')
+                system_id = data.get('system_id')
+                restore_to_file = data.get('restore_to_file', False)
+                
+                if not snapshot_id and not system_id:
+                    return JSONResponse({"error": "snapshot_id or system_id required"}, status_code=400)
+                
+                # Get snapshot to restore
+                if snapshot_id:
+                    # Restore specific snapshot
+                    with sqlite3.connect(self.config_backup.db_path) as conn:
+                        conn.row_factory = sqlite3.Row
+                        snapshot = conn.execute("""
+                            SELECT * FROM config_snapshots WHERE id = ?
+                        """, (snapshot_id,)).fetchone()
+                else:
+                    # Restore latest for system
+                    snapshot = self.config_backup.get_current_config(system_id)
+                
+                if not snapshot:
+                    return JSONResponse({"error": "Snapshot not found"}, status_code=404)
+                
+                snapshot_dict = dict(snapshot)
+                config_content = snapshot_dict.get('config_content', '')
+                file_path = snapshot_dict.get('file_path')
+                
+                # If restore_to_file and file_path exists, write to file
+                restored_to_file = False
+                if restore_to_file and file_path:
+                    try:
+                        import os
+                        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+                        with open(file_path, 'w') as f:
+                            f.write(config_content)
+                        restored_to_file = True
+                    except Exception as file_error:
+                        logger.warning(f"Failed to restore to file {file_path}: {file_error}")
+                
+                return JSONResponse({
+                    "success": True,
+                    "snapshot_id": snapshot_dict.get('id'),
+                    "system_id": snapshot_dict.get('system_id'),
+                    "config_content": config_content,
+                    "file_path": file_path,
+                    "restored_to_file": restored_to_file,
+                    "timestamp": snapshot_dict.get('timestamp'),
+                    "message": "Configuration restored successfully"
+                })
+                
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # Drift Detection API
+        @self.mcp.custom_route("/admin/api/configs/drift", methods=["GET"])
+        async def api_detect_drift(request):
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+                
+            try:
+                system_id = request.query_params.get('system_id')
+                hours_back = int(request.query_params.get('hours_back', 24))
+                
+                drift_issues = self.config_backup.detect_drift(system_id, hours_back)
+                
+                # Analyze and categorize issues
+                categorized = {
+                    'critical': [],
+                    'high': [],
+                    'medium': [],
+                    'low': []
+                }
+                
+                for issue in drift_issues:
+                    analysis = self.config_backup._analyze_drift(issue)
+                    issue['analysis'] = analysis
+                    severity = analysis.get('severity', 'low')
+                    categorized[severity].append(issue)
+                
+                return JSONResponse({
+                    "success": True,
+                    "system_id": system_id,
+                    "hours_back": hours_back,
+                    "total_issues": len(drift_issues),
+                    "issues": drift_issues,
+                    "categorized": categorized,
+                    "summary": {
+                        "critical": len(categorized['critical']),
+                        "high": len(categorized['high']),
+                        "medium": len(categorized['medium']),
+                        "low": len(categorized['low'])
+                    }
+                })
+                
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # Config Diff API
+        @self.mcp.custom_route("/admin/api/configs/diff/{id1}/{id2}", methods=["GET"])
+        async def api_compare_configs(request):
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+                
+            try:
+                id1 = request.path_params.get('id1')
+                id2 = request.path_params.get('id2')
+                
+                with sqlite3.connect(self.config_backup.db_path) as conn:
+                    conn.row_factory = sqlite3.Row
+                    
+                    # Get both snapshots
+                    snapshot1 = conn.execute("SELECT * FROM config_snapshots WHERE id = ?", (id1,)).fetchone()
+                    snapshot2 = conn.execute("SELECT * FROM config_snapshots WHERE id = ?", (id2,)).fetchone()
+                    
+                    if not snapshot1 or not snapshot2:
+                        return JSONResponse({"error": "One or both snapshots not found"}, status_code=404)
+                    
+                    # Check if diff already exists
+                    existing_diff = conn.execute("""
+                        SELECT * FROM config_diffs 
+                        WHERE (snapshot_id_before = ? AND snapshot_id_after = ?) 
+                           OR (snapshot_id_before = ? AND snapshot_id_after = ?)
+                    """, (id1, id2, id2, id1)).fetchone()
+                    
+                    if existing_diff:
+                        diff_data = dict(existing_diff)
+                    else:
+                        # Generate diff
+                        import difflib
+                        content1 = dict(snapshot1)['config_content']
+                        content2 = dict(snapshot2)['config_content']
+                        
+                        diff_lines = list(difflib.unified_diff(
+                            content1.splitlines(keepends=True),
+                            content2.splitlines(keepends=True),
+                            fromfile=f"snapshot_{id1}",
+                            tofile=f"snapshot_{id2}",
+                            n=3
+                        ))
+                        
+                        diff_content = ''.join(diff_lines)
+                        lines_added = sum(1 for line in diff_lines if line.startswith('+') and not line.startswith('+++'))
+                        lines_removed = sum(1 for line in diff_lines if line.startswith('-') and not line.startswith('---'))
+                        
+                        diff_data = {
+                            'diff_content': diff_content,
+                            'lines_added': lines_added,
+                            'lines_removed': lines_removed,
+                            'snapshot_id_before': id1,
+                            'snapshot_id_after': id2
+                        }
+                
+                return JSONResponse({
+                    "success": True,
+                    "snapshot1": dict(snapshot1),
+                    "snapshot2": dict(snapshot2),
+                    "diff": diff_data
+                })
+                
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # Systems List API
+        @self.mcp.custom_route("/admin/api/configs/systems", methods=["GET"])
+        async def api_list_config_systems(request):
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+                
+            try:
+                systems = self.config_backup.get_systems()
+                
+                return JSONResponse({
+                    "success": True,
+                    "systems": systems,
+                    "count": len(systems)
+                })
+                
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+        
+        # Register System API
+        @self.mcp.custom_route("/admin/api/configs/systems", methods=["POST"])
+        async def api_register_config_system(request):
+            if not await self._check_admin_auth(request):
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+                
+            try:
+                data = await request.json()
+                system_id = data.get('system_id')
+                system_name = data.get('system_name')
+                system_type = data.get('system_type')
+                
+                if not all([system_id, system_name, system_type]):
+                    return JSONResponse({"error": "system_id, system_name, and system_type required"}, status_code=400)
+                
+                success = self.config_backup.register_system(
+                    system_id=system_id,
+                    system_name=system_name,
+                    system_type=system_type,
+                    agent_id=data.get('agent_id', ''),
+                    description=data.get('description', ''),
+                    backup_frequency=data.get('backup_frequency', 3600),
+                    metadata=data.get('metadata', {})
+                )
+                
+                if success:
+                    return JSONResponse({
+                        "success": True,
+                        "system_id": system_id,
+                        "message": "System registered successfully"
+                    })
+                else:
+                    return JSONResponse({"error": "Failed to register system"}, status_code=500)
+                    
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
     
     def _add_session_recovery_middleware(self):
         """Add session recovery logic using custom error handling"""
