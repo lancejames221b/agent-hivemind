@@ -29,7 +29,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Start local MCP server (for Claude Code stdio integration)
 python src/memory_server.py
 
-# Start remote MCP server (for HTTP/SSE access)
+# Start remote MCP server (for HTTP/SSE access with 57+ DevOps tools)
 python src/remote_mcp_server.py
 
 # Start sync service (for machine-to-machine synchronization) 
@@ -41,7 +41,7 @@ pip install -r requirements.txt
 
 ### Setup Commands
 ```bash
-# Install Redis
+# Install Redis (required for hAIveMind coordination)
 sudo apt-get install redis-server
 sudo systemctl start redis-server
 
@@ -50,6 +50,23 @@ sudo bash services/install-services.sh
 
 # Remote machine setup
 bash INSTALL/setup-remote.sh
+
+# Initialize database schemas
+python -c "
+from src.project_management_system import ProjectManagementSystem
+from src.config_backup_system import ConfigBackupSystem
+from src.agent_kanban_system import AgentKanbanSystem
+from src.log_intelligence_system import LogIntelligenceSystem
+from src.disaster_recovery_system import DisasterRecoverySystem
+
+# Initialize all systems
+ProjectManagementSystem()
+ConfigBackupSystem()  
+AgentKanbanSystem()
+LogIntelligenceSystem()
+DisasterRecoverySystem()
+print('✅ All database schemas initialized')
+"
 ```
 
 ### Testing and Monitoring
@@ -57,14 +74,48 @@ bash INSTALL/setup-remote.sh
 # Check sync service status
 curl http://localhost:8899/api/status
 
-# Check remote MCP server health
+# Check remote MCP server health (includes all 57+ tools)
 curl http://localhost:8900/health
+
+# Test MCP tools via Claude Code
+python src/memory_server.py &
+# Then use MCP tools in Claude Code
 
 # Manual sync trigger
 curl -X POST http://localhost:8899/api/trigger-sync -H "Authorization: Bearer your-api-token"
 
 # Test Tailscale connectivity
 ping ljs-macbook-pro && ping m2 && ping max
+
+# Test project management system
+curl -X POST http://localhost:8900/admin/api/projects \
+  -H "Content-Type: application/json" \
+  -d '{"name": "test-project", "description": "Test project", "owner_agent_id": "test-agent"}'
+
+# Test configuration backup system  
+curl -X POST http://localhost:8900/admin/api/configs/backup \
+  -H "Content-Type: application/json" \
+  -d '{"system_id": "test-system", "config_content": "test: config"}'
+```
+
+### Common Development Tasks
+```bash
+# View all MCP tools available
+python -c "
+import sys; sys.path.append('src')
+from remote_mcp_server import RemoteMCPServer
+server = RemoteMCPServer()
+tools = [tool for tool in dir(server) if not tool.startswith('_') and callable(getattr(server, tool))]
+print(f'Available MCP Tools: {len(tools)}')
+for tool in sorted(tools): print(f'  - {tool}')
+"
+
+# Check database schemas
+sqlite3 data/projects.db ".schema"
+sqlite3 data/config_backup.db ".schema"
+sqlite3 data/kanban.db ".schema"
+sqlite3 data/logs.db ".schema"
+sqlite3 data/disaster_recovery.db ".schema"
 ```
 
 ## Configuration
@@ -137,6 +188,14 @@ The system supports comprehensive memory categories for DevOps operations:
 - `gdpr_delete_user_data`: GDPR compliant deletion of all data for specific user (right to be forgotten)
 - `gdpr_export_user_data`: GDPR compliant export of all data for specific user (data portability)
 
+### Project Management Tools:
+- `create_project`: Create new projects with comprehensive tracking, tags, metadata, and hAIveMind integration
+- `list_projects`: List projects with advanced filtering by status, owner, type, and pagination support
+- `switch_project_context`: Switch agent context to specific project with reason tracking and memory storage
+- `project_health_check`: Multi-dimensional health analysis with recommendations and trend analytics
+- `backup_project`: Full/incremental project backups with history preservation and conflict resolution
+- `restore_project`: Safe project restoration with validation, conflict resolution, and rollback capabilities
+
 ### ClaudeOps hAIveMind Management Tools:
 - `register_agent`: Register new hAIveMind agent with role and capabilities
 - `get_agent_roster`: List all active hAIveMind agents and their current status
@@ -150,6 +209,35 @@ The system supports comprehensive memory categories for DevOps operations:
 - `generate_runbook`: Create reusable runbooks from successful procedures
 - `sync_ssh_config`: Sync SSH configuration across ClaudeOps infrastructure
 - `sync_infrastructure_config`: Sync any infrastructure configuration across network
+
+### Configuration Management Tools:
+- `create_config_snapshot`: Create configuration snapshots with drift detection and metadata tracking
+- `compare_config_snapshots`: Compare configurations across systems with detailed diff analysis
+- `detect_config_drift`: Intelligent drift detection with ML-powered pattern recognition
+- `get_config_history`: Comprehensive configuration history with trend analysis and insights
+- `create_config_alert`: Set up intelligent alerts for configuration changes with custom rules
+- `get_drift_trend_analysis`: Predictive drift analysis with recommendations and risk assessment
+
+### Agent Task Management Tools:
+- `create_kanban_task`: Create intelligent tasks with auto-assignment and dependency tracking
+- `assign_kanban_task`: Smart task assignment based on agent capabilities and workload
+- `update_kanban_task`: Update tasks with status tracking and notification systems
+- `get_kanban_task`: Retrieve detailed task information with history and analytics
+- `list_kanban_tasks`: List tasks with advanced filtering and workload balancing insights
+- `delete_kanban_task`: Delete tasks with dependency validation and cleanup automation
+- `get_task_analytics`: Comprehensive task analytics with performance metrics and trends
+
+### Log Intelligence & Monitoring Tools:
+- `analyze_log_patterns`: ML-powered log pattern extraction using TF-IDF and clustering algorithms
+- `detect_log_anomalies`: Real-time anomaly detection using Isolation Forest and statistical analysis
+- `generate_debug_report`: Intelligent debug report generation with correlation analysis
+- `track_error_patterns`: Error pattern tracking with trend analysis and predictive insights
+
+### Disaster Recovery Tools:
+- `initiate_failover`: Automated failover procedures with health monitoring and rollback capability
+- `monitor_system_health`: Comprehensive system health monitoring with predictive failure detection
+- `run_chaos_experiment`: Chaos engineering experiments with safety controls and impact analysis
+- `generate_recovery_plan`: Dynamic recovery plan generation based on failure scenarios
 
 ### Automation & Playbook Tools:
 - `upload_playbook`: Upload and store Ansible/Terraform/Kubernetes playbooks
@@ -194,6 +282,27 @@ get_agent_roster
 delegate_task task_description="Optimize search performance on elastic1" required_capabilities=["elasticsearch_ops"]
 ```
 
+### Project Management & Context Switching:
+```bash
+# Create a new project with comprehensive tracking
+create_project name="eWitness Search Optimization" description="Optimize Elasticsearch queries for better performance" owner_agent_id="elastic-specialist" project_type="optimization" priority="high" tags="elasticsearch,performance,search"
+
+# List projects with filtering
+list_projects status_filter="active" project_type_filter="optimization" limit=10
+
+# Switch agent context to specific project
+switch_project_context project_id="proj_abc123" agent_id="lance-dev-agent" reason="Starting search optimization work"
+
+# Run comprehensive health check on projects
+project_health_check project_id="proj_abc123"
+
+# Create project backup
+backup_project project_id="proj_abc123" backup_type="full" include_history=true
+
+# Restore project from backup
+restore_project backup_id="backup_xyz789" restore_mode="safe"
+```
+
 ### Infrastructure Management:
 ```bash
 # Sync SSH configuration across all machines
@@ -204,6 +313,36 @@ track_infrastructure_state machine_id="elastic1" state_type="service_status" sta
 
 # Record an incident
 record_incident title="Elasticsearch cluster degraded" description="High CPU on elastic1" severity="high" affected_systems=["elastic1"]
+```
+
+### Configuration Management:
+```bash
+# Create configuration snapshot
+create_config_snapshot system_id="elastic1" config_type="elasticsearch" config_content="<yaml_content>" file_path="/etc/elasticsearch/elasticsearch.yml"
+
+# Compare configurations
+compare_config_snapshots system_id="elastic1" snapshot_id_1="snap_123" snapshot_id_2="snap_456"
+
+# Detect configuration drift
+detect_config_drift system_id="elastic1" threshold=0.8
+
+# Get comprehensive drift analysis
+get_drift_trend_analysis system_id="elastic1" days_back=7
+```
+
+### Agent Task Management:
+```bash
+# Create intelligent task with auto-assignment
+create_kanban_task title="Optimize Elasticsearch queries" description="Improve search performance" priority="high" required_capabilities=["elasticsearch_ops"]
+
+# Assign task to best available agent
+assign_kanban_task task_id="task_123" auto_assign=true
+
+# Update task status
+update_kanban_task task_id="task_123" status="in_progress" progress=25
+
+# Get task analytics
+get_task_analytics days=30
 ```
 
 ### hAIveMind Knowledge Sharing:
