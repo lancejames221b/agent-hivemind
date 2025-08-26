@@ -79,7 +79,8 @@ class RemoteMemoryMCPServer:
         # Configure session persistence settings
         from collections import defaultdict
         self.session_last_activity = defaultdict(lambda: datetime.now().isoformat())
-        self._start_time = datetime.now()
+        self._start_time = time.time()
+        self._start_datetime = datetime.now()
         
         # Initialize FastMCP server with hAIveMind context
         
@@ -90,8 +91,8 @@ class RemoteMemoryMCPServer:
             sse_path="/sse",
             message_path="/messages/",
             mount_path="/",
-            # Use stateless mode to avoid session persistence issues completely
-            stateless_http=True
+            # Enable sessions for MCP tool functionality - required for hAIveMind tools
+            stateless_http=False
         )
         
         # Add session recovery system  
@@ -8567,6 +8568,362 @@ server {
 
         logger.info("📊 Config backup system tools registered - comprehensive configuration tracking enabled")
 
+        # =======================
+        # Project Management Tools
+        # =======================
+        
+        @self.mcp.tool()
+        async def create_project(
+            name: str,
+            description: str,
+            owner_agent_id: str,
+            project_type: str = "development",
+            priority: str = "medium",
+            tags: Optional[str] = None,
+            metadata: Optional[str] = None
+        ) -> str:
+            """Create a new project with comprehensive tracking and context management"""
+            try:
+                from project_management_system import ProjectManagementSystem, Project
+                
+                if not hasattr(self, 'project_mgmt'):
+                    self.project_mgmt = ProjectManagementSystem()
+                
+                # Parse tags and metadata
+                parsed_tags = []
+                if tags:
+                    parsed_tags = [tag.strip() for tag in tags.split(',')]
+                
+                parsed_metadata = {}
+                if metadata:
+                    import json
+                    try:
+                        parsed_metadata = json.loads(metadata)
+                    except json.JSONDecodeError:
+                        parsed_metadata = {'notes': metadata}
+                
+                project = Project(
+                    name=name,
+                    description=description,
+                    owner_agent_id=owner_agent_id,
+                    project_type=project_type,
+                    priority=priority,
+                    tags=parsed_tags,
+                    metadata=parsed_metadata
+                )
+                
+                project_id = self.project_mgmt.create_project(project)
+                
+                if project_id:
+                    # Store in hAIveMind memory
+                    await self.storage.store_memory(
+                        category='project',
+                        content=f"Created new project: {name} - {description}",
+                        metadata={
+                            'project_id': project_id,
+                            'name': name,
+                            'owner': owner_agent_id,
+                            'type': project_type,
+                            'priority': priority,
+                            'tags': parsed_tags
+                        }
+                    )
+                    
+                    return f"✅ Project created successfully!\n📋 Project ID: {project_id}\n📝 Name: {name}\n👤 Owner: {owner_agent_id}\n🔖 Type: {project_type}"
+                else:
+                    return "❌ Failed to create project"
+                    
+            except Exception as e:
+                return f"❌ Error creating project: {str(e)}"
+
+        @self.mcp.tool()
+        async def list_projects(
+            status_filter: Optional[str] = None,
+            owner_filter: Optional[str] = None,
+            project_type_filter: Optional[str] = None,
+            limit: int = 50
+        ) -> str:
+            """List projects with optional filtering by status, owner, or type"""
+            try:
+                if not hasattr(self, 'project_mgmt'):
+                    self.project_mgmt = ProjectManagementSystem()
+                
+                projects = self.project_mgmt.list_projects(
+                    status_filter=status_filter,
+                    owner_filter=owner_filter,
+                    project_type_filter=project_type_filter,
+                    limit=limit
+                )
+                
+                if not projects:
+                    return "📭 No projects found matching the specified criteria"
+                
+                result = ["🗂️  Project Listing", "=" * 50]
+                
+                for project in projects:
+                    result.extend([
+                        f"📋 {project['name']} (ID: {project['id']})",
+                        f"   📝 Description: {project['description']}",
+                        f"   👤 Owner: {project['owner_agent_id']}",
+                        f"   📊 Status: {project['status']}",
+                        f"   🔖 Type: {project['project_type']}",
+                        f"   ⭐ Priority: {project['priority']}",
+                        f"   📅 Created: {project['created_at']}",
+                        f"   🔄 Updated: {project['updated_at']}",
+                        ""
+                    ])
+                
+                result.append(f"📊 Total: {len(projects)} projects")
+                
+                return "\n".join(result)
+                
+            except Exception as e:
+                return f"❌ Error listing projects: {str(e)}"
+
+        @self.mcp.tool()
+        async def switch_project_context(
+            project_id: str,
+            agent_id: str,
+            reason: Optional[str] = None
+        ) -> str:
+            """Switch the current project context for an agent"""
+            try:
+                if not hasattr(self, 'project_mgmt'):
+                    self.project_mgmt = ProjectManagementSystem()
+                
+                success = self.project_mgmt.switch_project_context(
+                    project_id=project_id,
+                    agent_id=agent_id,
+                    reason=reason
+                )
+                
+                if success:
+                    # Get project details
+                    project = self.project_mgmt.get_project(project_id)
+                    if project:
+                        # Store context switch in memory
+                        await self.storage.store_memory(
+                            category='project',
+                            content=f"Agent {agent_id} switched to project context: {project['name']}",
+                            metadata={
+                                'project_id': project_id,
+                                'agent_id': agent_id,
+                                'action': 'context_switch',
+                                'reason': reason,
+                                'project_name': project['name']
+                            }
+                        )
+                        
+                        result = [
+                            f"✅ Successfully switched to project context",
+                            f"📋 Project: {project['name']} (ID: {project_id})",
+                            f"📝 Description: {project['description']}",
+                            f"👤 Agent: {agent_id}",
+                            f"📅 Switched at: {project.get('current_context_timestamp', 'Now')}"
+                        ]
+                        
+                        if reason:
+                            result.append(f"💭 Reason: {reason}")
+                        
+                        return "\n".join(result)
+                    else:
+                        return f"✅ Context switched but could not retrieve project details"
+                else:
+                    return f"❌ Failed to switch project context - project may not exist"
+                    
+            except Exception as e:
+                return f"❌ Error switching project context: {str(e)}"
+
+        @self.mcp.tool()
+        async def project_health_check(
+            project_id: Optional[str] = None
+        ) -> str:
+            """Run comprehensive health check on a project or all projects"""
+            try:
+                if not hasattr(self, 'project_mgmt'):
+                    self.project_mgmt = ProjectManagementSystem()
+                
+                health_report = self.project_mgmt.project_health_check(project_id)
+                
+                if 'error' in health_report:
+                    return f"❌ Health check failed: {health_report['error']}"
+                
+                result = [
+                    "🏥 Project Health Check Report",
+                    "=" * 50
+                ]
+                
+                if project_id:
+                    project = health_report.get('project')
+                    if project:
+                        result.extend([
+                            f"📋 Project: {project['name']} (ID: {project_id})",
+                            f"📊 Status: {project['status']}",
+                            f"⚡ Health Score: {health_report.get('health_score', 'N/A')}/100",
+                            ""
+                        ])
+                
+                # Overall statistics
+                stats = health_report.get('statistics', {})
+                result.extend([
+                    "📊 OVERALL STATISTICS:",
+                    f"   🗂️  Total Projects: {stats.get('total_projects', 0)}",
+                    f"   ✅ Active Projects: {stats.get('active_projects', 0)}",
+                    f"   ⏸️  Paused Projects: {stats.get('paused_projects', 0)}",
+                    f"   ✔️  Completed Projects: {stats.get('completed_projects', 0)}",
+                    f"   ❌ Archived Projects: {stats.get('archived_projects', 0)}",
+                    ""
+                ])
+                
+                # Health indicators
+                health_indicators = health_report.get('health_indicators', {})
+                result.extend([
+                    "🏥 HEALTH INDICATORS:",
+                    f"   📈 Activity Level: {health_indicators.get('activity_level', 'Unknown')}",
+                    f"   🔄 Recent Updates: {health_indicators.get('recent_updates', 0)}",
+                    f"   ⚠️  Issues Count: {health_indicators.get('issues_count', 0)}",
+                    f"   📊 Completion Rate: {health_indicators.get('completion_rate', 0)}%",
+                    ""
+                ])
+                
+                # Recommendations
+                recommendations = health_report.get('recommendations', [])
+                if recommendations:
+                    result.append("💡 RECOMMENDATIONS:")
+                    for rec in recommendations:
+                        result.append(f"   • {rec}")
+                    result.append("")
+                
+                # Store health check in memory
+                await self.storage.store_memory(
+                    category='project',
+                    content=f"Project health check completed - {stats.get('total_projects', 0)} projects analyzed",
+                    metadata={
+                        'project_id': project_id,
+                        'health_score': health_report.get('health_score'),
+                        'total_projects': stats.get('total_projects', 0),
+                        'active_projects': stats.get('active_projects', 0),
+                        'issues_count': health_indicators.get('issues_count', 0),
+                        'recommendations_count': len(recommendations)
+                    }
+                )
+                
+                return "\n".join(result)
+                
+            except Exception as e:
+                return f"❌ Error during health check: {str(e)}"
+
+        @self.mcp.tool()
+        async def backup_project(
+            project_id: Optional[str] = None,
+            backup_type: str = "full",
+            include_history: bool = True
+        ) -> str:
+            """Create a comprehensive backup of a project or all projects"""
+            try:
+                if not hasattr(self, 'project_mgmt'):
+                    self.project_mgmt = ProjectManagementSystem()
+                
+                backup_result = self.project_mgmt.backup_project(
+                    project_id=project_id,
+                    backup_type=backup_type,
+                    include_history=include_history
+                )
+                
+                if 'error' in backup_result:
+                    return f"❌ Backup failed: {backup_result['error']}"
+                
+                backup_id = backup_result.get('backup_id')
+                
+                # Store backup event in memory
+                await self.storage.store_memory(
+                    category='project',
+                    content=f"Project backup completed - Type: {backup_type}, Include History: {include_history}",
+                    metadata={
+                        'backup_id': backup_id,
+                        'project_id': project_id,
+                        'backup_type': backup_type,
+                        'include_history': include_history,
+                        'backup_size': backup_result.get('backup_size', 0),
+                        'projects_backed_up': backup_result.get('projects_backed_up', 0)
+                    }
+                )
+                
+                result = [
+                    "💾 Project Backup Completed",
+                    "=" * 50,
+                    f"🆔 Backup ID: {backup_id}",
+                    f"🔧 Backup Type: {backup_type}",
+                    f"📚 Include History: {'Yes' if include_history else 'No'}",
+                    f"📊 Projects Backed Up: {backup_result.get('projects_backed_up', 0)}",
+                    f"💾 Backup Size: {backup_result.get('backup_size', 0)} bytes",
+                    f"📅 Created: {backup_result.get('created_at', 'Now')}",
+                    f"💡 Location: {backup_result.get('backup_location', 'Database')}"
+                ]
+                
+                return "\n".join(result)
+                
+            except Exception as e:
+                return f"❌ Error creating backup: {str(e)}"
+
+        @self.mcp.tool()
+        async def restore_project(
+            backup_id: str,
+            restore_mode: str = "safe",
+            target_project_id: Optional[str] = None
+        ) -> str:
+            """Restore a project from backup with comprehensive validation"""
+            try:
+                if not hasattr(self, 'project_mgmt'):
+                    self.project_mgmt = ProjectManagementSystem()
+                
+                restore_result = self.project_mgmt.restore_project(
+                    backup_id=backup_id,
+                    restore_mode=restore_mode,
+                    target_project_id=target_project_id
+                )
+                
+                if 'error' in restore_result:
+                    return f"❌ Restore failed: {restore_result['error']}"
+                
+                # Store restore event in memory
+                await self.storage.store_memory(
+                    category='project',
+                    content=f"Project restore completed from backup {backup_id}",
+                    metadata={
+                        'backup_id': backup_id,
+                        'restore_mode': restore_mode,
+                        'target_project_id': target_project_id,
+                        'restored_project_id': restore_result.get('restored_project_id'),
+                        'projects_restored': restore_result.get('projects_restored', 0),
+                        'conflicts_resolved': restore_result.get('conflicts_resolved', 0)
+                    }
+                )
+                
+                result = [
+                    "🔄 Project Restore Completed",
+                    "=" * 50,
+                    f"💾 Backup ID: {backup_id}",
+                    f"🔧 Restore Mode: {restore_mode}",
+                    f"📊 Projects Restored: {restore_result.get('projects_restored', 0)}",
+                    f"⚡ Conflicts Resolved: {restore_result.get('conflicts_resolved', 0)}",
+                    f"🆔 Restored Project ID: {restore_result.get('restored_project_id', 'N/A')}",
+                    f"📅 Restored At: {restore_result.get('restored_at', 'Now')}"
+                ]
+                
+                warnings = restore_result.get('warnings', [])
+                if warnings:
+                    result.append("\n⚠️  WARNINGS:")
+                    for warning in warnings:
+                        result.append(f"   • {warning}")
+                
+                return "\n".join(result)
+                
+            except Exception as e:
+                return f"❌ Error restoring project: {str(e)}"
+
+        logger.info("🗂️  Project Management System tools registered - comprehensive project lifecycle management enabled")
+
     def _add_admin_routes(self):
         """Add admin web interface routes"""
         from starlette.responses import HTMLResponse, JSONResponse, FileResponse
@@ -10920,12 +11277,12 @@ server {
             """Get session info and recovery instructions"""
             return JSONResponse({
                 "server_status": "online",
-                "session_management": "stateless",
+                "session_management": "enabled",
                 "recovery_available": True,
                 "recovery_endpoint": "/api/session/recover",
-                "message": "Server uses stateless mode - no persistent sessions, each request is independent",
+                "message": "Server now uses session mode - sessions enabled for MCP tool functionality",
                 "server_time": datetime.now().isoformat(),
-                "uptime": str(datetime.now() - self._start_time) if isinstance(self._start_time, datetime) else "unknown",
+                "uptime": str(datetime.now() - self._start_datetime),
                 "note": "If you still get session errors, it's likely a client-side caching issue"
             })
         
@@ -11031,13 +11388,13 @@ server {
                     "status": "healthy",
                     "active_sessions": active_sessions,
                     "session_details": session_details,
-                    "server_uptime": str(datetime.now() - self._start_time) if isinstance(self._start_time, datetime) else "unknown",
+                    "server_uptime": str(datetime.now() - self._start_datetime),
                     "mcp_config": {
                         "sse_path": "/sse", 
                         "message_path": "/messages/",
-                        "stateless": True,
+                        "stateless": False,
                         "session_recovery_enabled": True,
-                        "note": "Using stateless mode to avoid session persistence issues"
+                        "note": "Sessions enabled for MCP tool functionality"
                     }
                 })
             except Exception as e:
