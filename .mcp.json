@@ -1,10 +1,13 @@
 {
   "mcpServers": {
     "haivemind": {
-      "command": "/home/lj/memory-mcp/venv/bin/python",
-      "args": ["/home/lj/memory-mcp/src/memory_server.py"],
+      "command": "npx",
+      "args": ["@modelcontextprotocol/server-http", "http://localhost:8900/sse"],
       "env": {
-        "PYTHONPATH": "/home/lj/memory-mcp/src"
+        "HTTP_TIMEOUT": "60000",
+        "RETRY_DELAY": "1000",
+        "MAX_RETRIES": "5",
+        "KEEP_ALIVE": "true"
       }
     }
   }

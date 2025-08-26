@@ -20,7 +20,8 @@
       "Bash(systemctl:*)",
       "mcp__vibe_kanban__list_projects",
       "mcp__vibe_kanban__create_task",
-      "mcp__vibe_kanban__list_tasks"
+      "mcp__vibe_kanban__list_tasks",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": [],

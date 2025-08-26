@@ -10,7 +10,7 @@ import time
 from typing import Any, Dict, List, Optional
 import logging
 
-from .interactive_help_system import InteractiveHelpSystem
+from interactive_help_system import InteractiveHelpSystem
 
 logger = logging.getLogger(__name__)
 
