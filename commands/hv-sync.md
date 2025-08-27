@@ -33,6 +33,7 @@ hv-sync [operation] [options]
   - `--commands`: Sync only command files
   - `--config`: Sync only configuration files
   - `--memory`: Sync only memory/agent state
+  - `--hooks`: Enable automatic pre/post sync hooks for ticket-memory synchronization
   - `--dry-run`: Show what would be synced without making changes
 
 ## Real-World Examples
@@ -66,6 +67,12 @@ hv-sync clean
 hv-sync --commands --verbose
 ```
 **Result**: Updates only hv-* command files with detailed progress
+
+### Sync with Automated Hooks
+```
+hv-sync --hooks --verbose
+```
+**Result**: Performs sync with automatic pre/post hooks for ticket-memory synchronization
 
 ## Expected Output
 
@@ -211,6 +218,7 @@ hv-sync --commands --verbose
 - **After syncing**: Use `hv-install status` to verify installation
 - **For issues**: Use `hv-query` to find sync-related solutions
 - **Share updates**: Use `hv-broadcast` to inform others of sync results
+- **Hook management**: Use `hv-sync-hooks` to manage automated synchronization hooks
 
 ---
 

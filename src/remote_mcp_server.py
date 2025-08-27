@@ -28,6 +28,7 @@ from memory_server import MemoryStorage
 from auth import AuthManager
 from command_installer import CommandInstaller
 from mcp_bridge import get_bridge_manager
+from sync_hooks import SyncHooks
 
 # Setup logging
 logging.basicConfig(
@@ -68,6 +69,10 @@ class RemoteMemoryMCPServer:
         }
         self.command_installer = CommandInstaller(self.storage, self.config)
         self.bridge_manager = get_bridge_manager(self.storage)
+        
+        # Initialize sync hooks system
+        self.sync_hooks = SyncHooks(self.storage, self.config, self.command_installer)
+        self.sync_hooks.setup_default_hooks()
         
         # Get remote server config
         remote_config = self.config.get('remote_server', {})
@@ -8922,6 +8927,162 @@ server {
             except Exception as e:
                 return f"❌ Error restoring project: {str(e)}"
 
+        # ===== SYNC HOOKS TOOLS =====
+        @self.mcp.tool()
+        async def trigger_sync_hooks(
+            event_type: str,
+            ticket_id: Optional[str] = None,
+            project_id: Optional[str] = None,
+            work_results: Optional[Dict[str, Any]] = None
+        ) -> str:
+            """Manually trigger sync hooks for ticket-memory synchronization"""
+            try:
+                context = {
+                    'ticket_id': ticket_id,
+                    'project_id': project_id,
+                    'agent_id': self.storage.agent_id,
+                    'machine_id': self.storage.machine_id,
+                    'work_results': work_results or {},
+                    'manual_trigger': True,
+                    'timestamp': time.time()
+                }
+                
+                hook_results = await self.sync_hooks.trigger_hooks(event_type, context)
+                
+                if not hook_results:
+                    return f"⚠️ No hooks registered for event type: {event_type}"
+                
+                successful_hooks = [r for r in hook_results if r.get('success')]
+                failed_hooks = [r for r in hook_results if not r.get('success')]
+                
+                result = [
+                    f"🔄 Sync Hooks Triggered: {event_type}",
+                    "=" * 50,
+                    f"📋 Ticket ID: {ticket_id or 'N/A'}",
+                    f"🎯 Project ID: {project_id or 'N/A'}",
+                    f"✅ Successful Hooks: {len(successful_hooks)}",
+                    f"❌ Failed Hooks: {len(failed_hooks)}",
+                    ""
+                ]
+                
+                if successful_hooks:
+                    result.append("✅ Successful Operations:")
+                    for hook in successful_hooks:
+                        exec_time = hook.get('execution_time', 0)
+                        result.append(f"   • {hook['hook_function']} ({exec_time:.3f}s)")
+                
+                if failed_hooks:
+                    result.append("\n❌ Failed Operations:")
+                    for hook in failed_hooks:
+                        result.append(f"   • {hook['hook_function']}: {hook.get('error', 'Unknown error')}")
+                
+                return "\n".join(result)
+                
+            except Exception as e:
+                return f"❌ Error triggering sync hooks: {str(e)}"
+
+        @self.mcp.tool()
+        async def sync_with_hooks(
+            command_type: str = "install_sync",
+            agent_id: Optional[str] = None,
+            force: bool = False,
+            verbose: bool = False
+        ) -> str:
+            """Execute sync commands with automated pre/post hooks integration"""
+            try:
+                context = {
+                    'agent_id': agent_id or self.storage.agent_id,
+                    'machine_id': self.storage.machine_id,
+                    'force': force,
+                    'verbose': verbose,
+                    'timestamp': time.time()
+                }
+                
+                integration_result = await self.sync_hooks.integrate_with_sync_commands(command_type, context)
+                
+                if integration_result.get('status') == 'error':
+                    return f"❌ Sync with hooks failed: {integration_result.get('error')}"
+                
+                result = [
+                    f"🔄 {command_type.replace('_', ' ').title()} with Automated Hooks",
+                    "=" * 60,
+                    f"🤖 Agent: {context['agent_id']}",
+                    f"💻 Machine: {context['machine_id']}",
+                    f"⚡ Hooks Triggered: {len(integration_result.get('hooks_triggered', []))}",
+                    f"🔧 Sync Operations: {len(integration_result.get('sync_operations', []))}",
+                    ""
+                ]
+                
+                hooks_triggered = integration_result.get('hooks_triggered', [])
+                successful_hooks = [h for h in hooks_triggered if h.get('success')]
+                failed_hooks = [h for h in hooks_triggered if not h.get('success')]
+                
+                if successful_hooks:
+                    result.append("✅ Hook Operations Completed:")
+                    for hook in successful_hooks:
+                        exec_time = hook.get('execution_time', 0)
+                        result.append(f"   • {hook['hook_function']} ({exec_time:.3f}s)")
+                
+                if failed_hooks:
+                    result.append("\n❌ Hook Operations Failed:")
+                    for hook in failed_hooks:
+                        result.append(f"   • {hook['hook_function']}: {hook.get('error', 'Unknown')}")
+                
+                sync_ops = integration_result.get('sync_operations', [])
+                if sync_ops:
+                    result.append(f"\n🔧 Sync Results:")
+                    for op in sync_ops:
+                        if isinstance(op, dict):
+                            status = op.get('status', 'unknown')
+                            message = op.get('message', 'No message')
+                            result.append(f"   • Status: {status}")
+                            result.append(f"   • {message}")
+                
+                return "\n".join(result)
+                
+            except Exception as e:
+                return f"❌ Error executing sync with hooks: {str(e)}"
+
+        @self.mcp.tool()
+        async def get_sync_hooks_status() -> str:
+            """Get current status of registered sync hooks"""
+            try:
+                hook_status = await self.sync_hooks.get_hook_status()
+                
+                result = [
+                    "🔄 Sync Hooks System Status",
+                    "=" * 40,
+                    f"📋 Protocol Version: {hook_status.get('protocol_version', 'N/A')}",
+                    f"⚡ Compliance Level: {hook_status.get('compliance_level', 'N/A')}",
+                    f"🎯 Total Hooks: {hook_status.get('total_hooks', 0)}",
+                    ""
+                ]
+                
+                hooks_registered = hook_status.get('hooks_registered', {})
+                if hooks_registered:
+                    result.append("📋 Registered Hooks by Event Type:")
+                    for event_type, hooks in hooks_registered.items():
+                        result.append(f"\n🎯 {event_type} ({len(hooks)} hooks):")
+                        for hook in hooks:
+                            priority = hook.get('priority', 50)
+                            func_name = hook.get('function_name', 'Unknown')
+                            result.append(f"   • {func_name} (priority: {priority})")
+                else:
+                    result.append("⚠️ No hooks currently registered")
+                
+                last_exec = hook_status.get('last_execution')
+                if last_exec:
+                    exec_time = datetime.fromtimestamp(last_exec).strftime("%Y-%m-%d %H:%M:%S")
+                    result.append(f"\n⏰ Last Hook Execution: {exec_time}")
+                else:
+                    result.append("\n⏰ No recent hook executions found")
+                
+                return "\n".join(result)
+                
+            except Exception as e:
+                return f"❌ Error retrieving hook status: {str(e)}"
+
+        logger.info("🔄 Sync Hooks System tools registered - automated ticket-memory synchronization enabled")
         logger.info("🗂️  Project Management System tools registered - comprehensive project lifecycle management enabled")
 
     def _add_admin_routes(self):
