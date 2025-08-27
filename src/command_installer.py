@@ -42,14 +42,14 @@ class CommandInstaller:
         return paths
 
     async def get_command_templates(self) -> Dict[str, str]:
-        """Load all hv-* command templates from filesystem"""
+        """Load all command templates from filesystem"""
         templates = {}
         
         if not self.commands_dir.exists():
             logger.warning(f"Commands directory not found: {self.commands_dir}")
             return templates
             
-        for cmd_file in self.commands_dir.glob("hv-*.md"):
+        for cmd_file in self.commands_dir.glob("*.md"):
             cmd_name = cmd_file.stem
             try:
                 with open(cmd_file, 'r', encoding='utf-8') as f:
