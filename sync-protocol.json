@@ -1,0 +1,41 @@
+{
+  "protocol_version": "1.0",
+  "created_date": "2025-08-26",
+  "purpose": "Standardize ticket-memory synchronization workflow",
+  "trigger_words": {
+    "pre_sync": [
+      "sync-task",
+      "harmonize",
+      "coordinate-work"
+    ],
+    "post_sync": [
+      "harmonize-complete",
+      "sync-results",
+      "coordinate-finish"
+    ]
+  },
+  "pre_sync_checklist": [
+    "Read ticket description and current status",
+    "Check hAIveMind memory for related context",
+    "Store work intention with expected outcomes",
+    "Identify dependencies and blocking issues",
+    "Review lessons learned from similar work"
+  ],
+  "post_sync_checklist": [
+    "Update ticket status with detailed completion notes",
+    "Store comprehensive results in hAIveMind memory",
+    "Document lessons learned and troubleshooting solutions",
+    "Share important discoveries with other agents",
+    "Coordinate with dependent tickets and agents"
+  ],
+  "memory_categories": [
+    "workflow - Ticket synchronization events",
+    "lessons_learned - Key insights from completed work",
+    "troubleshooting - Solutions to common problems",
+    "dependencies - Cross-ticket relationships",
+    "agent_coordination - Multi-agent collaboration"
+  ],
+  "compliance_level": "REQUIRED",
+  "applies_to": "ALL_AGENTS",
+  "auto_remind": true
+}
