@@ -42,6 +42,19 @@ hv-install [target] [options]
 3. **Capability Assessment**: Determine agent role based on system type
 4. **Optimal Configuration**: Choose best installation strategy
 
+### Automatic Path Selection Logic
+When using `hv-install` with no target specified, the system uses intelligent path selection:
+
+1. **🏠 Existing Personal Commands**: If `~/.claude/commands/` has hAIveMind commands → use personal
+2. **📁 Existing Project Commands**: If `.claude/commands/` has hAIveMind commands → use project  
+3. **🎯 Orchestrator Machines**: If machine is `lance-dev`, `orchestrator`, or `primary` → prefer project
+4. **👤 Default for New Users**: All other machines → use personal directory (`~/.claude/commands/`)
+
+This ensures:
+- **Existing installations** continue using their current location
+- **Server/orchestrator machines** use project-level commands for sharing
+- **Individual agents** get personal installations that don't interfere with servers
+
 ### Location-Specific Installation
 - **Personal (~/.claude/commands/)**: Global commands available across all projects
 - **Project (.claude/commands/)**: Project-specific commands with custom configuration

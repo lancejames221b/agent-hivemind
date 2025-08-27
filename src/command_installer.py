@@ -265,19 +265,45 @@ Always consider the collective context when making decisions and share relevant 
             # 2. Determine target location
             log_verbose("Determining target installation location...")
             if target_location == "auto":
+                # Check if user already has commands installed somewhere
+                personal_has_commands = False
+                project_has_commands = False
+                
+                if "personal" in claude_paths:
+                    personal_dir = Path(claude_paths["personal"])
+                    personal_has_commands = any(personal_dir.glob("hv-*.md"))
+                    
                 if "project" in claude_paths:
+                    project_dir = Path(claude_paths["project"])
+                    project_has_commands = any(project_dir.glob("hv-*.md"))
+                
+                # Priority logic for auto-detection:
+                # 1. If personal directory has existing hAIveMind commands, use it
+                # 2. If project directory has existing hAIveMind commands, use it  
+                # 3. For orchestrator/server machines (like lance-dev), prefer project
+                # 4. For other machines, prefer personal directory
+                
+                is_orchestrator = machine_id in ["lance-dev", "orchestrator", "primary"]
+                
+                if personal_has_commands:
+                    target_location = "personal"
+                    log_verbose("Using personal commands (existing commands detected)")
+                elif project_has_commands:
+                    target_location = "project" 
+                    log_verbose("Using project commands (existing commands detected)")
+                elif is_orchestrator and "project" in claude_paths:
                     target_location = "project"
-                    log_verbose("Using project-level commands (.claude/commands)")
+                    log_verbose("Using project-level commands (orchestrator machine)")
                 elif "personal" in claude_paths:
                     target_location = "personal"
                     log_verbose("Using personal commands (~/.claude/commands)")
                 else:
-                    # Create personal path as fallback
+                    # Create personal path as fallback for non-orchestrator machines
                     personal_path = Path.home() / ".claude" / "commands"
                     personal_path.mkdir(parents=True, exist_ok=True)
                     claude_paths["personal"] = str(personal_path)
                     target_location = "personal"
-                    log_verbose("Created personal commands directory")
+                    log_verbose("Created personal commands directory (default for new installations)")
             else:
                 log_verbose(f"Using specified location: {target_location}")
             
