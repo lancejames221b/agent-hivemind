@@ -14298,6 +14298,10 @@ main "$@" """,
                 )
                 
                 if result.get('success'):
+                    # Add timestamp information to response
+                    timestamp_system = self.enhanced_ticket_system.timestamp_system
+                    timestamp_info = timestamp_system.format_message_timestamp()
+                    
                     return f"""🎫 Ticket Created Successfully
 
 Ticket #: {result.get('ticket_number')}
@@ -14307,7 +14311,9 @@ Type: {ticket_type}
 Priority: {priority}
 Status: New
 
-The ticket has been created in Vibe Kanban and indexed in hAIveMind memory for enhanced tracking and search."""
+The ticket has been created in Vibe Kanban and indexed in hAIveMind memory for enhanced tracking and search.
+
+{timestamp_info}"""
                 else:
                     return f"❌ Failed to create ticket: {result.get('error')}"
                     
@@ -14333,6 +14339,32 @@ The ticket has been created in Vibe Kanban and indexed in hAIveMind memory for e
                 if result.get('success'):
                     ticket = result['ticket']
                     metadata = ticket['metadata']
+                    timestamp_info = ticket.get('timestamp_info', {})
+                    
+                    # Format timestamp display
+                    created_display = "Unknown"
+                    updated_display = "Unknown"
+                    age_display = "Unknown"
+                    
+                    if timestamp_info.get('created'):
+                        created_display = f"{timestamp_info['created']['absolute']} ({timestamp_info['created']['relative']})"
+                    if timestamp_info.get('last_updated'):
+                        updated_display = f"{timestamp_info['last_updated']['absolute']} ({timestamp_info['last_updated']['relative']})"
+                    if timestamp_info.get('age'):
+                        age_display = timestamp_info['age']
+                    
+                    # Format due date display
+                    due_display = metadata.get('due_date', 'Not set')
+                    if timestamp_info.get('due_date'):
+                        due_info = timestamp_info['due_date']
+                        if due_info['is_overdue']:
+                            due_display = f"⚠️ OVERDUE by {due_info['overdue_by']} (was due {due_info['absolute']})"
+                        else:
+                            due_display = f"{due_info['absolute']} ({due_info['time_remaining']} remaining)"
+                    
+                    # Add current timestamp to message
+                    ticket_system = self._get_enhanced_ticket_system()
+                    current_time = ticket_system.timestamp_system.format_message_timestamp()
                     
                     details = f"""🎫 Ticket #{ticket.get('ticket_number', 'Unknown')}
 
@@ -14350,14 +14382,17 @@ Reporter: {metadata.get('reporter', 'Unknown')}
 {ticket['description']}
 
 🏷️ Labels: {', '.join(metadata.get('labels', []))}
-⏰ Due Date: {metadata.get('due_date', 'Not set')}
+⏰ Due Date: {due_display}
 ⏱️ Time Estimate: {metadata.get('time_estimate', 'Not estimated')}h
 
-📅 Timestamps:
-Created: {ticket['created_at']}
-Updated: {ticket['updated_at']}
+📅 Timeline:
+Created: {created_display}
+Last Updated: {updated_display}
+Age: {age_display}
 
-🧠 Memory Context: {len(ticket.get('memory_context', []))} related memories found"""
+🧠 Memory Context: {len(ticket.get('memory_context', []))} related memories found
+
+{current_time}"""
                     return details
                 else:
                     return f"❌ Failed to retrieve ticket: {result.get('error')}"
@@ -14433,6 +14468,12 @@ Updated: {ticket['updated_at']}
                         output.append(f"  #{ticket.get('ticket_number', '?')} {priority_icon} {ticket['title']}")
                         output.append(f"    Status: {ticket['status']} | Type: {metadata.get('ticket_type', 'task')} | Assignee: {metadata.get('assignee', 'Unassigned')}")
                     
+                    # Add timestamp information
+                    timestamp_system = self.enhanced_ticket_system.timestamp_system
+                    timestamp_info = timestamp_system.format_message_timestamp()
+                    output.append("")
+                    output.append(timestamp_info)
+                    
                     return '\n'.join(output)
                 else:
                     return f"❌ Failed to list tickets: {result.get('error')}"
@@ -14479,7 +14520,9 @@ New Status: {new_status}
 Updated By: {updated_by}
 Comment: {comment or 'No comment provided'}
 
-Status change has been recorded in both Vibe Kanban and hAIveMind memory for full audit trail."""
+Status change has been recorded in both Vibe Kanban and hAIveMind memory for full audit trail.
+
+{self.enhanced_ticket_system.timestamp_system.format_message_timestamp()}"""
                 else:
                     return f"❌ Failed to update status: {result.get('error')}"
                     
@@ -14528,6 +14571,11 @@ Status change has been recorded in both Vibe Kanban and hAIveMind memory for ful
                         output.append(f"  Status: {ticket['status']} | Priority: {metadata.get('priority', 'medium')}")
                         output.append(f"  ID: {ticket['id']}")
                         output.append("")
+                    
+                    # Add timestamp information
+                    timestamp_system = self.enhanced_ticket_system.timestamp_system
+                    timestamp_info = timestamp_system.format_message_timestamp()
+                    output.append(timestamp_info)
                     
                     return '\n'.join(output)
                 else:
@@ -14596,6 +14644,11 @@ Status change has been recorded in both Vibe Kanban and hAIveMind memory for ful
                             output.append(f"  #{ticket.get('ticket_number', '?')} {priority_icon} {ticket['title']}{estimate}")
                         output.append("")
                     
+                    # Add timestamp information
+                    timestamp_system = self.enhanced_ticket_system.timestamp_system
+                    timestamp_info = timestamp_system.format_message_timestamp()
+                    output.append(timestamp_info)
+                    
                     return '\n'.join(output)
                 else:
                     return f"❌ Failed to get tickets: {result.get('error')}"
@@ -14638,7 +14691,9 @@ Ticket ID: {ticket_id}
 Author: {author}
 Comment: {comment}
 
-Comment has been stored in hAIveMind memory for future reference and search."""
+Comment has been stored in hAIveMind memory for future reference and search.
+
+{self.enhanced_ticket_system.timestamp_system.format_message_timestamp()}"""
                 else:
                     return f"❌ Failed to add comment: {result.get('error')}"
                     
@@ -14704,6 +14759,12 @@ Comment has been stored in hAIveMind memory for future reference and search."""
                     output.append("⚠️ Alerts:")
                     output.append(f"  Critical Tickets: {metrics['critical_tickets']}")
                     output.append(f"  Overdue Tickets: {metrics['overdue_tickets']}")
+                    
+                    # Add timestamp information
+                    timestamp_system = self.enhanced_ticket_system.timestamp_system
+                    timestamp_info = timestamp_system.format_message_timestamp()
+                    output.append("")
+                    output.append(timestamp_info)
                     
                     return '\n'.join(output)
                 else:
