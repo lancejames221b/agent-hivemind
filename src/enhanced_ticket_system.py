@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 from dataclasses import dataclass, asdict
+from timestamp_system import EnhancedTimestampSystem
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +114,7 @@ class EnhancedTicketSystem:
         self.storage = memory_storage
         self.config = config
         self.ticket_counter = 1000  # Start ticket numbers at 1000
+        self.timestamp_system = EnhancedTimestampSystem()
         logger.info("🎫 Enhanced ticket system initialized with Vibe Kanban backend")
     
     def _generate_ticket_number(self) -> int:
@@ -288,6 +290,13 @@ class EnhancedTicketSystem:
                 # Get memory context
                 memory_context = await self._get_ticket_memory(ticket_id)
                 
+                # Format comprehensive timestamp information
+                timestamp_info = self.timestamp_system.format_ticket_timestamps({
+                    'created_at': task.get('created_at'),
+                    'updated_at': task.get('updated_at'),
+                    'metadata': asdict(metadata)
+                })
+                
                 enhanced_ticket = {
                     'id': ticket_id,
                     'ticket_number': ticket_number,
@@ -299,6 +308,7 @@ class EnhancedTicketSystem:
                     'metadata': asdict(metadata),
                     'created_at': task.get('created_at'),
                     'updated_at': task.get('updated_at'),
+                    'timestamp_info': timestamp_info,
                     'memory_context': memory_context
                 }
                 
