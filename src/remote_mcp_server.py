@@ -258,6 +258,28 @@ NETWORK TOPOLOGY:
             except Exception as e:
                 return f"Error getting machine context: {e}"
     
+    def _truncate_response(self, response: str, max_tokens: int = 20000) -> str:
+        """Truncate response if it exceeds token limit"""
+        # Rough estimate: 1 token ≈ 4 characters
+        max_chars = max_tokens * 4
+        
+        if len(response) <= max_chars:
+            return response
+        
+        truncated = response[:max_chars]
+        
+        # Try to truncate at a natural boundary (line break)
+        last_newline = truncated.rfind('\n')
+        if last_newline > max_chars * 0.8:  # If we can truncate at 80% or more
+            truncated = truncated[:last_newline]
+        
+        # Add truncation notice
+        truncated += f"\n\n⚠️ Response truncated due to size limit ({len(response):,} chars > {max_chars:,} chars limit)\n"
+        truncated += f"📄 Use pagination parameters (limit, offset) for full results\n"
+        truncated += f"💡 Try reducing limit or adding specific filters"
+        
+        return truncated
+
     def _register_tools(self):
         """Register all memory tools with FastMCP"""
         
@@ -312,6 +334,7 @@ NETWORK TOPOLOGY:
             category: Optional[str] = None,
             user_id: Optional[str] = None,
             limit: int = 10,
+            offset: int = 0,
             semantic: bool = True,
             scope: Optional[str] = None,
             include_global: bool = True,
@@ -320,18 +343,36 @@ NETWORK TOPOLOGY:
         ) -> str:
             """Search memories with comprehensive filtering including machine, project, and sharing scope"""
             try:
+                # Get more results to handle pagination
+                extended_limit = limit + offset + 50  # Get extra to ensure we have enough for pagination
                 memories = await self.storage.search_memories(
                     query=query,
                     category=category,
                     user_id=user_id,
-                    limit=limit,
+                    limit=extended_limit,
                     semantic=semantic,
                     scope=scope,
                     include_global=include_global,
                     from_machines=from_machines,
                     exclude_machines=exclude_machines
                 )
-                return json.dumps(memories, indent=2)
+                
+                # Apply pagination
+                total_count = len(memories)
+                paginated_memories = memories[offset:offset + limit]
+                
+                result = {
+                    "memories": paginated_memories,
+                    "pagination": {
+                        "total": total_count,
+                        "limit": limit,
+                        "offset": offset,
+                        "has_more": offset + limit < total_count
+                    }
+                }
+                
+                response = json.dumps(result, indent=2)
+                return self._truncate_response(response)
             except Exception as e:
                 logger.error(f"Error searching memories: {e}")
                 return f"Error searching memories: {str(e)}"
@@ -341,17 +382,35 @@ NETWORK TOPOLOGY:
             user_id: Optional[str] = None,
             category: Optional[str] = None,
             hours: int = 24,
-            limit: int = 20
+            limit: int = 20,
+            offset: int = 0
         ) -> str:
             """Get recent memories within a time window"""
             try:
+                # Get more results to handle pagination
+                extended_limit = limit + offset + 50
                 memories = await self.storage.get_recent_memories(
                     user_id=user_id,
                     category=category,
                     hours=hours,
-                    limit=limit
+                    limit=extended_limit
                 )
-                return json.dumps(memories, indent=2)
+                
+                # Apply pagination
+                total_count = len(memories)
+                paginated_memories = memories[offset:offset + limit]
+                
+                result = {
+                    "memories": paginated_memories,
+                    "pagination": {
+                        "total": total_count,
+                        "limit": limit,
+                        "offset": offset,
+                        "has_more": offset + limit < total_count
+                    }
+                }
+                
+                return json.dumps(result, indent=2)
             except Exception as e:
                 logger.error(f"Error getting recent memories: {e}")
                 return f"Error getting recent memories: {str(e)}"
@@ -370,16 +429,34 @@ NETWORK TOPOLOGY:
         async def get_project_memories(
             category: Optional[str] = None,
             user_id: Optional[str] = None,
-            limit: int = 50
+            limit: int = 50,
+            offset: int = 0
         ) -> str:
             """Get all memories for the current project"""
             try:
+                # Get more results to handle pagination
+                extended_limit = limit + offset + 50
                 memories = await self.storage.get_project_memories(
                     category=category,
                     user_id=user_id,
-                    limit=limit
+                    limit=extended_limit
                 )
-                return json.dumps(memories, indent=2)
+                
+                # Apply pagination
+                total_count = len(memories)
+                paginated_memories = memories[offset:offset + limit]
+                
+                result = {
+                    "memories": paginated_memories,
+                    "pagination": {
+                        "total": total_count,
+                        "limit": limit,
+                        "offset": offset,
+                        "has_more": offset + limit < total_count
+                    }
+                }
+                
+                return json.dumps(result, indent=2)
             except Exception as e:
                 logger.error(f"Error getting project memories: {e}")
                 return f"Error getting project memories: {str(e)}"
@@ -395,11 +472,34 @@ NETWORK TOPOLOGY:
                 return f"Error getting machine context: {str(e)}"
         
         @self.mcp.tool()
-        async def list_memory_sources(category: Optional[str] = None) -> str:
+        async def list_memory_sources(
+            category: Optional[str] = None,
+            limit: int = 20,
+            offset: int = 0
+        ) -> str:
             """List all machines that have contributed memories with statistics"""
             try:
                 sources = await self.storage.list_memory_sources(category=category)
-                return json.dumps(sources, indent=2)
+                
+                # Apply pagination to sources list if it's a list
+                if isinstance(sources, list):
+                    total_count = len(sources)
+                    paginated_sources = sources[offset:offset + limit]
+                    
+                    result = {
+                        "sources": paginated_sources,
+                        "pagination": {
+                            "total": total_count,
+                            "limit": limit,
+                            "offset": offset,
+                            "has_more": offset + limit < total_count
+                        }
+                    }
+                else:
+                    # Handle dictionary response
+                    result = sources
+                
+                return json.dumps(result, indent=2)
             except Exception as e:
                 logger.error(f"Error listing memory sources: {e}")
                 return f"Error listing memory sources: {str(e)}"
@@ -445,11 +545,39 @@ NETWORK TOPOLOGY:
                 return f"Error registering agent: {str(e)}"
         
         @self.mcp.tool()
-        async def get_agent_roster(include_inactive: bool = False) -> str:
-            """List all active ClaudeOps agents and their current status"""
+        async def get_agent_roster(
+            include_inactive: bool = False,
+            limit: int = 20,
+            offset: int = 0
+        ) -> str:
+            """List all active ClaudeOps agents and their current status with pagination"""
             try:
                 roster = await self.storage.get_agent_roster(include_inactive=include_inactive)
-                return json.dumps(roster, indent=2)
+                
+                # Ensure we only have agent data, not memory statistics
+                if "agents" in roster:
+                    agents = roster["agents"]
+                    
+                    # Apply pagination
+                    total_agents = len(agents)
+                    paginated_agents = agents[offset:offset + limit]
+                    
+                    result = {
+                        "active_agents": len([a for a in agents if a.get('is_active', False)]),
+                        "total_agents": total_agents,
+                        "agents": paginated_agents,
+                        "pagination": {
+                            "limit": limit,
+                            "offset": offset,
+                            "has_more": offset + limit < total_agents
+                        }
+                    }
+                else:
+                    # Fallback for error responses
+                    result = roster
+                
+                response = json.dumps(result, indent=2)
+                return self._truncate_response(response)
             except Exception as e:
                 logger.error(f"Error getting agent roster: {e}")
                 return f"Error getting agent roster: {str(e)}"
@@ -1904,7 +2032,9 @@ Project is ready for DevOps operations! Use `switch_project_context` to activate
         @self.mcp.tool()
         async def list_projects(
             include_devops_status: bool = True,
-            show_archived: bool = False
+            show_archived: bool = False,
+            limit: int = 20,
+            offset: int = 0
         ) -> str:
             """Show all projects with enhanced DevOps metadata"""
             try:
@@ -1918,17 +2048,20 @@ Project is ready for DevOps operations! Use `switch_project_context` to activate
                     pass
                 
                 # Get DevOps project definitions from memory
-                devops_projects = await self.storage.search_memories(
+                all_devops_projects = await self.storage.search_memories(
                     query="DevOps project definition",
                     category="project_definitions",
-                    limit=50
+                    limit=200  # Get more to enable pagination
                 )
+                
+                # Apply pagination
+                total_projects = len(all_devops_projects)
+                devops_projects = all_devops_projects[offset:offset + limit]
                 
                 # Get current project context
                 current_project = await self._get_current_project_context()
                 
                 project_list = []
-                total_projects = len(devops_projects)
                 
                 # Process DevOps project definitions
                 for proj_mem in devops_projects:
@@ -1972,10 +2105,19 @@ Use `create_project` to create your first DevOps-enabled project with:
 - Security scanning
 - Configuration management"""
                 
+                # Add pagination info
+                has_more = offset + limit < total_projects
+                pagination_info = ""
+                if total_projects > limit:
+                    pagination_info = f"\n📄 Page {offset//limit + 1} ({offset + 1}-{min(offset + limit, total_projects)} of {total_projects})"
+                    if has_more:
+                        pagination_info += f" | Use offset={offset + limit} for next page"
+                
                 return f"""📊 DevOps Projects Overview
 
 **Total Projects**: {total_projects}
 **Current Active**: {current_project.get('name', 'None selected') if current_project else 'None selected'}
+**Showing**: {len(devops_projects)} projects{pagination_info}
 
 {chr(10).join(project_list)}
 
@@ -2517,9 +2659,58 @@ Use `switch_project_context {target_name}` to activate."""
             return await self.hosting_tools.get_mcp_server_status(server_id)
         
         @self.mcp.tool()
-        async def list_mcp_servers() -> str:
-            """List all hosted MCP servers"""
-            return await self.hosting_tools.list_mcp_servers()
+        async def list_mcp_servers(
+            limit: int = 20,
+            offset: int = 0
+        ) -> str:
+            """List all hosted MCP servers with pagination"""
+            # Get all servers first
+            all_servers_result = await self.hosting_tools.list_mcp_servers()
+            
+            # Try to parse if it's JSON to apply pagination
+            try:
+                import json
+                if all_servers_result.startswith('{') or all_servers_result.startswith('['):
+                    servers_data = json.loads(all_servers_result)
+                    
+                    if isinstance(servers_data, list):
+                        # Apply pagination to list
+                        total_count = len(servers_data)
+                        paginated_servers = servers_data[offset:offset + limit]
+                        
+                        result = {
+                            "servers": paginated_servers,
+                            "pagination": {
+                                "total": total_count,
+                                "limit": limit,
+                                "offset": offset,
+                                "has_more": offset + limit < total_count
+                            }
+                        }
+                        return json.dumps(result, indent=2)
+                    elif isinstance(servers_data, dict) and "servers" in servers_data:
+                        # Handle dict with servers key
+                        servers = servers_data["servers"]
+                        total_count = len(servers)
+                        paginated_servers = servers[offset:offset + limit]
+                        
+                        result = {
+                            **servers_data,
+                            "servers": paginated_servers,
+                            "pagination": {
+                                "total": total_count,
+                                "limit": limit,
+                                "offset": offset,
+                                "has_more": offset + limit < total_count
+                            }
+                        }
+                        return json.dumps(result, indent=2)
+            except:
+                # If parsing fails, return original result with pagination note
+                pass
+            
+            # Fallback: return original with pagination note
+            return f"{all_servers_result}\n\n📄 Pagination: limit={limit}, offset={offset}"
         
         @self.mcp.tool()
         async def get_mcp_server_logs(server_id: str, lines: int = 50) -> str:
@@ -8653,19 +8844,26 @@ server {
             status_filter: Optional[str] = None,
             owner_filter: Optional[str] = None,
             project_type_filter: Optional[str] = None,
-            limit: int = 50
+            limit: int = 50,
+            offset: int = 0
         ) -> str:
             """List projects with optional filtering by status, owner, or type"""
             try:
                 if not hasattr(self, 'project_mgmt'):
                     self.project_mgmt = ProjectManagementSystem()
                 
-                projects = self.project_mgmt.list_projects(
+                # Get more projects to handle pagination
+                extended_limit = limit + offset + 20
+                all_projects = self.project_mgmt.list_projects(
                     status_filter=status_filter,
                     owner_filter=owner_filter,
                     project_type_filter=project_type_filter,
-                    limit=limit
+                    limit=extended_limit
                 )
+                
+                # Apply pagination
+                total_projects = len(all_projects)
+                projects = all_projects[offset:offset + limit]
                 
                 if not projects:
                     return "📭 No projects found matching the specified criteria"
@@ -8685,7 +8883,15 @@ server {
                         ""
                     ])
                 
-                result.append(f"📊 Total: {len(projects)} projects")
+                # Add pagination info
+                has_more = offset + limit < total_projects
+                pagination_info = f"📊 Total: {total_projects} projects | Showing: {len(projects)}"
+                if total_projects > limit:
+                    pagination_info += f" | Page {offset//limit + 1}"
+                    if has_more:
+                        pagination_info += f" | Next: offset={offset + limit}"
+                
+                result.append(pagination_info)
                 
                 return "\n".join(result)
                 
