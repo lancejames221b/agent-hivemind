@@ -32,7 +32,8 @@
         "lance-dev",
         "ljs-macbook-pro",
         "m2",
-        "max"
+        "max",
+        "chris-dev"
       ]
     }
   },
@@ -385,7 +386,8 @@
       "lance-dev",
       "ljs-macbook-pro",
       "m2",
-      "max"
+      "max",
+      "chris-dev"
     ],
     "ip_whitelist": [
       "127.0.0.1",

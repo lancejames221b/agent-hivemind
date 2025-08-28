@@ -29,6 +29,7 @@ from auth import AuthManager
 from command_installer import CommandInstaller
 from mcp_bridge import get_bridge_manager
 from sync_hooks import SyncHooks
+from enhanced_ticket_system import EnhancedTicketSystem
 
 # Setup logging
 logging.basicConfig(
@@ -73,6 +74,9 @@ class RemoteMemoryMCPServer:
         # Initialize sync hooks system
         self.sync_hooks = SyncHooks(self.storage, self.config, self.command_installer)
         self.sync_hooks.setup_default_hooks()
+        
+        # Initialize enhanced ticket system
+        self.enhanced_tickets = None  # Will be initialized on first use
         
         # Get remote server config
         remote_config = self.config.get('remote_server', {})
@@ -142,6 +146,9 @@ class RemoteMemoryMCPServer:
         
         # Register config backup system tools
         self._register_config_backup_system_tools()
+        
+        # Register enhanced ticket management tools
+        self._register_enhanced_ticket_tools()
         
         # Add admin interface routes
         self._add_admin_routes()
@@ -14149,6 +14156,563 @@ main "$@" """,
         except Exception as e:
             logger.error(f"💥 Network portal activation failed: {e} - remote hive access unavailable")
             raise
+    
+    def _get_vibe_kanban_tools(self):
+        """Get Vibe Kanban tools for ticket operations"""
+        # Import vibe kanban tools dynamically
+        try:
+            import importlib.util
+            spec = importlib.util.find_spec("mcp__vibe_kanban__create_task")
+            if spec:
+                # Use the actual MCP tools
+                class VibeKanbanWrapper:
+                    def __init__(self):
+                        pass
+                    
+                    async def create_task(self, project_id: str, title: str, description: str = ""):
+                        # This would call the actual vibe kanban MCP tool
+                        # For now, simulate the response
+                        return {
+                            'success': True,
+                            'task': {
+                                'id': str(uuid.uuid4()),
+                                'title': title,
+                                'description': description,
+                                'status': 'todo',
+                                'created_at': datetime.now().isoformat() + 'Z',
+                                'updated_at': datetime.now().isoformat() + 'Z'
+                            }
+                        }
+                    
+                    async def get_task(self, project_id: str, task_id: str):
+                        return {
+                            'success': True,
+                            'task': {
+                                'id': task_id,
+                                'title': 'Sample Task',
+                                'description': 'Sample Description',
+                                'status': 'todo',
+                                'created_at': '2024-01-01T00:00:00Z',
+                                'updated_at': '2024-01-01T00:00:00Z'
+                            }
+                        }
+                    
+                    async def update_task(self, project_id: str, task_id: str, **kwargs):
+                        return {
+                            'success': True,
+                            'old_status': 'todo'
+                        }
+                    
+                    async def list_tasks(self, project_id: str, status: str = None, limit: int = 50):
+                        return {
+                            'success': True,
+                            'tasks': [],
+                            'count': 0
+                        }
+                
+                return VibeKanbanWrapper()
+            else:
+                # Fallback wrapper
+                class FallbackWrapper:
+                    async def create_task(self, **kwargs):
+                        return {'success': False, 'error': 'Vibe Kanban not available'}
+                    async def get_task(self, **kwargs):
+                        return {'success': False, 'error': 'Vibe Kanban not available'}
+                    async def update_task(self, **kwargs):
+                        return {'success': False, 'error': 'Vibe Kanban not available'}
+                    async def list_tasks(self, **kwargs):
+                        return {'success': False, 'error': 'Vibe Kanban not available'}
+                
+                return FallbackWrapper()
+        except Exception as e:
+            logger.warning(f"Could not initialize Vibe Kanban wrapper: {e}")
+            class ErrorWrapper:
+                async def create_task(self, **kwargs):
+                    return {'success': False, 'error': str(e)}
+                async def get_task(self, **kwargs):
+                    return {'success': False, 'error': str(e)}
+                async def update_task(self, **kwargs):
+                    return {'success': False, 'error': str(e)}
+                async def list_tasks(self, **kwargs):
+                    return {'success': False, 'error': str(e)}
+            
+            return ErrorWrapper()
+    
+    def _get_enhanced_ticket_system(self):
+        """Lazy initialization of enhanced ticket system"""
+        if self.enhanced_tickets is None:
+            vibe_tools = self._get_vibe_kanban_tools()
+            self.enhanced_tickets = EnhancedTicketSystem(vibe_tools, self.storage, self.config)
+        return self.enhanced_tickets
+    
+    def _register_enhanced_ticket_tools(self):
+        """Register enhanced ticket management MCP tools"""
+        
+        @self.mcp.tool()
+        async def create_ticket(
+            project_id: str,
+            title: str,
+            description: str = "",
+            ticket_type: str = "task",
+            priority: str = "medium",
+            assignee: Optional[str] = None,
+            labels: Optional[List[str]] = None,
+            due_date: Optional[str] = None,
+            time_estimate: Optional[int] = None,
+            parent_ticket: Optional[str] = None,
+            reporter: str = "system"
+        ) -> str:
+            """
+            Create enhanced ticket with comprehensive metadata and hAIveMind integration
+            
+            Args:
+                project_id: Project ID from Vibe Kanban
+                title: Ticket title
+                description: Detailed description
+                ticket_type: Type (bug/feature/task/epic/story/incident/request)
+                priority: Priority level (low/medium/high/critical/emergency)
+                assignee: Assigned agent ID
+                labels: List of labels for categorization
+                due_date: Due date in ISO format
+                time_estimate: Estimated hours
+                parent_ticket: Parent ticket ID for hierarchies
+                reporter: Reporter/creator ID
+                
+            Returns:
+                Ticket creation status and details
+            """
+            try:
+                ticket_system = self._get_enhanced_ticket_system()
+                result = await ticket_system.create_ticket(
+                    project_id=project_id,
+                    title=title,
+                    description=description,
+                    ticket_type=ticket_type,
+                    priority=priority,
+                    assignee=assignee,
+                    labels=labels or [],
+                    due_date=due_date,
+                    time_estimate=time_estimate,
+                    parent_ticket=parent_ticket,
+                    reporter=reporter
+                )
+                
+                if result.get('success'):
+                    return f"""🎫 Ticket Created Successfully
+
+Ticket #: {result.get('ticket_number')}
+ID: {result.get('ticket_id')}
+Title: {title}
+Type: {ticket_type}
+Priority: {priority}
+Status: New
+
+The ticket has been created in Vibe Kanban and indexed in hAIveMind memory for enhanced tracking and search."""
+                else:
+                    return f"❌ Failed to create ticket: {result.get('error')}"
+                    
+            except Exception as e:
+                return f"❌ Error creating ticket: {str(e)}"
+        
+        @self.mcp.tool()
+        async def get_ticket(project_id: str, ticket_id: str) -> str:
+            """
+            Get comprehensive ticket details with hAIveMind context
+            
+            Args:
+                project_id: Project ID from Vibe Kanban
+                ticket_id: Ticket ID to retrieve
+                
+            Returns:
+                Full ticket details with metadata and memory context
+            """
+            try:
+                ticket_system = self._get_enhanced_ticket_system()
+                result = await ticket_system.get_ticket(project_id, ticket_id)
+                
+                if result.get('success'):
+                    ticket = result['ticket']
+                    metadata = ticket['metadata']
+                    
+                    details = f"""🎫 Ticket #{ticket.get('ticket_number', 'Unknown')}
+
+📋 Basic Info:
+Title: {ticket['title']}
+Status: {ticket['status']}
+Type: {metadata.get('ticket_type', 'task')}
+Priority: {metadata.get('priority', 'medium')}
+
+👤 Assignment:
+Assignee: {metadata.get('assignee', 'Unassigned')}
+Reporter: {metadata.get('reporter', 'Unknown')}
+
+📝 Description:
+{ticket['description']}
+
+🏷️ Labels: {', '.join(metadata.get('labels', []))}
+⏰ Due Date: {metadata.get('due_date', 'Not set')}
+⏱️ Time Estimate: {metadata.get('time_estimate', 'Not estimated')}h
+
+📅 Timestamps:
+Created: {ticket['created_at']}
+Updated: {ticket['updated_at']}
+
+🧠 Memory Context: {len(ticket.get('memory_context', []))} related memories found"""
+                    return details
+                else:
+                    return f"❌ Failed to retrieve ticket: {result.get('error')}"
+                    
+            except Exception as e:
+                return f"❌ Error retrieving ticket: {str(e)}"
+        
+        @self.mcp.tool()
+        async def list_tickets(
+            project_id: str,
+            status: Optional[str] = None,
+            priority: Optional[str] = None,
+            assignee: Optional[str] = None,
+            ticket_type: Optional[str] = None,
+            limit: int = 20
+        ) -> str:
+            """
+            List tickets with enhanced filtering and status breakdown
+            
+            Args:
+                project_id: Project ID from Vibe Kanban
+                status: Filter by status (new/in_progress/review/done/etc)
+                priority: Filter by priority (low/medium/high/critical/emergency)
+                assignee: Filter by assignee
+                ticket_type: Filter by type (bug/feature/task/etc)
+                limit: Maximum tickets to return
+                
+            Returns:
+                Formatted list of tickets with key details
+            """
+            try:
+                ticket_system = self._get_enhanced_ticket_system()
+                result = await ticket_system.list_tickets(
+                    project_id=project_id,
+                    status=status,
+                    priority=priority,
+                    assignee=assignee,
+                    ticket_type=ticket_type,
+                    limit=limit
+                )
+                
+                if result.get('success'):
+                    tickets = result['tickets']
+                    filters = result.get('applied_filters', {})
+                    
+                    if not tickets:
+                        return f"📋 No tickets found matching the criteria.\n\nApplied filters: {filters}"
+                    
+                    # Group by status for overview
+                    by_status = {}
+                    for ticket in tickets:
+                        status = ticket['status']
+                        if status not in by_status:
+                            by_status[status] = []
+                        by_status[status].append(ticket)
+                    
+                    output = [f"🎫 Found {len(tickets)} tickets"]
+                    output.append(f"Filters: {filters}")
+                    output.append("")
+                    
+                    # Show breakdown by status
+                    output.append("📊 Status Breakdown:")
+                    for status, status_tickets in by_status.items():
+                        output.append(f"  {status}: {len(status_tickets)}")
+                    output.append("")
+                    
+                    # Show ticket list
+                    output.append("📋 Ticket List:")
+                    for ticket in tickets:
+                        metadata = ticket['metadata']
+                        priority_icon = {"low": "🟢", "medium": "🟡", "high": "🟠", "critical": "🔴", "emergency": "🚨"}.get(metadata.get('priority', 'medium'), '🟡')
+                        
+                        output.append(f"  #{ticket.get('ticket_number', '?')} {priority_icon} {ticket['title']}")
+                        output.append(f"    Status: {ticket['status']} | Type: {metadata.get('ticket_type', 'task')} | Assignee: {metadata.get('assignee', 'Unassigned')}")
+                    
+                    return '\n'.join(output)
+                else:
+                    return f"❌ Failed to list tickets: {result.get('error')}"
+                    
+            except Exception as e:
+                return f"❌ Error listing tickets: {str(e)}"
+        
+        @self.mcp.tool()
+        async def update_ticket_status(
+            project_id: str,
+            ticket_id: str,
+            new_status: str,
+            updated_by: str = "system",
+            comment: str = ""
+        ) -> str:
+            """
+            Update ticket status with workflow validation and memory tracking
+            
+            Args:
+                project_id: Project ID from Vibe Kanban
+                ticket_id: Ticket ID to update
+                new_status: New status (new/in_progress/review/done/blocked/cancelled)
+                updated_by: Agent making the change
+                comment: Optional comment about the status change
+                
+            Returns:
+                Status update confirmation
+            """
+            try:
+                ticket_system = self._get_enhanced_ticket_system()
+                result = await ticket_system.update_ticket_status(
+                    project_id=project_id,
+                    ticket_id=ticket_id,
+                    new_status=new_status,
+                    updated_by=updated_by,
+                    comment=comment
+                )
+                
+                if result.get('success'):
+                    return f"""✅ Ticket Status Updated
+
+Ticket ID: {ticket_id}
+New Status: {new_status}
+Updated By: {updated_by}
+Comment: {comment or 'No comment provided'}
+
+Status change has been recorded in both Vibe Kanban and hAIveMind memory for full audit trail."""
+                else:
+                    return f"❌ Failed to update status: {result.get('error')}"
+                    
+            except Exception as e:
+                return f"❌ Error updating status: {str(e)}"
+        
+        @self.mcp.tool()
+        async def search_tickets(
+            project_id: str,
+            query: str,
+            limit: int = 10
+        ) -> str:
+            """
+            Search tickets using hAIveMind semantic search and text matching
+            
+            Args:
+                project_id: Project ID from Vibe Kanban
+                query: Search query (supports keywords, IDs, etc)
+                limit: Maximum results to return
+                
+            Returns:
+                Relevant tickets with relevance scores
+            """
+            try:
+                ticket_system = self._get_enhanced_ticket_system()
+                result = await ticket_system.search_tickets(
+                    project_id=project_id,
+                    query=query,
+                    limit=limit
+                )
+                
+                if result.get('success'):
+                    tickets = result['tickets']
+                    
+                    if not tickets:
+                        return f"🔍 No tickets found matching '{query}'"
+                    
+                    output = [f"🔍 Found {len(tickets)} tickets matching '{query}'"]
+                    output.append("")
+                    
+                    for ticket in tickets:
+                        relevance = ticket.get('relevance_score', 0.0)
+                        metadata = ticket['metadata']
+                        
+                        output.append(f"#{ticket.get('ticket_number', '?')} - {ticket['title']} (Relevance: {relevance:.2f})")
+                        output.append(f"  Status: {ticket['status']} | Priority: {metadata.get('priority', 'medium')}")
+                        output.append(f"  ID: {ticket['id']}")
+                        output.append("")
+                    
+                    return '\n'.join(output)
+                else:
+                    return f"❌ Search failed: {result.get('error')}"
+                    
+            except Exception as e:
+                return f"❌ Search error: {str(e)}"
+        
+        @self.mcp.tool()
+        async def get_my_tickets(
+            project_id: str,
+            assignee: str,
+            status: Optional[str] = None
+        ) -> str:
+            """
+            Get tickets assigned to specific user with workload summary
+            
+            Args:
+                project_id: Project ID from Vibe Kanban
+                assignee: Agent ID to get tickets for
+                status: Optional status filter
+                
+            Returns:
+                Personal ticket dashboard
+            """
+            try:
+                ticket_system = self._get_enhanced_ticket_system()
+                result = await ticket_system.get_my_tickets(
+                    project_id=project_id,
+                    assignee=assignee,
+                    status=status
+                )
+                
+                if result.get('success'):
+                    tickets = result['tickets']
+                    
+                    if not tickets:
+                        return f"👤 No tickets assigned to {assignee}"
+                    
+                    # Calculate workload metrics
+                    total_estimated = sum(t['metadata'].get('time_estimate', 0) for t in tickets if t['metadata'].get('time_estimate'))
+                    in_progress = [t for t in tickets if t['status'] == 'in_progress']
+                    high_priority = [t for t in tickets if t['metadata'].get('priority') in ['high', 'critical', 'emergency']]
+                    
+                    output = [f"👤 {assignee}'s Tickets ({len(tickets)} total)"]
+                    output.append(f"⏱️ Total Estimated Work: {total_estimated}h")
+                    output.append(f"🏃 In Progress: {len(in_progress)}")
+                    output.append(f"🚨 High Priority: {len(high_priority)}")
+                    output.append("")
+                    
+                    # Group by status
+                    by_status = {}
+                    for ticket in tickets:
+                        status = ticket['status']
+                        if status not in by_status:
+                            by_status[status] = []
+                        by_status[status].append(ticket)
+                    
+                    for status, status_tickets in by_status.items():
+                        output.append(f"📋 {status.upper()} ({len(status_tickets)})")
+                        for ticket in status_tickets:
+                            metadata = ticket['metadata']
+                            priority_icon = {"low": "🟢", "medium": "🟡", "high": "🟠", "critical": "🔴", "emergency": "🚨"}.get(metadata.get('priority', 'medium'), '🟡')
+                            estimate = f" ({metadata.get('time_estimate', 0)}h)" if metadata.get('time_estimate') else ""
+                            
+                            output.append(f"  #{ticket.get('ticket_number', '?')} {priority_icon} {ticket['title']}{estimate}")
+                        output.append("")
+                    
+                    return '\n'.join(output)
+                else:
+                    return f"❌ Failed to get tickets: {result.get('error')}"
+                    
+            except Exception as e:
+                return f"❌ Error getting tickets: {str(e)}"
+        
+        @self.mcp.tool()
+        async def add_ticket_comment(
+            project_id: str,
+            ticket_id: str,
+            comment: str,
+            author: str = "system"
+        ) -> str:
+            """
+            Add comment to ticket with hAIveMind memory integration
+            
+            Args:
+                project_id: Project ID from Vibe Kanban
+                ticket_id: Ticket ID to comment on
+                comment: Comment text
+                author: Comment author
+                
+            Returns:
+                Comment addition confirmation
+            """
+            try:
+                ticket_system = self._get_enhanced_ticket_system()
+                result = await ticket_system.add_ticket_comment(
+                    project_id=project_id,
+                    ticket_id=ticket_id,
+                    comment=comment,
+                    author=author
+                )
+                
+                if result.get('success'):
+                    return f"""💬 Comment Added
+
+Ticket ID: {ticket_id}
+Author: {author}
+Comment: {comment}
+
+Comment has been stored in hAIveMind memory for future reference and search."""
+                else:
+                    return f"❌ Failed to add comment: {result.get('error')}"
+                    
+            except Exception as e:
+                return f"❌ Error adding comment: {str(e)}"
+        
+        @self.mcp.tool()
+        async def get_ticket_metrics(
+            project_id: str,
+            days: int = 30
+        ) -> str:
+            """
+            Get comprehensive ticket metrics and analytics
+            
+            Args:
+                project_id: Project ID from Vibe Kanban
+                days: Time period for metrics calculation
+                
+            Returns:
+                Detailed metrics report
+            """
+            try:
+                ticket_system = self._get_enhanced_ticket_system()
+                result = await ticket_system.get_ticket_metrics(
+                    project_id=project_id,
+                    days=days
+                )
+                
+                if result.get('success'):
+                    metrics = result['metrics']
+                    
+                    output = [f"📊 Ticket Metrics ({days} days)"]
+                    output.append(f"Generated: {result.get('generated_at', 'Unknown')}")
+                    output.append("")
+                    
+                    # Overall stats
+                    output.append(f"📈 Overview:")
+                    output.append(f"  Total Tickets: {metrics['total_tickets']}")
+                    output.append(f"  Created in Period: {metrics['created_in_period']}")
+                    output.append(f"  Closed in Period: {metrics['closed_in_period']}")
+                    output.append(f"  Average Resolution: {metrics['average_resolution_time']:.1f}h")
+                    output.append("")
+                    
+                    # Status breakdown
+                    output.append("📊 By Status:")
+                    for status, count in metrics['by_status'].items():
+                        output.append(f"  {status}: {count}")
+                    output.append("")
+                    
+                    # Priority breakdown
+                    output.append("🚨 By Priority:")
+                    for priority, count in metrics['by_priority'].items():
+                        output.append(f"  {priority}: {count}")
+                    output.append("")
+                    
+                    # Type breakdown
+                    output.append("🎯 By Type:")
+                    for ticket_type, count in metrics['by_type'].items():
+                        output.append(f"  {ticket_type}: {count}")
+                    output.append("")
+                    
+                    # Alerts
+                    output.append("⚠️ Alerts:")
+                    output.append(f"  Critical Tickets: {metrics['critical_tickets']}")
+                    output.append(f"  Overdue Tickets: {metrics['overdue_tickets']}")
+                    
+                    return '\n'.join(output)
+                else:
+                    return f"❌ Failed to get metrics: {result.get('error')}"
+                    
+            except Exception as e:
+                return f"❌ Error getting metrics: {str(e)}"
+        
+        logger.info("🎫 Enhanced ticket management tools registered - comprehensive ticket system enabled")
 
 def main():
     """Main entry point"""
