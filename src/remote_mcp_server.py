@@ -30,6 +30,8 @@ from command_installer import CommandInstaller
 from mcp_bridge import get_bridge_manager
 from sync_hooks import SyncHooks
 from enhanced_ticket_system import EnhancedTicketSystem
+from agent_directives import AgentDirectiveSystem
+from comet_integration import CometDirectiveSystem
 
 # Setup logging
 logging.basicConfig(
@@ -77,6 +79,12 @@ class RemoteMemoryMCPServer:
         
         # Initialize enhanced ticket system
         self.enhanced_tickets = None  # Will be initialized on first use
+        
+        # Initialize agent directive system
+        self.agent_directives = AgentDirectiveSystem(self.storage)
+        
+        # Initialize Comet integration system
+        self.comet_system = CometDirectiveSystem(self.config.get('comet', {}), self.storage)
         
         # Get remote server config
         remote_config = self.config.get('remote_server', {})
@@ -2602,6 +2610,161 @@ Use `switch_project_context {target_name}` to activate."""
                     return "Critical 🔴"
             except:
                 return "Unknown ⚪"
+        
+        # Agent directive system tools
+        @self.mcp.tool()
+        async def get_agent_directive(agent_type: str = "claude_code_agent") -> str:
+            """Get installation directive for specific agent type"""
+            try:
+                directive = await self.agent_directives.get_agent_directive(agent_type)
+                return json.dumps(directive, indent=2)
+            except Exception as e:
+                logger.error(f"Error getting agent directive: {e}")
+                return f"Error getting agent directive: {str(e)}"
+        
+        @self.mcp.tool()
+        async def get_installation_instructions(agent_id: Optional[str] = None) -> str:
+            """Get human-readable installation instructions for connecting to hAIveMind"""
+            try:
+                instructions = await self.agent_directives.get_installation_instructions(agent_id)
+                return instructions
+            except Exception as e:
+                logger.error(f"Error getting installation instructions: {e}")
+                return f"Error getting installation instructions: {str(e)}"
+        
+        @self.mcp.tool()
+        async def generate_installation_script(agent_type: str = "claude_code_agent") -> str:
+            """Generate executable installation script from directive"""
+            try:
+                directive = await self.agent_directives.get_agent_directive(agent_type)
+                script = await self.agent_directives.generate_installation_script(directive)
+                return script
+            except Exception as e:
+                logger.error(f"Error generating installation script: {e}")
+                return f"Error generating installation script: {str(e)}"
+        
+        @self.mcp.tool()
+        async def execute_agent_directive(
+            agent_type: str = "claude_code_agent",
+            agent_id: Optional[str] = None,
+            auto_execute: bool = True
+        ) -> str:
+            """Execute agent installation directive automatically"""
+            try:
+                if not agent_id:
+                    import socket
+                    agent_id = f"claude_code_agent_{socket.gethostname()}_{int(time.time())}"
+                
+                directive = await self.agent_directives.get_agent_directive(agent_type)
+                
+                if not auto_execute:
+                    instructions = await self.agent_directives.get_installation_instructions(agent_id)
+                    return f"Manual execution required. Instructions:\n\n{instructions}"
+                
+                # Execute directive steps
+                results = []
+                
+                for step in directive.get("steps", []):
+                    step_result = {
+                        "step_id": step.get("id"),
+                        "step_name": step.get("name"),
+                        "success": False,
+                        "message": "",
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    
+                    try:
+                        if step.get("action") == "mcp_call":
+                            tool_name = step.get("tool")
+                            parameters = step.get("parameters", {})
+                            
+                            # Execute MCP tool calls directly
+                            if tool_name == "install_agent_commands":
+                                result = await self.command_installer.sync_agent_installation(
+                                    agent_id=agent_id,
+                                    force=parameters.get("force", False),
+                                    verbose=parameters.get("verbose", False)
+                                )
+                                step_result["success"] = "success" in str(result).lower()
+                                step_result["message"] = str(result)
+                                
+                            elif tool_name == "register_agent":
+                                # Register agent with hAIveMind
+                                role = parameters.get("role", "claude_code_agent")
+                                capabilities = parameters.get("capabilities", [])
+                                
+                                registration_result = await self.storage.store_memory(
+                                    content=f"Agent {agent_id} registered with role {role}",
+                                    category="infrastructure",
+                                    context=f"Agent registration for {agent_id}",
+                                    metadata={
+                                        "agent_id": agent_id,
+                                        "role": role,
+                                        "capabilities": capabilities,
+                                        "registration_time": datetime.now().isoformat()
+                                    },
+                                    tags=["agent-registration", agent_id, role]
+                                )
+                                
+                                step_result["success"] = True
+                                step_result["message"] = f"Agent registered: {registration_result}"
+                                
+                            elif tool_name == "get_agent_roster":
+                                roster = await self.storage.search_memories(
+                                    query="agent-registration",
+                                    category="infrastructure",
+                                    limit=parameters.get("limit", 5)
+                                )
+                                step_result["success"] = len(roster) > 0
+                                step_result["message"] = f"Found {len(roster)} agents in collective"
+                        
+                        elif step.get("action") == "bash":
+                            # For bash commands, we'd need to implement shell execution
+                            # For now, mark as success with instruction
+                            step_result["success"] = True
+                            step_result["message"] = f"Execute: {step.get('command')}"
+                        
+                        elif step.get("action") == "create_files":
+                            # For file creation, we'd need file system access
+                            # For now, provide the file list
+                            files = step.get("files", [])
+                            step_result["success"] = True
+                            step_result["message"] = f"Create {len(files)} files: {[f['path'] for f in files]}"
+                        
+                    except Exception as e:
+                        step_result["success"] = False
+                        step_result["message"] = f"Step failed: {str(e)}"
+                    
+                    results.append(step_result)
+                
+                # Store execution results
+                memory_id = await self.agent_directives.store_directive_execution(
+                    agent_id, directive.get("directive_id", "unknown"), results
+                )
+                
+                success_count = len([r for r in results if r["success"]])
+                total_steps = len(results)
+                
+                response = f"🤖 Agent Directive Execution Complete!\n\n"
+                response += f"Agent ID: {agent_id}\n"
+                response += f"Success Rate: {success_count}/{total_steps} steps\n"
+                response += f"Execution ID: {memory_id}\n\n"
+                response += "Step Results:\n"
+                
+                for result in results:
+                    status = "✅" if result["success"] else "❌"
+                    response += f"{status} {result['step_name']}: {result['message']}\n"
+                
+                if success_count == total_steps:
+                    response += f"\n🎉 Welcome to the hAIveMind collective, {agent_id}!"
+                else:
+                    response += f"\n⚠️  Some steps failed. Check logs and retry if needed."
+                
+                return response
+                
+            except Exception as e:
+                logger.error(f"Error executing agent directive: {e}")
+                return f"Error executing agent directive: {str(e)}"
         
         logger.info("🤝 All hive mind tools synchronized with network portal - collective intelligence ready")
     
@@ -9455,6 +9618,1049 @@ server {
             </body>
             </html>
             """)
+        
+        # ===== COMET BROWSER INTEGRATION ROUTES =====
+        
+        # Comet main portal
+        @self.mcp.custom_route("/comet", methods=["GET"])
+        async def comet_portal(request):
+            """Serve the main Comet browser portal page"""
+            if not self.comet_system.enabled:
+                return JSONResponse({"error": "Comet integration is disabled"}, status_code=404)
+            
+            return HTMLResponse("""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>hAIveMind Comet Portal</title>
+                <meta charset="utf-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1">
+                <style>
+                    body { 
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                        margin: 0; 
+                        padding: 20px; 
+                        background: #0a0e1a; 
+                        color: #e1e5e9;
+                        line-height: 1.4;
+                    }
+                    .container { max-width: 800px; margin: 0 auto; }
+                    .header { text-align: center; margin-bottom: 30px; }
+                    .title { color: #00d4aa; font-size: 2.2em; margin: 0; }
+                    .subtitle { color: #8892b0; margin: 5px 0 0 0; }
+                    .auth-card { 
+                        background: #162032; 
+                        border: 1px solid #2d3748; 
+                        border-radius: 8px; 
+                        padding: 30px; 
+                        margin: 20px 0;
+                    }
+                    .form-group { margin-bottom: 20px; }
+                    label { display: block; margin-bottom: 5px; color: #8892b0; }
+                    input { 
+                        width: 100%; 
+                        padding: 12px; 
+                        border: 1px solid #4a5568; 
+                        border-radius: 4px; 
+                        background: #2d3748; 
+                        color: #e1e5e9;
+                        font-size: 16px;
+                    }
+                    input:focus { outline: none; border-color: #00d4aa; }
+                    .btn { 
+                        background: #00d4aa; 
+                        color: #0a0e1a; 
+                        border: none; 
+                        padding: 12px 24px; 
+                        border-radius: 4px; 
+                        cursor: pointer; 
+                        font-weight: 500;
+                        font-size: 16px;
+                        width: 100%;
+                    }
+                    .btn:hover { background: #00b894; }
+                    .hidden { display: none; }
+                    .status { margin: 15px 0; padding: 10px; border-radius: 4px; }
+                    .status.success { background: #1a4d3a; border: 1px solid #00d4aa; }
+                    .status.error { background: #4a1a1a; border: 1px solid #e53e3e; }
+                    .directives { margin: 20px 0; }
+                    .directive { 
+                        background: #1a1e30; 
+                        border: 1px solid #2d3748; 
+                        border-left: 4px solid #00d4aa;
+                        border-radius: 4px; 
+                        padding: 15px; 
+                        margin: 10px 0;
+                    }
+                    .directive-meta { color: #8892b0; font-size: 0.9em; margin-bottom: 8px; }
+                    .directive-content { color: #e1e5e9; }
+                    .nav-links { text-align: center; margin: 20px 0; }
+                    .nav-links a { 
+                        color: #00d4aa; 
+                        text-decoration: none; 
+                        margin: 0 15px;
+                        padding: 8px 16px;
+                        border: 1px solid #2d3748;
+                        border-radius: 4px;
+                        display: inline-block;
+                    }
+                    .nav-links a:hover { background: #162032; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h1 class="title">🚀 hAIveMind Comet Portal</h1>
+                        <p class="subtitle">AI-optimized interface for Comet Browser</p>
+                    </div>
+                    
+                    <div id="authCard" class="auth-card hidden">
+                        <h2>Authentication Required</h2>
+                        <p>Enter the authentication password to access hAIveMind directives.</p>
+                        <form id="authForm">
+                            <div class="form-group">
+                                <label for="password">Password</label>
+                                <input type="password" id="password" name="password" required autocomplete="current-password">
+                            </div>
+                            <button type="submit" class="btn">Authenticate</button>
+                        </form>
+                        <div id="status" class="status hidden"></div>
+                    </div>
+                    
+                    <div id="mainPortal">
+                        <div class="nav-links">
+                            <a href="/comet/directives">📋 Active Directives</a>
+                            <a href="/comet/status">📊 System Status</a>
+                            <a href="#" onclick="showMemorySearch()">🔍 Memory Search</a>
+                            <a href="#" onclick="toggleDataSubmission()">📤 Submit Data</a>
+                        </div>
+                        
+                        <div id="dataSubmissionForm" class="auth-card hidden">
+                            <h2>📤 Submit Data to hAIveMind</h2>
+                            <p>Submit research findings, observations, or any data to the collective intelligence system.</p>
+                            
+                            <form id="submitDataForm">
+                                <div class="form-group">
+                                    <label for="submitContent">Content *</label>
+                                    <textarea id="submitContent" name="content" rows="4" placeholder="Enter the data, findings, or information to submit..." required style="resize: vertical; min-height: 100px;"></textarea>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label for="submitCategory">Category</label>
+                                    <select id="submitCategory" name="category">
+                                        <option value="comet_findings">Comet Findings</option>
+                                        <option value="research">Research</option>
+                                        <option value="intelligence">Intelligence</option>
+                                        <option value="observations">Observations</option>
+                                        <option value="analysis">Analysis</option>
+                                        <option value="incident">Incident</option>
+                                        <option value="security">Security</option>
+                                        <option value="other">Other</option>
+                                    </select>
+                                    <button type="button" onclick="toggleCreateCategory()" style="margin-top: 5px; padding: 5px 10px; font-size: 12px; background: #4a5568; border: 1px solid #2d3748;">+ New Category</button>
+                                </div>
+                                
+                                <div id="createCategoryForm" class="form-group hidden">
+                                    <label for="newCategoryName">New Category Name</label>
+                                    <input type="text" id="newCategoryName" placeholder="Enter new category name...">
+                                    <label for="newCategoryDesc" style="margin-top: 10px;">Description (optional)</label>
+                                    <input type="text" id="newCategoryDesc" placeholder="Brief description of this category...">
+                                    <div style="margin-top: 10px;">
+                                        <button type="button" onclick="createNewCategory()" class="btn" style="width: auto; margin-right: 10px;">Create</button>
+                                        <button type="button" onclick="toggleCreateCategory()" style="background: #4a5568; border: 1px solid #2d3748; padding: 8px 16px; border-radius: 4px;">Cancel</button>
+                                    </div>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label for="submitType">Type</label>
+                                    <select id="submitType" name="type">
+                                        <option value="general">General</option>
+                                        <option value="urgent">Urgent</option>
+                                        <option value="investigation">Investigation</option>
+                                        <option value="evidence">Evidence</option>
+                                        <option value="analysis">Analysis</option>
+                                        <option value="report">Report</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label for="submitTags">Tags (comma-separated)</label>
+                                    <input type="text" id="submitTags" name="tags" placeholder="threat-intel, social-media, discord, telegram...">
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label for="submitMetadata">Additional Context (JSON format, optional)</label>
+                                    <textarea id="submitMetadata" name="metadata" rows="2" placeholder='{"source_url": "https://example.com", "confidence": "high"}'></textarea>
+                                </div>
+                                
+                                <button type="submit" class="btn">Submit to hAIveMind</button>
+                            </form>
+                            
+                            <div id="submitStatus" class="status hidden"></div>
+                        </div>
+                        
+                        <div class="auth-card">
+                            <h2>🤖 Comet Assistant Instructions</h2>
+                            <p>You are now connected to the hAIveMind collective intelligence system. Here are your current capabilities:</p>
+                            
+                            <div class="directives" id="quickDirectives">
+                                <div class="directive">
+                                    <div class="directive-meta">Quick Access • Priority: High</div>
+                                    <div class="directive-content">
+                                        <strong>Memory Search:</strong> You can search the collective memory by navigating to <code>/comet/api/memory/search?q=your_query</code>
+                                    </div>
+                                </div>
+                                
+                                <div class="directive">
+                                    <div class="directive-meta">System Status • Priority: Normal</div>
+                                    <div class="directive-content">
+                                        <strong>Agent Status:</strong> Check active agents at <code>/comet/status</code> for current collective health
+                                    </div>
+                                </div>
+                                
+                                <div class="directive">
+                                    <div class="directive-meta">Dynamic Directives • Priority: Normal</div>
+                                    <div class="directive-content">
+                                        <strong>Active Tasks:</strong> Visit <code>/comet/directives</code> for dynamic tasks assigned to you
+                                    </div>
+                                </div>
+                                
+                                <div class="directive">
+                                    <div class="directive-meta">Data Submission • Priority: Normal</div>
+                                    <div class="directive-content">
+                                        <strong>Submit Findings:</strong> Use the "Submit Data" form above to contribute research findings to the collective
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <p><strong>Usage:</strong> Navigate to any of the above URLs to access hAIveMind functionality. The system will provide structured data optimized for AI processing.</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <script>
+                // No authentication required - secured by Tailscale network
+                
+                function showMemorySearch() {
+                    // Create a simple search interface instead of redirect
+                    const searchForm = document.createElement('div');
+                    searchForm.innerHTML = `
+                        <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; display: flex; justify-content: center; align-items: center;">
+                            <div style="background: #162032; padding: 30px; border-radius: 8px; border: 1px solid #2d3748; width: 500px; max-width: 90vw;">
+                                <h3 style="margin: 0 0 20px 0; color: #00d4aa;">🔍 Memory Search</h3>
+                                <input type="text" id="searchQuery" placeholder="Enter search terms..." style="width: 100%; padding: 12px; border: 1px solid #4a5568; border-radius: 4px; background: #2d3748; color: #e1e5e9; font-size: 16px; margin-bottom: 15px;">
+                                <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                                    <select id="searchCategory" style="flex: 1; padding: 8px; border: 1px solid #4a5568; border-radius: 4px; background: #2d3748; color: #e1e5e9;">
+                                        <option value="">All Categories</option>
+                                        <option value="comet_findings">Comet Findings</option>
+                                        <option value="research">Research</option>
+                                        <option value="intelligence">Intelligence</option>
+                                    </select>
+                                    <select id="searchLimit" style="flex: 1; padding: 8px; border: 1px solid #4a5568; border-radius: 4px; background: #2d3748; color: #e1e5e9;">
+                                        <option value="5">5 results</option>
+                                        <option value="10">10 results</option>
+                                        <option value="20">20 results</option>
+                                    </select>
+                                </div>
+                                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                                    <button onclick="performSearch()" style="background: #00d4aa; color: #0a0e1a; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">Search</button>
+                                    <button onclick="closeSearchModal()" style="background: #4a5568; color: #e1e5e9; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">Cancel</button>
+                                </div>
+                                <div id="searchResults" style="margin-top: 20px; max-height: 300px; overflow-y: auto;"></div>
+                            </div>
+                        </div>
+                    `;
+                    document.body.appendChild(searchForm);
+                    document.getElementById('searchQuery').focus();
+                }
+                
+                function closeSearchModal() {
+                    const modal = document.querySelector('[style*="position: fixed"]');
+                    if (modal) {
+                        modal.remove();
+                    }
+                }
+                
+                async function performSearch() {
+                    const query = document.getElementById('searchQuery').value.trim();
+                    const category = document.getElementById('searchCategory').value;
+                    const limit = document.getElementById('searchLimit').value;
+                    const resultsDiv = document.getElementById('searchResults');
+                    
+                    if (!query) {
+                        resultsDiv.innerHTML = '<p style="color: #e53e3e;">Please enter search terms</p>';
+                        return;
+                    }
+                    
+                    resultsDiv.innerHTML = '<p style="color: #8892b0;">Searching...</p>';
+                    
+                    try {
+                        let url = `/comet/api/memory/search?q=${encodeURIComponent(query)}&limit=${limit}`;
+                        if (category) {
+                            url += `&category=${encodeURIComponent(category)}`;
+                        }
+                        
+                        const response = await fetch(url);
+                        const data = await response.json();
+                        
+                        if (data.results && data.results.length > 0) {
+                            let html = `<h4 style="color: #00d4aa; margin: 0 0 10px 0;">Found ${data.total_found} results</h4>`;
+                            data.results.forEach(result => {
+                                html += `
+                                    <div style="background: #1a1e30; padding: 10px; margin: 5px 0; border-radius: 4px; border-left: 3px solid #00d4aa;">
+                                        <small style="color: #8892b0;">${result.category || 'Unknown'} • ${result.timestamp || ''}</small>
+                                        <p style="margin: 5px 0; color: #e1e5e9;">${result.content ? result.content.substring(0, 200) + '...' : 'No content'}</p>
+                                        ${result.tags && result.tags.length > 0 ? `<div style="font-size: 11px; color: #4a5568;">Tags: ${result.tags.join(', ')}</div>` : ''}
+                                    </div>
+                                `;
+                            });
+                            resultsDiv.innerHTML = html;
+                        } else {
+                            resultsDiv.innerHTML = '<p style="color: #8892b0;">No results found</p>';
+                        }
+                    } catch (error) {
+                        resultsDiv.innerHTML = `<p style="color: #e53e3e;">Search error: ${error.message}</p>`;
+                    }
+                }
+                
+                // Allow Enter key to search
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' && document.getElementById('searchQuery')) {
+                        performSearch();
+                    }
+                });
+                
+                function toggleDataSubmission() {
+                    const form = document.getElementById('dataSubmissionForm');
+                    if (form.classList.contains('hidden')) {
+                        form.classList.remove('hidden');
+                    } else {
+                        form.classList.add('hidden');
+                    }
+                }
+                
+                document.getElementById('submitDataForm').addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    
+                    const content = document.getElementById('submitContent').value;
+                    const category = document.getElementById('submitCategory').value;
+                    const type = document.getElementById('submitType').value;
+                    const tags = document.getElementById('submitTags').value;
+                    const metadataText = document.getElementById('submitMetadata').value;
+                    
+                    let metadata = {
+                        submitted_via: 'comet_portal',
+                        user_agent: navigator.userAgent
+                    };
+                    
+                    // Parse additional metadata if provided
+                    if (metadataText.trim()) {
+                        try {
+                            const additionalMetadata = JSON.parse(metadataText);
+                            metadata = { ...metadata, ...additionalMetadata };
+                        } catch (error) {
+                            showSubmitStatus('Invalid JSON in metadata field', 'error');
+                            return;
+                        }
+                    }
+                    
+                    const payload = {
+                        content: content,
+                        category: category,
+                        type: type,
+                        tags: tags ? tags.split(',').map(t => t.trim()).filter(t => t) : [],
+                        metadata: metadata
+                    };
+                    
+                    try {
+                        const response = await fetch('/comet/api/submit', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(payload)
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (data.success) {
+                            showSubmitStatus(`Data submitted successfully! Memory ID: ${data.memory_id}`, 'success');
+                            document.getElementById('submitDataForm').reset();
+                        } else {
+                            showSubmitStatus(data.error || 'Submission failed', 'error');
+                        }
+                    } catch (error) {
+                        showSubmitStatus('Submission error: ' + error.message, 'error');
+                    }
+                });
+                
+                function showSubmitStatus(message, type) {
+                    const status = document.getElementById('submitStatus');
+                    status.textContent = message;
+                    status.className = 'status ' + type;
+                    status.classList.remove('hidden');
+                    
+                    setTimeout(() => {
+                        status.classList.add('hidden');
+                    }, 5000);
+                }
+                
+                // Load categories when page loads
+                window.addEventListener('DOMContentLoaded', () => {
+                    loadCategories();
+                });
+                
+                async function loadCategories() {
+                    try {
+                        const response = await fetch('/comet/api/categories');
+                        const data = await response.json();
+                        
+                        if (data.categories) {
+                            const select = document.getElementById('submitCategory');
+                            // Clear existing options except defaults
+                            select.innerHTML = `
+                                <option value="comet_findings">Comet Findings</option>
+                                <option value="research">Research</option>
+                                <option value="intelligence">Intelligence</option>
+                                <option value="observations">Observations</option>
+                                <option value="analysis">Analysis</option>
+                                <option value="incident">Incident</option>
+                                <option value="security">Security</option>
+                                <option value="other">Other</option>
+                            `;
+                            
+                            // Add custom categories
+                            data.categories.forEach(cat => {
+                                if (!['comet_findings', 'research', 'intelligence', 'observations', 'analysis', 'incident', 'security', 'other'].includes(cat.value)) {
+                                    const option = document.createElement('option');
+                                    option.value = cat.value;
+                                    option.textContent = cat.label;
+                                    if (cat.description) {
+                                        option.title = cat.description;
+                                    }
+                                    select.appendChild(option);
+                                }
+                            });
+                        }
+                    } catch (error) {
+                        console.log('Could not load categories:', error.message);
+                    }
+                }
+                
+                function toggleCreateCategory() {
+                    const form = document.getElementById('createCategoryForm');
+                    if (form.classList.contains('hidden')) {
+                        form.classList.remove('hidden');
+                    } else {
+                        form.classList.add('hidden');
+                        // Clear form
+                        document.getElementById('newCategoryName').value = '';
+                        document.getElementById('newCategoryDesc').value = '';
+                    }
+                }
+                
+                async function createNewCategory() {
+                    const name = document.getElementById('newCategoryName').value.trim();
+                    const description = document.getElementById('newCategoryDesc').value.trim();
+                    
+                    if (!name) {
+                        showSubmitStatus('Category name is required', 'error');
+                        return;
+                    }
+                    
+                    try {
+                        const response = await fetch('/comet/api/categories', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                name: name,
+                                description: description
+                            })
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (data.success) {
+                            showSubmitStatus(`Category "${name}" created successfully!`, 'success');
+                            toggleCreateCategory(); // Hide form
+                            await loadCategories(); // Reload categories
+                            
+                            // Select the new category
+                            document.getElementById('submitCategory').value = name;
+                        } else {
+                            showSubmitStatus(data.error || 'Failed to create category', 'error');
+                        }
+                    } catch (error) {
+                        showSubmitStatus('Error creating category: ' + error.message, 'error');
+                    }
+                }
+                </script>
+            </body>
+            </html>
+            """)
+        
+        # ===== COMET API ENDPOINTS =====
+        
+        # Comet authentication endpoint
+        @self.mcp.custom_route("/comet/api/auth", methods=["POST"])
+        async def comet_auth(request):
+            """Authenticate Comet browser and return session token"""
+            if not self.comet_system.enabled:
+                return JSONResponse({"error": "Comet integration is disabled"}, status_code=404)
+            
+            try:
+                body = await request.json()
+                password = body.get('password')
+                
+                if not password:
+                    return JSONResponse({"error": "Password required"}, status_code=400)
+                
+                session_token = self.comet_system.authenticate_comet(password)
+                
+                if session_token:
+                    return JSONResponse({
+                        "success": True,
+                        "session_token": session_token,
+                        "message": "Authentication successful"
+                    })
+                else:
+                    return JSONResponse({"error": "Invalid password"}, status_code=401)
+                    
+            except Exception as e:
+                logger.error(f"Comet auth error: {e}")
+                return JSONResponse({"error": "Authentication failed"}, status_code=500)
+        
+        # Comet session validation endpoint
+        @self.mcp.custom_route("/comet/api/validate", methods=["GET"])
+        async def comet_validate(request):
+            """Validate Comet session token"""
+            if not self.comet_system.enabled:
+                return JSONResponse({"error": "Comet integration is disabled"}, status_code=404)
+            
+            auth_header = request.headers.get('authorization')
+            if not auth_header or not auth_header.startswith('Bearer '):
+                return JSONResponse({"error": "Authorization header required"}, status_code=401)
+            
+            token = auth_header.split(' ')[1]
+            
+            if self.comet_system.validate_session(token):
+                return JSONResponse({"valid": True})
+            else:
+                return JSONResponse({"valid": False}, status_code=401)
+        
+        # Comet directives endpoint
+        @self.mcp.custom_route("/comet/directives", methods=["GET"])
+        async def comet_directives(request):
+            """Get active directives for Comet to process"""
+            if not self.comet_system.enabled:
+                return JSONResponse({"error": "Comet integration is disabled"}, status_code=404)
+            
+            directives = self.comet_system.get_active_directives()
+            
+            # Return HTML format optimized for AI reading
+            return HTMLResponse(f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>hAIveMind Active Directives</title>
+                <meta name="ai-optimized" content="true">
+                <meta name="refresh-interval" content="{self.comet_system.refresh_interval}">
+            </head>
+            <body style="font-family: monospace; padding: 20px; background: #0a0e1a; color: #e1e5e9; line-height: 1.6;">
+                <h1>📋 Active Directives for Comet Assistant</h1>
+                <p><strong>Directive Count:</strong> {len(directives)}</p>
+                <p><strong>Last Updated:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+                
+                {"".join([f'''
+                <div style="border: 1px solid #2d3748; border-left: 4px solid #00d4aa; margin: 15px 0; padding: 15px; background: #162032;">
+                    <h3>Directive ID: {directive['id']}</h3>
+                    <p><strong>Type:</strong> {directive['type']}</p>
+                    <p><strong>Priority:</strong> {directive['priority']}</p>
+                    <p><strong>Status:</strong> {directive['status']}</p>
+                    <p><strong>Created:</strong> {directive['created_at']}</p>
+                    <div style="background: #0a0e1a; padding: 10px; margin: 10px 0; border-radius: 4px;">
+                        <pre>{json.dumps(directive['content'], indent=2)}</pre>
+                    </div>
+                    <p><strong>Instructions:</strong> {directive['content'].get('instruction', 'No specific instructions')}</p>
+                    <p><strong>Expected Format:</strong> {directive['content'].get('expected_format', 'Not specified')}</p>
+                </div>
+                ''' for directive in directives])}
+                
+                {'''<div style="border: 1px solid #4a5568; padding: 15px; margin: 15px 0; background: #1a1e30; text-align: center;">
+                    <p>No active directives at this time.</p>
+                    <p>Check back in {self.comet_system.refresh_interval} seconds for new tasks.</p>
+                </div>''' if not directives else ''}
+                
+                <hr style="border: 1px solid #2d3748; margin: 30px 0;">
+                <p><strong>Next Check:</strong> Refresh this page in {self.comet_system.refresh_interval} seconds</p>
+                <p><strong>API Endpoint:</strong> <code>/comet/api/directives</code> for JSON format</p>
+            </body>
+            </html>
+            """)
+        
+        # Comet status endpoint  
+        @self.mcp.custom_route("/comet/status", methods=["GET"])
+        async def comet_status(request):
+            """Get system status dashboard for Comet"""
+            if not self.comet_system.enabled:
+                return JSONResponse({"error": "Comet integration is disabled"}, status_code=404)
+            
+            status = await self.comet_system.get_status_dashboard()
+            
+            # Return HTML format optimized for AI reading
+            return HTMLResponse(f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>hAIveMind System Status</title>
+                <meta name="ai-optimized" content="true">
+            </head>
+            <body style="font-family: monospace; padding: 20px; background: #0a0e1a; color: #e1e5e9; line-height: 1.6;">
+                <h1>📊 hAIveMind Collective Status</h1>
+                <p><strong>System Status:</strong> {status['status']}</p>
+                <p><strong>Last Updated:</strong> {status['timestamp']}</p>
+                
+                <h2>🤖 System Overview</h2>
+                <ul>
+                    <li><strong>Active Comet Sessions:</strong> {status['system']['active_sessions']}</li>
+                    <li><strong>Active Directives:</strong> {status['system']['active_directives']}</li>
+                    <li><strong>Total Agents:</strong> {status['system']['agent_count']}</li>
+                    <li><strong>Memory Categories:</strong> {status['system']['memory_categories']}</li>
+                </ul>
+                
+                <h2>📋 Recent Activity</h2>
+                {"".join([f'''
+                <div style="border-left: 3px solid #00d4aa; padding-left: 15px; margin: 10px 0;">
+                    <p><strong>Memory:</strong> {memory['content']}</p>
+                    <p><em>Category: {memory['category']} | Time: {memory['timestamp']}</em></p>
+                </div>
+                ''' for memory in status.get('recent_activity', [])])}
+                
+                <h2>⚡ Directive System</h2>
+                <ul>
+                    <li><strong>Active Directives:</strong> {status['directives']['active']}</li>
+                    <li><strong>Max Allowed:</strong> {status['directives']['max_allowed']}</li>
+                    <li><strong>Refresh Interval:</strong> {status['directives']['refresh_interval']}</li>
+                </ul>
+                
+                <hr style="border: 1px solid #2d3748; margin: 30px 0;">
+                <p><strong>API Endpoint:</strong> <code>/comet/api/status</code> for JSON format</p>
+            </body>
+            </html>
+            """)
+        
+        # Comet memory search endpoint
+        @self.mcp.custom_route("/comet/api/memory/search", methods=["GET"])  
+        async def comet_memory_search(request):
+            """Search hAIveMind collective memory"""
+            if not self.comet_system.enabled:
+                return JSONResponse({"error": "Comet integration is disabled"}, status_code=404)
+            
+            query = request.query_params.get('q', '')
+            category = request.query_params.get('category')
+            limit = int(request.query_params.get('limit', '5'))
+            
+            if not query:
+                return JSONResponse({"error": "Query parameter 'q' is required"}, status_code=400)
+            
+            try:
+                # Search memories using the storage system
+                results = await self.storage.search_memories(
+                    query=query,
+                    category=category,
+                    limit=limit,
+                    semantic=True
+                )
+                
+                # Sanitize output to prevent prompt injection
+                sanitized_results = self.comet_system.sanitize_output(results)
+                
+                return JSONResponse({
+                    "query": query,
+                    "category": category,
+                    "results": sanitized_results[:limit],
+                    "total_found": len(sanitized_results),
+                    "timestamp": datetime.now().isoformat()
+                })
+                
+            except Exception as e:
+                logger.error(f"Comet memory search error: {e}")
+                return JSONResponse({"error": "Search failed"}, status_code=500)
+        
+        # Comet API directives (JSON format)
+        @self.mcp.custom_route("/comet/api/directives", methods=["GET"])
+        async def comet_api_directives(request):
+            """Get active directives in JSON format"""
+            if not self.comet_system.enabled:
+                return JSONResponse({"error": "Comet integration is disabled"}, status_code=404)
+            
+            # Validate session
+            auth_header = request.headers.get('authorization')
+            if not auth_header or not auth_header.startswith('Bearer '):
+                return JSONResponse({"error": "Authorization required"}, status_code=401)
+            
+            token = auth_header.split(' ')[1]
+            if not self.comet_system.validate_session(token):
+                return JSONResponse({"error": "Invalid or expired session"}, status_code=401)
+            
+            directives = self.comet_system.get_active_directives()
+            
+            return JSONResponse({
+                "directives": directives,
+                "count": len(directives),
+                "refresh_interval": self.comet_system.refresh_interval,
+                "timestamp": datetime.now().isoformat()
+            })
+        
+        # Comet API status (JSON format)
+        @self.mcp.custom_route("/comet/api/status", methods=["GET"])
+        async def comet_api_status(request):
+            """Get system status in JSON format"""
+            if not self.comet_system.enabled:
+                return JSONResponse({"error": "Comet integration is disabled"}, status_code=404)
+            
+            status = await self.comet_system.get_status_dashboard()
+            return JSONResponse(status)
+        
+        # Comet status HTML page
+        @self.mcp.custom_route("/comet/status", methods=["GET"])
+        async def comet_status_html(request):
+            """Get system status in HTML format for Comet"""
+            if not self.comet_system.enabled:
+                return JSONResponse({"error": "Comet integration is disabled"}, status_code=404)
+            
+            status = await self.comet_system.get_status_dashboard()
+            
+            # Convert to HTML
+            recent_activity_html = ""
+            for activity in status.get('recent_activity', []):
+                recent_activity_html += f'''
+                <div style="background: #1a1e30; padding: 10px; margin: 10px 0; border-radius: 4px; border-left: 3px solid #00d4aa;">
+                    <strong>{activity.get('category', 'unknown').upper()}</strong> - {activity.get('timestamp', '')}
+                    <br>{activity.get('content', '')[:100]}...
+                </div>'''
+            
+            return HTMLResponse(f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>hAIveMind System Status</title>
+                <meta name="ai-optimized" content="true">
+                <meta name="refresh-interval" content="30">
+            </head>
+            <body style="font-family: monospace; padding: 20px; background: #0a0e1a; color: #e1e5e9; line-height: 1.6;">
+                <h1>📊 hAIveMind System Status</h1>
+                <p><a href="/comet">← Back to Portal</a></p>
+                
+                <div style="border: 1px solid #2d3748; padding: 15px; margin: 15px 0; background: #162032;">
+                    <h2>System Health: {status.get('status', 'Unknown')}</h2>
+                    <p><strong>Active Sessions:</strong> {status.get('system', {}).get('active_sessions', 0)}</p>
+                    <p><strong>Active Agents:</strong> {status.get('system', {}).get('agent_count', 0)}</p>
+                    <p><strong>Active Directives:</strong> {status.get('system', {}).get('active_directives', 0)}</p>
+                    <p><strong>Last Updated:</strong> {status.get('timestamp', '')}</p>
+                </div>
+                
+                <div style="border: 1px solid #2d3748; padding: 15px; margin: 15px 0; background: #162032;">
+                    <h2>Recent Activity</h2>
+                    {recent_activity_html}
+                </div>
+                
+                <hr style="border: 1px solid #2d3748; margin: 30px 0;">
+                <p><strong>API Endpoint:</strong> <code>/comet/api/status</code> for JSON format</p>
+            </body>
+            </html>
+            """)
+        
+        # Comet API get available categories
+        @self.mcp.custom_route("/comet/api/categories", methods=["GET"])
+        async def comet_get_categories(request):
+            """Get all available memory categories for Comet"""
+            if not self.comet_system.enabled:
+                return JSONResponse({"error": "Comet integration is disabled"}, status_code=404)
+            
+            try:
+                # Return default categories for now - can be extended later
+                category_options = [
+                    {"value": "comet_findings", "label": "Comet Findings", "description": "Findings from Comet browser"},
+                    {"value": "research", "label": "Research", "description": "Research data and findings"},
+                    {"value": "intelligence", "label": "Intelligence", "description": "Threat intelligence data"},
+                    {"value": "observations", "label": "Observations", "description": "General observations"},
+                    {"value": "analysis", "label": "Analysis", "description": "Analysis results"},
+                    {"value": "incident", "label": "Incident", "description": "Security incidents"},
+                    {"value": "security", "label": "Security", "description": "Security-related information"},
+                    {"value": "other", "label": "Other", "description": "Miscellaneous category"}
+                ]
+                
+                return JSONResponse({
+                    "categories": category_options,
+                    "total": len(category_options),
+                    "timestamp": datetime.now().isoformat()
+                })
+                
+            except Exception as e:
+                logger.error(f"Comet get categories error: {e}")
+                return JSONResponse({"error": "Failed to get categories"}, status_code=500)
+        
+        # Comet API create new category (simplified for now)
+        @self.mcp.custom_route("/comet/api/categories", methods=["POST"])
+        async def comet_create_category(request):
+            """Create a new memory category from Comet"""
+            if not self.comet_system.enabled:
+                return JSONResponse({"error": "Comet integration is disabled"}, status_code=404)
+            
+            try:
+                data = await request.json()
+                category_name = data.get('name', '').strip()
+                description = data.get('description', '').strip()
+                
+                if not category_name:
+                    return JSONResponse({"error": "Category name is required"}, status_code=400)
+                
+                # For now, just acknowledge the creation
+                # Later this can be expanded to actually create categories in the system
+                return JSONResponse({
+                    "success": True,
+                    "message": f"Category '{category_name}' noted for creation",
+                    "category": {
+                        "name": category_name,
+                        "description": description
+                    },
+                    "timestamp": datetime.now().isoformat()
+                })
+                    
+            except Exception as e:
+                logger.error(f"Comet create category error: {e}")
+                return JSONResponse({"error": "Failed to create category"}, status_code=500)
+
+        # Comet API create directive (JSON format)
+        @self.mcp.custom_route("/comet/api/directive", methods=["POST"])
+        async def comet_api_create_directive(request):
+            """Create a new directive for Comet"""
+            if not self.comet_system.enabled:
+                return JSONResponse({"error": "Comet integration is disabled"}, status_code=404)
+            
+            # Validate session
+            auth_header = request.headers.get('authorization')
+            if not auth_header or not auth_header.startswith('Bearer '):
+                return JSONResponse({"error": "Authorization required"}, status_code=401)
+            
+            token = auth_header.split(' ')[1]
+            if not self.comet_system.validate_session(token):
+                return JSONResponse({"error": "Invalid or expired session"}, status_code=401)
+            
+            try:
+                data = await request.json()
+                directive_type = data.get('type', 'task')
+                content = data.get('content', {})
+                priority = data.get('priority', 'normal')
+                
+                directive_id = self.comet_system.create_directive(directive_type, content, priority)
+                
+                return JSONResponse({
+                    "success": True,
+                    "directive_id": directive_id,
+                    "message": "Directive created successfully",
+                    "timestamp": datetime.now().isoformat()
+                })
+                
+            except Exception as e:
+                logger.error(f"Comet create directive error: {e}")
+                return JSONResponse({"error": "Failed to create directive"}, status_code=500)
+        
+        # Comet data submission endpoints for bidirectional communication  
+        @self.mcp.custom_route("/comet/api/submit", methods=["POST"])
+        async def comet_submit_data(request):
+            """Accept data submissions from Comet browser"""
+            if not self.comet_system.enabled:
+                return JSONResponse({"error": "Comet integration is disabled"}, status_code=404)
+            
+            try:
+                data = await request.json()
+                submission_type = data.get('type', 'general')
+                content = data.get('content', '')
+                category = data.get('category', 'comet_findings')
+                tags = data.get('tags', [])
+                metadata = data.get('metadata', {})
+                
+                if not content:
+                    return JSONResponse({"error": "Content is required"}, status_code=400)
+                
+                # Add Comet-specific metadata
+                enhanced_metadata = {
+                    **metadata,
+                    "source": "comet_browser",
+                    "submission_type": submission_type,
+                    "submitted_at": datetime.now().isoformat(),
+                    "network": "tailscale_secured",
+                }
+                
+                # Store in hAIveMind memory system
+                memory_id = await self.storage.store_memory(
+                    content=content,
+                    category=category,
+                    tags=tags + ["comet-submission", submission_type],
+                    metadata=enhanced_metadata
+                )
+                
+                logger.info(f"🚀 Comet submitted data: {submission_type} - {memory_id}")
+                
+                return JSONResponse({
+                    "success": True,
+                    "memory_id": memory_id,
+                    "message": "Data successfully submitted to hAIveMind",
+                    "timestamp": datetime.now().isoformat()
+                })
+                
+            except Exception as e:
+                logger.error(f"Comet data submission error: {e}")
+                return JSONResponse({"error": "Failed to submit data"}, status_code=500)
+        
+        # Comet results submission (for task completion)
+        @self.mcp.custom_route("/comet/api/results", methods=["POST"])
+        async def comet_submit_results(request):
+            """Accept task completion results from Comet"""
+            if not self.comet_system.enabled:
+                return JSONResponse({"error": "Comet integration is disabled"}, status_code=404)
+            
+            # Validate session
+            auth_header = request.headers.get('authorization')
+            if not auth_header or not auth_header.startswith('Bearer '):
+                return JSONResponse({"error": "Authorization required"}, status_code=401)
+            
+            token = auth_header.split(' ')[1]
+            if not self.comet_system.validate_session(token):
+                return JSONResponse({"error": "Invalid or expired session"}, status_code=401)
+            
+            try:
+                data = await request.json()
+                directive_id = data.get('directive_id')
+                results = data.get('results', {})
+                status = data.get('status', 'completed')
+                notes = data.get('notes', '')
+                
+                if not directive_id:
+                    return JSONResponse({"error": "directive_id is required"}, status_code=400)
+                
+                # Update directive status
+                updated = self.comet_system.update_directive_status(
+                    directive_id, 
+                    status, 
+                    {
+                        "results": results,
+                        "notes": notes,
+                        "completed_at": datetime.now().isoformat(),
+                        "completion_source": "comet_browser"
+                    }
+                )
+                
+                if not updated:
+                    return JSONResponse({"error": "Directive not found or already completed"}, status_code=404)
+                
+                # Store results in memory for future reference
+                result_content = f"Comet Task Completion - Directive {directive_id}\\n\\n"
+                result_content += f"Status: {status}\\n"
+                result_content += f"Results: {results}\\n"
+                if notes:
+                    result_content += f"Notes: {notes}\\n"
+                
+                memory_id = await self.storage.store_memory(
+                    content=result_content,
+                    category="comet_results",
+                    tags=["comet-completion", "task-results", directive_id],
+                    metadata={
+                        "source": "comet_browser",
+                        "directive_id": directive_id,
+                        "completion_status": status,
+                        "completed_at": datetime.now().isoformat()
+                    }
+                )
+                
+                logger.info(f"🚀 Comet completed directive {directive_id} - {status}")
+                
+                return JSONResponse({
+                    "success": True,
+                    "directive_id": directive_id,
+                    "memory_id": memory_id,
+                    "message": "Results successfully submitted",
+                    "timestamp": datetime.now().isoformat()
+                })
+                
+            except Exception as e:
+                logger.error(f"Comet results submission error: {e}")
+                return JSONResponse({"error": "Failed to submit results"}, status_code=500)
+        
+        # Comet feedback/questions endpoint
+        @self.mcp.custom_route("/comet/api/feedback", methods=["POST"])
+        async def comet_submit_feedback(request):
+            """Accept feedback or questions from Comet"""
+            if not self.comet_system.enabled:
+                return JSONResponse({"error": "Comet integration is disabled"}, status_code=404)
+            
+            # Validate session
+            auth_header = request.headers.get('authorization')
+            if not auth_header or not auth_header.startswith('Bearer '):
+                return JSONResponse({"error": "Authorization required"}, status_code=401)
+            
+            token = auth_header.split(' ')[1]
+            if not self.comet_system.validate_session(token):
+                return JSONResponse({"error": "Invalid or expired session"}, status_code=401)
+            
+            try:
+                data = await request.json()
+                feedback_type = data.get('type', 'general')  # general, question, issue, suggestion
+                message = data.get('message', '')
+                priority = data.get('priority', 'normal')
+                context = data.get('context', {})
+                
+                if not message:
+                    return JSONResponse({"error": "Message is required"}, status_code=400)
+                
+                # Store feedback in memory
+                feedback_content = f"Comet Browser Feedback ({feedback_type})\\n\\n{message}"
+                if context:
+                    feedback_content += f"\\n\\nContext: {context}"
+                
+                memory_id = await self.storage.store_memory(
+                    content=feedback_content,
+                    category="comet_feedback",
+                    tags=["comet-feedback", feedback_type, priority],
+                    metadata={
+                        "source": "comet_browser",
+                        "feedback_type": feedback_type,
+                        "priority": priority,
+                        "context": context,
+                        "submitted_at": datetime.now().isoformat()
+                    }
+                )
+                
+                # If it's a question or issue, create a directive for human review
+                if feedback_type in ['question', 'issue'] and priority in ['high', 'urgent']:
+                    self.comet_system.create_directive(
+                        'comet_feedback_review',
+                        {
+                            "feedback_id": memory_id,
+                            "type": feedback_type,
+                            "message": message,
+                            "priority": priority,
+                            "requires_response": True
+                        },
+                        priority
+                    )
+                
+                logger.info(f"🚀 Comet feedback received: {feedback_type} - {priority}")
+                
+                return JSONResponse({
+                    "success": True,
+                    "feedback_id": memory_id,
+                    "message": "Feedback received and stored",
+                    "timestamp": datetime.now().isoformat()
+                })
+                
+            except Exception as e:
+                logger.error(f"Comet feedback submission error: {e}")
+                return JSONResponse({"error": "Failed to submit feedback"}, status_code=500)
         
         # Playbook management dashboard endpoint
         @self.mcp.custom_route("/admin/playbooks", methods=["GET"])

@@ -425,6 +425,44 @@
       "key_file": "/etc/ssl/private/haivemind.key"
     }
   },
+  "comet": {
+    "enabled": true,
+    "authentication": {
+      "password": "R3dca070111-001",
+      "session_timeout_hours": 24,
+      "auto_logout": true
+    },
+    "directives": {
+      "enabled": true,
+      "refresh_interval_seconds": 30,
+      "max_active_directives": 10,
+      "priority_levels": ["low", "normal", "high", "urgent"]
+    },
+    "api": {
+      "enabled": true,
+      "rate_limit_per_minute": 60,
+      "max_response_size_kb": 1024
+    },
+    "ui": {
+      "theme": "dark",
+      "minimal_mode": true,
+      "hide_complex_features": true,
+      "ai_optimized": true
+    },
+    "security": {
+      "sanitize_output": true,
+      "prevent_prompt_injection": true,
+      "audit_all_requests": true,
+      "ip_restriction": false
+    },
+    "features": {
+      "memory_search": true,
+      "agent_status": true,
+      "command_execution": false,
+      "report_generation": true,
+      "workflow_triggers": true
+    }
+  },
   "confluence": {
     "server_url": "https://updated.atlassian.net",
     "username": "updated@example.com",
