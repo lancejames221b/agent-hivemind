@@ -228,7 +228,7 @@ class HTTPMCPServer:
         
         # Start the stdio MCP server process
         process = await asyncio.create_subprocess_exec(
-            "python3", "/home/lj/memory-mcp/src/memory_server.py",
+            "python3", "/home/lj/haivemind-mcp-server/src/memory_server.py",
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE

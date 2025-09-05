@@ -3935,7 +3935,7 @@ def main():
 ╰─────────────────────────────────────────────────────────────╯
     """)
     
-    config_path = "/home/lj/memory-mcp/config/config.json"
+    config_path = "/home/lj/haivemind-mcp-server/config/config.json"
     if len(sys.argv) > 1:
         config_path = sys.argv[1]
     
