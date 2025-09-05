@@ -454,7 +454,7 @@ async def startup_event():
     """Initialize service on startup"""
     global config, sync_service, rules_sync_service
     
-    config_path = "/home/lj/memory-mcp/config/config.json"
+    config_path = "/home/lj/haivemind-mcp-server/config/config.json"
     with open(config_path, 'r') as f:
         config = json.load(f)
     
@@ -568,7 +568,7 @@ async def websocket_endpoint(websocket: WebSocket, machine_id: str):
 
 def main():
     """Run the sync service"""
-    config_path = "/home/lj/memory-mcp/config/config.json"
+    config_path = "/home/lj/haivemind-mcp-server/config/config.json"
     
     # Load config
     with open(config_path, 'r') as f:

@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 try:
     from mcp.server.fastmcp import FastMCP
     from mcp.types import TextContent
+    from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse
 except ImportError:
     print("Error: MCP package not found. Install with: pip install mcp")
     sys.exit(1)
@@ -9078,778 +9079,13 @@ server {
         # Comet main portal
         @self.mcp.custom_route("/comet", methods=["GET"])
         async def comet_portal(request):
-            """Serve the main Comet browser portal page"""
+            """Redirect to AI-optimized interface"""
             if not self.comet_system.enabled:
                 return JSONResponse({"error": "Comet integration is disabled"}, status_code=404)
             
-            return HTMLResponse("""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>hAIveMind Comet Portal</title>
-                <meta charset="utf-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1">
-                <style>
-                    body { 
-                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                        margin: 0; 
-                        padding: 20px; 
-                        background: #0a0e1a; 
-                        color: #e1e5e9;
-                        line-height: 1.4;
-                    }
-                    .container { max-width: 800px; margin: 0 auto; }
-                    .header { text-align: center; margin-bottom: 30px; }
-                    .title { color: #00d4aa; font-size: 2.2em; margin: 0; }
-                    .subtitle { color: #8892b0; margin: 5px 0 0 0; }
-                    .auth-card { 
-                        background: #162032; 
-                        border: 1px solid #2d3748; 
-                        border-radius: 8px; 
-                        padding: 30px; 
-                        margin: 20px 0;
-                    }
-                    .form-group { margin-bottom: 20px; }
-                    label { display: block; margin-bottom: 5px; color: #8892b0; }
-                    input, select, textarea { 
-                        width: 100%; 
-                        padding: 12px; 
-                        border: 1px solid #4a5568; 
-                        border-radius: 4px; 
-                        background: #2d3748; 
-                        color: #e1e5e9;
-                        font-size: 16px;
-                        font-family: inherit;
-                        box-sizing: border-box;
-                    }
-                    select {
-                        min-height: 44px;
-                    }
-                    textarea {
-                        min-height: 120px;
-                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                        line-height: 1.5;
-                    }
-                    input:focus { outline: none; border-color: #00d4aa; }
-                    .btn { 
-                        background: #00d4aa; 
-                        color: #0a0e1a; 
-                        border: none; 
-                        padding: 12px 24px; 
-                        border-radius: 4px; 
-                        cursor: pointer; 
-                        font-weight: 500;
-                        font-size: 16px;
-                        width: 100%;
-                    }
-                    .btn:hover { background: #00b894; }
-                    .hidden { display: none; }
-                    .status { margin: 15px 0; padding: 10px; border-radius: 4px; }
-                    .status.success { background: #1a4d3a; border: 1px solid #00d4aa; }
-                    .status.error { background: #4a1a1a; border: 1px solid #e53e3e; }
-                    .directives { margin: 20px 0; }
-                    .directive { 
-                        background: #1a1e30; 
-                        border: 1px solid #2d3748; 
-                        border-left: 4px solid #00d4aa;
-                        border-radius: 4px; 
-                        padding: 15px; 
-                        margin: 10px 0;
-                    }
-                    .directive-meta { color: #8892b0; font-size: 0.9em; margin-bottom: 8px; }
-                    .directive-content { color: #e1e5e9; }
-                    .nav-links { text-align: center; margin: 20px 0; }
-                    .nav-links a { 
-                        color: #00d4aa; 
-                        text-decoration: none; 
-                        margin: 0 15px;
-                        padding: 8px 16px;
-                        border: 1px solid #2d3748;
-                        border-radius: 4px;
-                        display: inline-block;
-                    }
-                    .nav-links a:hover { background: #162032; }
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <div class="header">
-                        <h1 class="title">🚀 hAIveMind Comet Portal</h1>
-                        <p class="subtitle">AI-optimized interface for Comet Browser</p>
-                    </div>
-                    
-                    <div id="authCard" class="auth-card hidden">
-                        <h2>Authentication Required</h2>
-                        <p>Enter the authentication password to access hAIveMind directives.</p>
-                        <form id="authForm">
-                            <div class="form-group">
-                                <label for="password">Password</label>
-                                <input type="password" id="password" name="password" required autocomplete="current-password">
-                            </div>
-                            <button type="submit" class="btn">Authenticate</button>
-                        </form>
-                        <div id="status" class="status hidden"></div>
-                    </div>
-                    
-                    <div id="mainPortal">
-                        <div class="nav-links">
-                            <a href="/comet/directives">📋 Active Directives</a>
-                            <a href="/comet/status">📊 System Status</a>
-                            <a href="#" onclick="showMemorySearch()">🔍 Memory Search</a>
-                            <a href="#" onclick="showTicketComments()">💬 Ticket Comments</a>
-                            <a href="#" onclick="toggleDataSubmission()">📤 Submit Data</a>
-                            <a href="#" onclick="toggleDirectiveCreation()">📝 Create Directive</a>
-                        </div>
-                        
-                        <div id="dataSubmissionForm" class="auth-card hidden">
-                            <h2>📤 Submit Data to hAIveMind</h2>
-                            <p>Submit research findings, observations, or any data to the collective intelligence system.</p>
-                            
-                            <form id="submitDataForm">
-                                <div class="form-group">
-                                    <label for="submitContent">Content *</label>
-                                    <textarea id="submitContent" name="content" rows="4" placeholder="Enter the data, findings, or information to submit..." required style="resize: vertical; min-height: 100px;"></textarea>
-                                </div>
-                                
-                                <div class="form-group">
-                                    <label for="submitCategory">Category</label>
-                                    <select id="submitCategory" name="category">
-                                        <option value="comet_findings">Comet Findings</option>
-                                        <option value="research">Research</option>
-                                        <option value="intelligence">Intelligence</option>
-                                        <option value="observations">Observations</option>
-                                        <option value="analysis">Analysis</option>
-                                        <option value="incident">Incident</option>
-                                        <option value="security">Security</option>
-                                        <option value="other">Other</option>
-                                    </select>
-                                    <button type="button" onclick="toggleCreateCategory()" style="margin-top: 5px; padding: 5px 10px; font-size: 12px; background: #4a5568; border: 1px solid #2d3748;">+ New Category</button>
-                                </div>
-                                
-                                <div id="createCategoryForm" class="form-group hidden">
-                                    <label for="newCategoryName">New Category Name</label>
-                                    <input type="text" id="newCategoryName" placeholder="Enter new category name...">
-                                    <label for="newCategoryDesc" style="margin-top: 10px;">Description (optional)</label>
-                                    <input type="text" id="newCategoryDesc" placeholder="Brief description of this category...">
-                                    <div style="margin-top: 10px;">
-                                        <button type="button" onclick="createNewCategory()" class="btn" style="width: auto; margin-right: 10px;">Create</button>
-                                        <button type="button" onclick="toggleCreateCategory()" style="background: #4a5568; border: 1px solid #2d3748; padding: 8px 16px; border-radius: 4px;">Cancel</button>
-                                    </div>
-                                </div>
-                                
-                                <div class="form-group">
-                                    <label for="submitType">Type</label>
-                                    <select id="submitType" name="type">
-                                        <option value="general">General</option>
-                                        <option value="urgent">Urgent</option>
-                                        <option value="investigation">Investigation</option>
-                                        <option value="evidence">Evidence</option>
-                                        <option value="analysis">Analysis</option>
-                                        <option value="report">Report</option>
-                                    </select>
-                                </div>
-                                
-                                <div class="form-group">
-                                    <label for="submitTags">Tags (comma-separated)</label>
-                                    <input type="text" id="submitTags" name="tags" placeholder="threat-intel, social-media, discord, telegram...">
-                                </div>
-                                
-                                <div class="form-group">
-                                    <label for="submitMetadata">Additional Context (JSON format, optional)</label>
-                                    <textarea id="submitMetadata" name="metadata" rows="2" placeholder='{"source_url": "https://example.com", "confidence": "high"}'></textarea>
-                                </div>
-                                
-                                <button type="submit" class="btn">Submit to hAIveMind</button>
-                            </form>
-                            
-                            <div id="submitStatus" class="status hidden"></div>
-                        </div>
-                        
-                        <div id="directiveCreationForm" class="auth-card hidden">
-                            <h2>📝 Create Directive for Agents</h2>
-                            <p>Create tasks or directives for other agents in the hAIveMind network to execute.</p>
-                            
-                            <form id="createDirectiveForm">
-                                <div class="form-group">
-                                    <label for="directiveTitle">Directive Title *</label>
-                                    <input type="text" id="directiveTitle" name="title" placeholder="Brief, clear title for the directive..." required>
-                                </div>
-                                
-                                <div class="form-group">
-                                    <label for="directiveContent">Directive Content *</label>
-                                    <textarea id="directiveContent" name="content" rows="6" placeholder="Detailed instructions, requirements, and context for the task..." required></textarea>
-                                </div>
-                                
-                                <div class="form-group">
-                                    <label for="directivePriority">Priority Level</label>
-                                    <select id="directivePriority" name="priority">
-                                        <option value="low">Low - Non-urgent, background task</option>
-                                        <option value="normal" selected>Normal - Standard priority</option>
-                                        <option value="high">High - Important, time-sensitive</option>
-                                        <option value="urgent">Urgent - Critical, immediate attention</option>
-                                    </select>
-                                </div>
-                                
-                                <div class="form-group">
-                                    <label for="directiveType">Directive Type</label>
-                                    <select id="directiveType" name="type">
-                                        <option value="task">Task - General work assignment</option>
-                                        <option value="investigation">Investigation - Research or analysis</option>
-                                        <option value="monitoring">Monitoring - Watch for specific events</option>
-                                        <option value="analysis">Analysis - Data processing or interpretation</option>
-                                        <option value="deployment">Deployment - System or configuration changes</option>
-                                        <option value="incident_response">Incident Response - Handle security/operational issues</option>
-                                    </select>
-                                </div>
-                                
-                                <div class="form-group">
-                                    <label for="directiveDeadline">Deadline (optional)</label>
-                                    <input type="datetime-local" id="directiveDeadline" name="deadline">
-                                </div>
-                                
-                                <div class="form-group">
-                                    <label for="directiveTags">Tags (comma-separated)</label>
-                                    <input type="text" id="directiveTags" name="tags" placeholder="automation, security, urgent, elasticsearch...">
-                                </div>
-                                
-                                <div class="form-group">
-                                    <label for="directiveRequirements">Required Capabilities (optional)</label>
-                                    <input type="text" id="directiveRequirements" name="requirements" placeholder="elasticsearch_ops, database_management, docker...">
-                                </div>
-                                
-                                <button type="submit" class="btn">Create Directive</button>
-                            </form>
-                            
-                            <div id="directiveStatus" class="status hidden"></div>
-                        </div>
-                        
-                        <div class="auth-card">
-                            <h2>🤖 Comet Assistant Instructions</h2>
-                            <p>You are now connected to the hAIveMind collective intelligence system. Here are your current capabilities:</p>
-                            
-                            <div class="directives" id="quickDirectives">
-                                <div class="directive">
-                                    <div class="directive-meta">Quick Access • Priority: High</div>
-                                    <div class="directive-content">
-                                        <strong>Memory Search:</strong> You can search the collective memory by navigating to <code>/comet/api/memory/search?q=your_query</code>
-                                    </div>
-                                </div>
-                                
-                                <div class="directive">
-                                    <div class="directive-meta">System Status • Priority: Normal</div>
-                                    <div class="directive-content">
-                                        <strong>Agent Status:</strong> Check active agents at <code>/comet/status</code> for current collective health
-                                    </div>
-                                </div>
-                                
-                                <div class="directive">
-                                    <div class="directive-meta">Dynamic Directives • Priority: Normal</div>
-                                    <div class="directive-content">
-                                        <strong>Active Tasks:</strong> Visit <code>/comet/directives</code> for dynamic tasks assigned to you
-                                    </div>
-                                </div>
-                                
-                                <div class="directive">
-                                    <div class="directive-meta">Data Submission • Priority: Normal</div>
-                                    <div class="directive-content">
-                                        <strong>Submit Findings:</strong> Use the "Submit Data" form above to contribute research findings to the collective
-                                    </div>
-                                </div>
-                                
-                                <div class="directive">
-                                    <div class="directive-meta">Directive Creation • Priority: Normal</div>
-                                    <div class="directive-content">
-                                        <strong>Create Tasks:</strong> Use "Create Directive" to assign tasks to other agents in the network
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <p><strong>Usage:</strong> Navigate to any of the above URLs to access hAIveMind functionality. The system will provide structured data optimized for AI processing.</p>
-                        </div>
-                    </div>
-                </div>
-                
-                <script>
-                // No authentication required - secured by Tailscale network
-                
-                function showMemorySearch() {
-                    // Create a simple search interface instead of redirect
-                    const searchForm = document.createElement('div');
-                    searchForm.innerHTML = `
-                        <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; display: flex; justify-content: center; align-items: center;">
-                            <div style="background: #162032; padding: 30px; border-radius: 8px; border: 1px solid #2d3748; width: 500px; max-width: 90vw;">
-                                <h3 style="margin: 0 0 20px 0; color: #00d4aa;">🔍 Memory Search</h3>
-                                <input type="text" id="searchQuery" placeholder="Enter search terms..." style="width: 100%; padding: 12px; border: 1px solid #4a5568; border-radius: 4px; background: #2d3748; color: #e1e5e9; font-size: 16px; margin-bottom: 15px;">
-                                <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-                                    <select id="searchCategory" style="flex: 1; padding: 8px; border: 1px solid #4a5568; border-radius: 4px; background: #2d3748; color: #e1e5e9;">
-                                        <option value="">All Categories</option>
-                                        <option value="comet_findings">Comet Findings</option>
-                                        <option value="research">Research</option>
-                                        <option value="intelligence">Intelligence</option>
-                                    </select>
-                                    <select id="searchLimit" style="flex: 1; padding: 8px; border: 1px solid #4a5568; border-radius: 4px; background: #2d3748; color: #e1e5e9;">
-                                        <option value="5">5 results</option>
-                                        <option value="10">10 results</option>
-                                        <option value="20">20 results</option>
-                                    </select>
-                                </div>
-                                <div style="display: flex; gap: 10px; justify-content: flex-end;">
-                                    <button onclick="performSearch()" style="background: #00d4aa; color: #0a0e1a; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">Search</button>
-                                    <button onclick="closeSearchModal()" style="background: #4a5568; color: #e1e5e9; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">Cancel</button>
-                                </div>
-                                <div id="searchResults" style="margin-top: 20px; max-height: 300px; overflow-y: auto;"></div>
-                            </div>
-                        </div>
-                    `;
-                    document.body.appendChild(searchForm);
-                    document.getElementById('searchQuery').focus();
-                }
-                
-                function closeSearchModal() {
-                    const modal = document.querySelector('[style*="position: fixed"]');
-                    if (modal) {
-                        modal.remove();
-                    }
-                }
-                
-                async function performSearch() {
-                    const query = document.getElementById('searchQuery').value.trim();
-                    const category = document.getElementById('searchCategory').value;
-                    const limit = document.getElementById('searchLimit').value;
-                    const resultsDiv = document.getElementById('searchResults');
-                    
-                    if (!query) {
-                        resultsDiv.innerHTML = '<p style="color: #e53e3e;">Please enter search terms</p>';
-                        return;
-                    }
-                    
-                    resultsDiv.innerHTML = '<p style="color: #8892b0;">Searching...</p>';
-                    
-                    try {
-                        let url = `/comet/api/memory/search?q=${encodeURIComponent(query)}&limit=${limit}`;
-                        if (category) {
-                            url += `&category=${encodeURIComponent(category)}`;
-                        }
-                        
-                        const response = await fetch(url);
-                        const data = await response.json();
-                        
-                        if (data.results && data.results.length > 0) {
-                            let html = `<h4 style="color: #00d4aa; margin: 0 0 10px 0;">Found ${data.total_found} results</h4>`;
-                            data.results.forEach(result => {
-                                html += `
-                                    <div style="background: #1a1e30; padding: 10px; margin: 5px 0; border-radius: 4px; border-left: 3px solid #00d4aa;">
-                                        <small style="color: #8892b0;">${result.category || 'Unknown'} • ${result.timestamp || ''}</small>
-                                        <p style="margin: 5px 0; color: #e1e5e9;">${result.content ? result.content.substring(0, 200) + '...' : 'No content'}</p>
-                                        ${result.tags && result.tags.length > 0 ? `<div style="font-size: 11px; color: #4a5568;">Tags: ${result.tags.join(', ')}</div>` : ''}
-                                    </div>
-                                `;
-                            });
-                            resultsDiv.innerHTML = html;
-                        } else {
-                            resultsDiv.innerHTML = '<p style="color: #8892b0;">No results found</p>';
-                        }
-                    } catch (error) {
-                        resultsDiv.innerHTML = `<p style="color: #e53e3e;">Search error: ${error.message}</p>`;
-                    }
-                }
-                
-                // Allow Enter key to search
-                document.addEventListener('keydown', (e) => {
-                    if (e.key === 'Enter' && document.getElementById('searchQuery')) {
-                        performSearch();
-                    }
-                });
-                
-                function showTicketComments() {
-                    // Create ticket comment viewer interface
-                    const commentForm = document.createElement('div');
-                    commentForm.innerHTML = `
-                        <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; display: flex; justify-content: center; align-items: center; overflow-y: auto;">
-                            <div style="background: #162032; padding: 30px; border-radius: 8px; border: 1px solid #2d3748; width: 800px; max-width: 90vw; max-height: 80vh; overflow-y: auto; margin: 20px;">
-                                <h3 style="margin: 0 0 20px 0; color: #00d4aa;">💬 Ticket Comments Viewer</h3>
-                                
-                                <div style="margin-bottom: 20px;">
-                                    <input type="text" id="ticketIdInput" placeholder="Enter Ticket ID..." style="width: 70%; padding: 12px; border: 1px solid #4a5568; border-radius: 4px; background: #2d3748; color: #e1e5e9; font-size: 16px; margin-right: 10px;">
-                                    <button onclick="loadTicketComments()" style="padding: 12px 20px; background: #00d4aa; color: #0a0e1a; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Load Comments</button>
-                                </div>
-                                
-                                <div id="ticketCommentsResults" style="border: 1px solid #4a5568; border-radius: 4px; background: #1a1e30; padding: 15px; min-height: 200px; color: #e1e5e9;">
-                                    <p style="color: #8892b0; text-align: center;">Enter a ticket ID above to view comments with memory context</p>
-                                </div>
-                                
-                                <div style="margin-top: 20px; text-align: right;">
-                                    <button onclick="this.parentElement.parentElement.parentElement.remove()" style="padding: 8px 16px; background: #4a5568; color: #e1e5e9; border: none; border-radius: 4px; cursor: pointer;">Close</button>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                    
-                    document.body.appendChild(commentForm);
-                    
-                    // Focus on ticket ID input
-                    setTimeout(() => {
-                        document.getElementById('ticketIdInput').focus();
-                    }, 100);
-                    
-                    // Allow Enter key to load comments
-                    document.getElementById('ticketIdInput').addEventListener('keydown', (e) => {
-                        if (e.key === 'Enter') {
-                            loadTicketComments();
-                        }
-                    });
-                }
-                
-                async function loadTicketComments() {
-                    const ticketId = document.getElementById('ticketIdInput').value.trim();
-                    const resultsDiv = document.getElementById('ticketCommentsResults');
-                    
-                    if (!ticketId) {
-                        resultsDiv.innerHTML = '<p style="color: #e53e3e;">Please enter a ticket ID</p>';
-                        return;
-                    }
-                    
-                    resultsDiv.innerHTML = '<p style="color: #8892b0;">Loading comments...</p>';
-                    
-                    try {
-                        const response = await fetch(`/comet/api/tickets/${ticketId}/comments`);
-                        const data = await response.json();
-                        
-                        if (data.success && data.comments && data.comments.length > 0) {
-                            let html = `
-                                <div style="border-bottom: 1px solid #4a5568; padding-bottom: 15px; margin-bottom: 15px;">
-                                    <h4 style="margin: 0; color: #00d4aa;">📋 Ticket ${ticketId} Comments (${data.total_comments})</h4>
-                                </div>
-                            `;
-                            
-                            data.comments.forEach((comment, index) => {
-                                html += `
-                                    <div style="border: 1px solid #4a5568; border-radius: 6px; margin-bottom: 15px; padding: 15px; background: #0f1319;">
-                                        <div style="display: flex; justify-content: between; align-items: center; margin-bottom: 10px;">
-                                            <h5 style="margin: 0; color: #00d4aa;">Comment #${index + 1}</h5>
-                                            <span style="font-size: 12px; color: #8892b0;">${comment.created_at || 'Unknown time'}</span>
-                                        </div>
-                                        
-                                        <div style="margin-bottom: 10px;">
-                                            <strong style="color: #e1e5e9;">💬 Comment:</strong> ${comment.comment || 'No content'}
-                                        </div>
-                                        
-                                        <div style="margin-bottom: 10px;">
-                                            <strong style="color: #e1e5e9;">👤 Author:</strong> ${comment.author || 'Unknown'}
-                                        </div>
-                                        
-                                        <div style="background: #2d3748; padding: 10px; border-radius: 4px; margin-bottom: 10px;">
-                                            <div style="font-size: 12px; color: #8892b0; margin-bottom: 5px;"><strong>🧠 Memory Context:</strong></div>
-                                            <div style="font-size: 12px; color: #e1e5e9;"><strong>Memory ID:</strong> <code style="background: #4a5568; padding: 2px 6px; border-radius: 3px;">${comment.memory_id || 'N/A'}</code></div>
-                                            <div style="font-size: 12px; color: #e1e5e9;"><strong>Comment ID:</strong> <code style="background: #4a5568; padding: 2px 6px; border-radius: 3px;">${comment.comment_id || 'N/A'}</code></div>
-                                            ${comment.memory_id ? `<button onclick="viewMemoryDetails('${comment.memory_id}')" style="margin-top: 5px; padding: 4px 8px; background: #00d4aa; color: #0a0e1a; border: none; border-radius: 3px; cursor: pointer; font-size: 11px;">View Memory</button>` : ''}
-                                        </div>
-                                    </div>
-                                `;
-                            });
-                            
-                            resultsDiv.innerHTML = html;
-                        } else if (data.success && (!data.comments || data.comments.length === 0)) {
-                            resultsDiv.innerHTML = `<p style="color: #8892b0; text-align: center;">No comments found for ticket ${ticketId}</p>`;
-                        } else {
-                            resultsDiv.innerHTML = `<p style="color: #e53e3e;">Error: ${data.error || 'Failed to load comments'}</p>`;
-                        }
-                    } catch (error) {
-                        resultsDiv.innerHTML = `<p style="color: #e53e3e;">Error loading comments: ${error.message}</p>`;
-                    }
-                }
-                
-                async function viewMemoryDetails(memoryId) {
-                    try {
-                        const response = await fetch(`/comet/api/memory/${memoryId}`);
-                        const data = await response.json();
-                        
-                        if (data.success && data.memory) {
-                            const memory = data.memory;
-                            const detailsForm = document.createElement('div');
-                            detailsForm.innerHTML = `
-                                <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 1001; display: flex; justify-content: center; align-items: center; overflow-y: auto;">
-                                    <div style="background: #162032; padding: 30px; border-radius: 8px; border: 1px solid #2d3748; width: 700px; max-width: 90vw; max-height: 80vh; overflow-y: auto; margin: 20px;">
-                                        <h3 style="margin: 0 0 20px 0; color: #00d4aa;">🧠 Memory Details</h3>
-                                        
-                                        <div style="background: #1a1e30; padding: 15px; border-radius: 6px; margin-bottom: 15px;">
-                                            <div style="margin-bottom: 10px;"><strong style="color: #e1e5e9;">Memory ID:</strong> <code style="background: #4a5568; padding: 2px 6px; border-radius: 3px;">${memory.id}</code></div>
-                                            <div style="margin-bottom: 10px;"><strong style="color: #e1e5e9;">Category:</strong> ${memory.category || 'N/A'}</div>
-                                            <div style="margin-bottom: 10px;"><strong style="color: #e1e5e9;">Created:</strong> ${memory.created_at || 'N/A'}</div>
-                                            <div style="margin-bottom: 10px;"><strong style="color: #e1e5e9;">Machine:</strong> ${memory.machine_id || 'N/A'}</div>
-                                        </div>
-                                        
-                                        <div style="background: #1a1e30; padding: 15px; border-radius: 6px; margin-bottom: 15px;">
-                                            <div style="margin-bottom: 10px;"><strong style="color: #e1e5e9;">Content:</strong></div>
-                                            <div style="background: #2d3748; padding: 10px; border-radius: 4px; color: #e1e5e9; white-space: pre-wrap;">${memory.content || 'No content'}</div>
-                                        </div>
-                                        
-                                        ${memory.context ? `
-                                        <div style="background: #1a1e30; padding: 15px; border-radius: 6px; margin-bottom: 15px;">
-                                            <div style="margin-bottom: 10px;"><strong style="color: #e1e5e9;">Context:</strong></div>
-                                            <div style="background: #2d3748; padding: 10px; border-radius: 4px; color: #e1e5e9; white-space: pre-wrap; font-family: monospace; font-size: 12px;">${memory.context}</div>
-                                        </div>
-                                        ` : ''}
-                                        
-                                        <div style="text-align: right;">
-                                            <button onclick="this.parentElement.parentElement.parentElement.remove()" style="padding: 8px 16px; background: #4a5568; color: #e1e5e9; border: none; border-radius: 4px; cursor: pointer;">Close</button>
-                                        </div>
-                                    </div>
-                                </div>
-                            `;
-                            
-                            document.body.appendChild(detailsForm);
-                        } else {
-                            alert('Failed to load memory details: ' + (data.error || 'Unknown error'));
-                        }
-                    } catch (error) {
-                        alert('Error loading memory details: ' + error.message);
-                    }
-                }
-                
-                function toggleDataSubmission() {
-                    const form = document.getElementById('dataSubmissionForm');
-                    if (form.classList.contains('hidden')) {
-                        form.classList.remove('hidden');
-                    } else {
-                        form.classList.add('hidden');
-                    }
-                }
-                
-                document.getElementById('submitDataForm').addEventListener('submit', async (e) => {
-                    e.preventDefault();
-                    
-                    const content = document.getElementById('submitContent').value;
-                    const category = document.getElementById('submitCategory').value;
-                    const type = document.getElementById('submitType').value;
-                    const tags = document.getElementById('submitTags').value;
-                    const metadataText = document.getElementById('submitMetadata').value;
-                    
-                    let metadata = {
-                        submitted_via: 'comet_portal',
-                        user_agent: navigator.userAgent
-                    };
-                    
-                    // Parse additional metadata if provided
-                    if (metadataText.trim()) {
-                        try {
-                            const additionalMetadata = JSON.parse(metadataText);
-                            metadata = { ...metadata, ...additionalMetadata };
-                        } catch (error) {
-                            showSubmitStatus('Invalid JSON in metadata field', 'error');
-                            return;
-                        }
-                    }
-                    
-                    const payload = {
-                        content: content,
-                        category: category,
-                        type: type,
-                        tags: tags ? tags.split(',').map(t => t.trim()).filter(t => t) : [],
-                        metadata: metadata
-                    };
-                    
-                    try {
-                        const response = await fetch('/comet/api/submit', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify(payload)
-                        });
-                        
-                        const data = await response.json();
-                        
-                        if (data.success) {
-                            showSubmitStatus(`Data submitted successfully! Memory ID: ${data.memory_id}`, 'success');
-                            document.getElementById('submitDataForm').reset();
-                        } else {
-                            showSubmitStatus(data.error || 'Submission failed', 'error');
-                        }
-                    } catch (error) {
-                        showSubmitStatus('Submission error: ' + error.message, 'error');
-                    }
-                });
-                
-                function showSubmitStatus(message, type) {
-                    const status = document.getElementById('submitStatus');
-                    status.textContent = message;
-                    status.className = 'status ' + type;
-                    status.classList.remove('hidden');
-                    
-                    setTimeout(() => {
-                        status.classList.add('hidden');
-                    }, 5000);
-                }
-                
-                // Load categories when page loads
-                window.addEventListener('DOMContentLoaded', () => {
-                    loadCategories();
-                });
-                
-                async function loadCategories() {
-                    try {
-                        const response = await fetch('/comet/api/categories');
-                        const data = await response.json();
-                        
-                        if (data.categories) {
-                            const select = document.getElementById('submitCategory');
-                            // Clear existing options except defaults
-                            select.innerHTML = `
-                                <option value="comet_findings">Comet Findings</option>
-                                <option value="research">Research</option>
-                                <option value="intelligence">Intelligence</option>
-                                <option value="observations">Observations</option>
-                                <option value="analysis">Analysis</option>
-                                <option value="incident">Incident</option>
-                                <option value="security">Security</option>
-                                <option value="other">Other</option>
-                            `;
-                            
-                            // Add custom categories
-                            data.categories.forEach(cat => {
-                                if (!['comet_findings', 'research', 'intelligence', 'observations', 'analysis', 'incident', 'security', 'other'].includes(cat.value)) {
-                                    const option = document.createElement('option');
-                                    option.value = cat.value;
-                                    option.textContent = cat.label;
-                                    if (cat.description) {
-                                        option.title = cat.description;
-                                    }
-                                    select.appendChild(option);
-                                }
-                            });
-                        }
-                    } catch (error) {
-                        console.log('Could not load categories:', error.message);
-                    }
-                }
-                
-                function toggleCreateCategory() {
-                    const form = document.getElementById('createCategoryForm');
-                    if (form.classList.contains('hidden')) {
-                        form.classList.remove('hidden');
-                    } else {
-                        form.classList.add('hidden');
-                        // Clear form
-                        document.getElementById('newCategoryName').value = '';
-                        document.getElementById('newCategoryDesc').value = '';
-                    }
-                }
-                
-                async function createNewCategory() {
-                    const name = document.getElementById('newCategoryName').value.trim();
-                    const description = document.getElementById('newCategoryDesc').value.trim();
-                    
-                    if (!name) {
-                        showSubmitStatus('Category name is required', 'error');
-                        return;
-                    }
-                    
-                    try {
-                        const response = await fetch('/comet/api/categories', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({
-                                name: name,
-                                description: description
-                            })
-                        });
-                        
-                        const data = await response.json();
-                        
-                        if (data.success) {
-                            showSubmitStatus(`Category "${name}" created successfully!`, 'success');
-                            toggleCreateCategory(); // Hide form
-                            await loadCategories(); // Reload categories
-                            
-                            // Select the new category
-                            document.getElementById('submitCategory').value = name;
-                        } else {
-                            showSubmitStatus(data.error || 'Failed to create category', 'error');
-                        }
-                    } catch (error) {
-                        showSubmitStatus('Error creating category: ' + error.message, 'error');
-                    }
-                }
-                
-                function toggleDirectiveCreation() {
-                    const form = document.getElementById('directiveCreationForm');
-                    if (form.classList.contains('hidden')) {
-                        form.classList.remove('hidden');
-                    } else {
-                        form.classList.add('hidden');
-                    }
-                }
-                
-                document.getElementById('createDirectiveForm').addEventListener('submit', async (e) => {
-                    e.preventDefault();
-                    
-                    const title = document.getElementById('directiveTitle').value.trim();
-                    const content = document.getElementById('directiveContent').value.trim();
-                    const priority = document.getElementById('directivePriority').value;
-                    const type = document.getElementById('directiveType').value;
-                    const deadline = document.getElementById('directiveDeadline').value;
-                    const tags = document.getElementById('directiveTags').value.trim();
-                    const requirements = document.getElementById('directiveRequirements').value.trim();
-                    
-                    if (!title || !content) {
-                        showDirectiveStatus('Title and content are required', 'error');
-                        return;
-                    }
-                    
-                    const payload = {
-                        title: title,
-                        content: content,
-                        priority: priority,
-                        type: type,
-                        deadline: deadline || null,
-                        tags: tags ? tags.split(',').map(t => t.trim()).filter(t => t) : [],
-                        required_capabilities: requirements ? requirements.split(',').map(r => r.trim()).filter(r => r) : [],
-                        metadata: {
-                            created_by: 'comet_browser',
-                            created_via: 'comet_portal',
-                            user_agent: navigator.userAgent
-                        }
-                    };
-                    
-                    try {
-                        const response = await fetch('/comet/api/directive', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify(payload)
-                        });
-                        
-                        const data = await response.json();
-                        
-                        if (data.success) {
-                            showDirectiveStatus(`Directive created successfully! ID: ${data.directive_id}`, 'success');
-                            document.getElementById('createDirectiveForm').reset();
-                        } else {
-                            showDirectiveStatus(data.error || 'Failed to create directive', 'error');
-                        }
-                    } catch (error) {
-                        showDirectiveStatus('Error creating directive: ' + error.message, 'error');
-                    }
-                });
-                
-                function showDirectiveStatus(message, type) {
-                    const status = document.getElementById('directiveStatus');
-                    status.textContent = message;
-                    status.className = 'status ' + type;
-                    status.classList.remove('hidden');
-                    
-                    setTimeout(() => {
-                        status.classList.add('hidden');
-                    }, 5000);
-                }
-                </script>
-            </body>
-            </html>
-            """)
+            # Redirect to the AI-optimized single-page playground
+            return RedirectResponse(url="/comet-ai", status_code=302)
+            
         
         # ===== COMET API ENDPOINTS =====
         
@@ -10534,7 +9770,7 @@ server {
         
         # ===== COMET# - AI-OPTIMIZED SIMPLIFIED PORTAL =====
         
-        @self.mcp.custom_route("/comet#", methods=["GET"])
+        @self.mcp.custom_route("/comet-ai", methods=["GET"])
         async def comet_ai_portal(request):
             """Ultra-simplified AI-first portal for Comet Browser"""
             if not self.comet_system.enabled:
@@ -10548,133 +9784,203 @@ server {
 {
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
-  "name": "hAIveMind Comet Portal",
-  "description": "AI-optimized interface for distributed memory and task coordination",
-  "applicationCategory": "AI Coordination",
+  "name": "hAIveMind Single-Page Portal",
+  "description": "Unified AI interface for memory, context, and data exchange",
   "capabilities": ["memory-access", "task-delegation", "context-preservation", "real-time-sync"],
   "endpoints": {
-    "exchange": "/comet#/exchange",
-    "context": "/comet#/context", 
-    "execute": "/comet#/execute",
-    "sync": "/comet#/sync",
-    "stream": "/comet#/stream"
+    "exchange": "/comet-ai/exchange",
+    "context": "/comet-ai/context", 
+    "sync": "/comet-ai/sync",
+    "stream": "/comet-ai/stream"
   }
 }
 </script>
 <style>
-body{font-family:system-ui;margin:0;background:#0a0e1a;color:#e1e5e9;line-height:1.4;}
-.ai-data{background:#1a1e30;border:1px solid #2d3748;padding:15px;margin:10px;border-radius:4px;}
-.auth{background:#162032;border:1px solid #00d4aa;padding:20px;margin:10px;border-radius:8px;}
-input,button{padding:10px;border:1px solid #4a5568;border-radius:4px;background:#2d3748;color:#e1e5e9;margin:5px 0;}
-button{background:#00d4aa;color:#0a0e1a;cursor:pointer;border:none;}
-.hidden{display:none;}
-#context-data{white-space:pre-wrap;font-family:monospace;font-size:12px;}
+body{font-family:system-ui;margin:10px;background:#0a0e1a;color:#e1e5e9;line-height:1.4;}
+.section{background:#1a1e30;border:1px solid #2d3748;padding:15px;margin:10px 0;border-radius:4px;}
+input,textarea,select,button{padding:8px;border:1px solid #4a5568;border-radius:4px;background:#2d3748;color:#e1e5e9;margin:3px 0;font-size:14px;}
+button{background:#00d4aa;color:#0a0e1a;cursor:pointer;border:none;font-weight:500;}
+textarea{width:100%;box-sizing:border-box;resize:vertical;}
+select{min-width:120px;}
+.data-output{background:#0f1419;border:1px solid #2d3748;padding:10px;margin:5px 0;border-radius:4px;white-space:pre-wrap;font-family:monospace;font-size:11px;max-height:200px;overflow-y:auto;}
+.inline{display:inline-block;margin:0 10px 10px 0;}
+.status{color:#00d4aa;font-size:12px;}
 </style>
 </head><body>
 
-<div class="auth" id="auth-panel">
-<h2>🚀 hAIveMind AI Access</h2>
-<input type="password" id="password" placeholder="Authentication Password" autocomplete="current-password">
-<button onclick="authenticate()">Authenticate</button>
-<div id="auth-status"></div>
+<h2>🚀 hAIveMind Single-Page Portal</h2>
+
+<div class="section">
+<h3>🔐 Network Access</h3>
+<div class="status">✅ Connected via Tailscale - No authentication required</div>
 </div>
 
-<div id="main-portal" class="hidden">
-<div class="ai-data">
-<h3>📋 Quick Context</h3>
-<div id="context-data">Loading system context...</div>
+<div class="section">
+<h3>📋 System Context</h3>
+<button onclick="loadContext()">Get Context</button>
+<div id="context-data" class="data-output">Click "Get Context" to load system information...</div>
 </div>
 
-<div class="ai-data">
-<h3>💬 Exchange Data</h3>
-<textarea id="exchange-input" rows="3" placeholder="Submit findings, query memory, delegate task..." style="width:100%;box-sizing:border-box;"></textarea>
-<select id="intent-type">
-<option value="query">Query</option>
-<option value="store">Store</option>
-<option value="execute">Execute</option>
-<option value="delegate">Delegate</option>
+<div class="section">
+<h3>💬 Data Exchange</h3>
+<textarea id="exchange-input" rows="2" placeholder="Enter your query, data to store, or task to delegate..."></textarea>
+<select id="intent-type" class="inline">
+<option value="query">Query Memory</option>
+<option value="store">Store Data</option>
+<option value="execute">Execute Task</option>
+<option value="delegate">Delegate Task</option>
 </select>
-<button onclick="exchange()">Submit</button>
-<div id="exchange-result"></div>
+<button onclick="exchange()" class="inline">Submit</button>
+<div id="exchange-result" class="data-output">Results will appear here...</div>
 </div>
 
-<div class="ai-data">
-<h3>⚡ Live Stream</h3>
-<div id="stream-data">Stream disconnected</div>
+<div class="section">
+<h3>🔄 Agent Sync</h3>
+<button onclick="getSync()" class="inline">Export State</button>
+<button onclick="showImport()" class="inline">Import State</button>
+<div id="sync-controls" style="display:none;margin:10px 0;">
+<textarea id="import-data" rows="2" placeholder="Paste state data from another agent..."></textarea>
+<button onclick="importSync()">Import</button>
 </div>
+<div id="sync-result" class="data-output">Sync data will appear here...</div>
+</div>
+
+<div class="section">
+<h3>⚡ Live Stream</h3>
+<button onclick="toggleStream()" id="stream-btn">Connect Stream</button>
+<div id="stream-data" class="data-output">Click "Connect Stream" to start real-time updates</div>
 </div>
 
 <script>
-let sessionToken = null;
 let eventSource = null;
+let streamConnected = false;
 
-async function authenticate() {
-  const password = document.getElementById('password').value;
-  const response = await fetch('/comet#/auth', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({password})
-  });
-  const result = await response.json();
-  
-  if (result.success) {
-    sessionToken = result.token;
-    document.getElementById('auth-panel').classList.add('hidden');
-    document.getElementById('main-portal').classList.remove('hidden');
-    loadContext();
-    connectStream();
-  } else {
-    document.getElementById('auth-status').innerText = 'Authentication failed';
+async function loadContext() {
+  try {
+    const response = await fetch('/comet-ai/context');
+    const context = await response.json();
+    document.getElementById('context-data').innerText = JSON.stringify(context, null, 2);
+  } catch(e) {
+    document.getElementById('context-data').innerText = 'Error loading context: ' + e.message;
   }
 }
 
-async function loadContext() {
-  const response = await fetch('/comet#/context', {
-    headers: {'Authorization': 'Bearer ' + sessionToken}
-  });
-  const context = await response.json();
-  document.getElementById('context-data').innerText = JSON.stringify(context, null, 2);
-}
-
 async function exchange() {
-  const input = document.getElementById('exchange-input').value;
+  
+  const input = document.getElementById('exchange-input').value.trim();
   const intent = document.getElementById('intent-type').value;
   
-  const payload = {
-    comet_meta: {
-      session: sessionToken,
-      timestamp: new Date().toISOString(),
-      source: 'comet-browser',
-      capabilities: ['autonomous', 'memory-access', 'workflow']
-    },
-    intent: intent,
-    payload: { content: input }
-  };
-
-  const response = await fetch('/comet#/exchange', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + sessionToken},
-    body: JSON.stringify(payload)
-  });
+  if (!input) {
+    document.getElementById('exchange-result').innerText = '❌ Please enter some content';
+    return;
+  }
   
-  const result = await response.json();
-  document.getElementById('exchange-result').innerHTML = '<pre>' + JSON.stringify(result, null, 2) + '</pre>';
+  try {
+    const payload = {
+      comet_meta: {
+        timestamp: new Date().toISOString(),
+        source: 'comet-playground',
+        capabilities: ['autonomous', 'memory-access', 'playground']
+      },
+      intent: intent,
+      payload: { 
+        content: input,
+        category: intent === 'store' ? 'comet_findings' : undefined
+      }
+    };
+
+    const response = await fetch('/comet-ai/exchange', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload)
+    });
+    
+    const result = await response.json();
+    document.getElementById('exchange-result').innerText = JSON.stringify(result, null, 2);
+    
+    // Clear input after successful submission
+    if (result.status === 'processed') {
+      document.getElementById('exchange-input').value = '';
+    }
+  } catch(e) {
+    document.getElementById('exchange-result').innerText = 'Error: ' + e.message;
+  }
 }
 
-function connectStream() {
-  eventSource = new EventSource('/comet#/stream?token=' + sessionToken);
+async function getSync() {
+  try {
+    const response = await fetch('/comet-ai/sync');
+    const sync = await response.json();
+    document.getElementById('sync-result').innerText = JSON.stringify(sync, null, 2);
+  } catch(e) {
+    document.getElementById('sync-result').innerText = 'Error: ' + e.message;
+  }
+}
+
+function showImport() {
+  const controls = document.getElementById('sync-controls');
+  controls.style.display = controls.style.display === 'none' ? 'block' : 'none';
+}
+
+async function importSync() {
+  const data = document.getElementById('import-data').value.trim();
+  if (!data) return;
+  
+  try {
+    const importData = JSON.parse(data);
+    const response = await fetch('/comet-ai/sync', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        state: importData,
+        source_agent: 'imported-agent'
+      })
+    });
+    const result = await response.json();
+    document.getElementById('sync-result').innerText = JSON.stringify(result, null, 2);
+    document.getElementById('import-data').value = '';
+    showImport();
+  } catch(e) {
+    document.getElementById('sync-result').innerText = 'Import error: ' + e.message;
+  }
+}
+
+function toggleStream() {
+  if (streamConnected && eventSource) {
+    eventSource.close();
+    streamConnected = false;
+    document.getElementById('stream-btn').innerText = 'Connect Stream';
+    document.getElementById('stream-data').innerText = 'Stream disconnected';
+    return;
+  }
+  
+  eventSource = new EventSource('/comet-ai/stream');
+  eventSource.onopen = function() {
+    streamConnected = true;
+    document.getElementById('stream-btn').innerText = 'Disconnect Stream';
+    document.getElementById('stream-data').innerText = 'Stream connecting...';
+  };
   eventSource.onmessage = function(event) {
     const data = JSON.parse(event.data);
-    document.getElementById('stream-data').innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+    document.getElementById('stream-data').innerText = JSON.stringify(data, null, 2);
   };
   eventSource.onerror = function() {
-    document.getElementById('stream-data').innerText = 'Stream error - reconnecting...';
+    streamConnected = false;
+    document.getElementById('stream-btn').innerText = 'Connect Stream';
+    document.getElementById('stream-data').innerText = 'Stream error - disconnected';
   };
 }
+
+// Allow Enter key in textarea to submit
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && e.ctrlKey && document.activeElement.id === 'exchange-input') {
+    exchange();
+  }
+});
 </script>
 </body></html>""")
 
-        @self.mcp.custom_route("/comet#/auth", methods=["POST"])
+        @self.mcp.custom_route("/comet-ai/auth", methods=["POST"])
         async def comet_ai_auth(request):
             """Lightweight authentication for AI clients"""
             try:
@@ -10706,17 +10012,10 @@ function connectStream() {
                     "comet_meta": {"source": "haivemind", "error": True}
                 }, status_code=500)
 
-        @self.mcp.custom_route("/comet#/context", methods=["GET"])
+        @self.mcp.custom_route("/comet-ai/context", methods=["GET"])
         async def comet_ai_context(request):
             """Get current system context in structured format"""
-            auth_header = request.headers.get('authorization', '')
-            if not auth_header.startswith('Bearer '):
-                return JSONResponse({"error": "Authorization required", "comet_meta": {"error": True}}, status_code=401)
-            
-            token = auth_header.split(' ')[1]
-            if not self.comet_system.validate_session(token):
-                return JSONResponse({"error": "Invalid session", "comet_meta": {"error": True}}, status_code=401)
-            
+            # No auth required - secured by Tailscale network
             try:
                 # Get active agents and system status
                 active_agents = len(self.agent_directives.active_agents) if hasattr(self.agent_directives, 'active_agents') else 0
@@ -10726,7 +10025,6 @@ function connectStream() {
                     "comet_meta": {
                         "source": "haivemind",
                         "timestamp": datetime.now().isoformat(),
-                        "session": token[:8] + "...",
                         "format": "ai-optimized"
                     },
                     "system_status": {
@@ -10755,16 +10053,10 @@ function connectStream() {
                     "comet_meta": {"source": "haivemind", "error": True}
                 }, status_code=500)
 
-        @self.mcp.custom_route("/comet#/exchange", methods=["POST"])
+        @self.mcp.custom_route("/comet-ai/exchange", methods=["POST"])
         async def comet_ai_exchange(request):
             """Unified data exchange endpoint for AI agents"""
-            auth_header = request.headers.get('authorization', '')
-            if not auth_header.startswith('Bearer '):
-                return JSONResponse({"error": "Authorization required", "comet_meta": {"error": True}}, status_code=401)
-            
-            token = auth_header.split(' ')[1]
-            if not self.comet_system.validate_session(token):
-                return JSONResponse({"error": "Invalid session", "comet_meta": {"error": True}}, status_code=401)
+            # No auth required - secured by Tailscale network
                 
             try:
                 data = await request.json()
@@ -10778,7 +10070,6 @@ function connectStream() {
                     "processed_at": datetime.now().isoformat(),
                     "tags": "#comet-ai,#ai-exchange",
                     "source": comet_meta.get("source", "unknown"),
-                    "session": comet_meta.get("session", "")[:8] + "..." if comet_meta.get("session") else "",
                     "capabilities": ",".join(comet_meta.get("capabilities", [])) if comet_meta.get("capabilities") else ""
                 }
                 
@@ -10841,12 +10132,10 @@ function connectStream() {
                     "comet_meta": {"source": "haivemind", "error": True}
                 }, status_code=500)
 
-        @self.mcp.custom_route("/comet#/stream", methods=["GET"])
+        @self.mcp.custom_route("/comet-ai/stream", methods=["GET"])
         async def comet_ai_stream(request):
             """SSE stream for real-time bidirectional communication"""
-            token = request.query_params.get('token')
-            if not token or not self.comet_system.validate_session(token):
-                return JSONResponse({"error": "Invalid session", "comet_meta": {"error": True}}, status_code=401)
+            # No auth required - secured by Tailscale network
             
             async def generate_stream():
                 yield "data: " + json.dumps({
@@ -10894,16 +10183,10 @@ function connectStream() {
                 }
             )
 
-        @self.mcp.custom_route("/comet#/sync", methods=["GET", "POST"])
+        @self.mcp.custom_route("/comet-ai/sync", methods=["GET", "POST"])
         async def comet_ai_sync(request):
             """State synchronization for multi-agent handoff"""
-            auth_header = request.headers.get('authorization', '')
-            if not auth_header.startswith('Bearer '):
-                return JSONResponse({"error": "Authorization required", "comet_meta": {"error": True}}, status_code=401)
-            
-            token = auth_header.split(' ')[1]
-            if not self.comet_system.validate_session(token):
-                return JSONResponse({"error": "Invalid session", "comet_meta": {"error": True}}, status_code=401)
+            # No auth required - secured by Tailscale network
             
             try:
                 if request.method == "GET":
@@ -10912,11 +10195,9 @@ function connectStream() {
                         "comet_meta": {
                             "source": "haivemind",
                             "sync_type": "state_export",
-                            "timestamp": datetime.now().isoformat(),
-                            "session": token[:8] + "..."
+                            "timestamp": datetime.now().isoformat()
                         },
-                        "session_context": self.comet_system.get_session_info(token) or {
-                            "active_session": token,
+                        "session_context": {
                             "created_at": datetime.now().isoformat(),
                             "last_activity": datetime.now().isoformat()
                         },

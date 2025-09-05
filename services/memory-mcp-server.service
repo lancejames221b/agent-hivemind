@@ -7,9 +7,9 @@ Wants=redis.service
 Type=simple
 User=lj
 Group=lj
-WorkingDirectory=/home/lj/memory-mcp
-Environment=PYTHONPATH=/home/lj/memory-mcp/src
-ExecStart=/home/lj/memory-mcp/venv/bin/python /home/lj/memory-mcp/src/memory_server.py
+WorkingDirectory=/home/lj/haivemind-mcp-server
+Environment=PYTHONPATH=/home/lj/haivemind-mcp-server/src
+ExecStart=/home/lj/haivemind-mcp-server/venv/bin/python /home/lj/haivemind-mcp-server/src/memory_server.py
 Restart=always
 RestartSec=10
 StandardOutput=journal
@@ -19,7 +19,7 @@ StandardError=journal
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=false
-ReadWritePaths=/home/lj/memory-mcp
+ReadWritePaths=/home/lj/haivemind-mcp-server
 PrivateTmp=true
 
 [Install]

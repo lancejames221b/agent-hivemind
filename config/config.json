@@ -421,8 +421,8 @@
     },
     "tls": {
       "enabled": false,
-      "cert_file": "/etc/ssl/certs/haivemind.crt",
-      "key_file": "/etc/ssl/private/haivemind.key"
+      "cert_file": "/etc/ssl/haivemind/haivemind.crt",
+      "key_file": "/etc/ssl/haivemind/haivemind.key"
     }
   },
   "comet": {

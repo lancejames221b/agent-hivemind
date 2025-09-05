@@ -511,26 +511,81 @@ class EnhancedTicketSystem:
                                comment: str, author: str = "system") -> Dict[str, Any]:
         """Add comment to ticket (stored in hAIveMind memory)"""
         try:
+            comment_id = str(uuid.uuid4())
             comment_data = {
                 'ticket_id': ticket_id,
+                'project_id': project_id,
                 'action': 'comment_added',
                 'comment': comment,
+                'comment_id': comment_id,
                 'author': author,
                 'created_at': datetime.now().isoformat()
             }
             
-            await self._store_ticket_memory(ticket_id, comment_data)
+            # Store in hAIveMind memory and get memory ID
+            memory_id = await self._store_ticket_memory(ticket_id, comment_data)
             
             # Also update the ticket description with comment if needed
             # This could be enhanced to maintain comment threads
             
-            logger.info(f"💬 Added comment to ticket {ticket_id}")
-            return {'success': True, 'comment_id': str(uuid.uuid4())}
+            logger.info(f"💬 Added comment to ticket {ticket_id} with memory ID {memory_id}")
+            return {
+                'success': True, 
+                'comment_id': comment_id,
+                'memory_id': memory_id,
+                'memory_content': comment_data,
+                'stored_at': comment_data['created_at']
+            }
             
         except Exception as e:
             logger.error(f"Error adding comment: {e}")
             return {'success': False, 'error': str(e)}
     
+    async def get_ticket_comments(self, ticket_id: str) -> Dict[str, Any]:
+        """Get all comments for a ticket with full memory context"""
+        try:
+            # Get ticket-related memories filtered for comments
+            memories = await self.storage.search_memories(
+                query=f"ticket_{ticket_id} comment_added",
+                category='workflow',
+                limit=100,
+                semantic=False
+            )
+            
+            comments = []
+            for memory in memories:
+                try:
+                    # Parse the context data
+                    context_data = json.loads(memory.get('context', '{}'))
+                    if context_data.get('action') == 'comment_added':
+                        comment_info = {
+                            'comment_id': context_data.get('comment_id'),
+                            'comment': context_data.get('comment'),
+                            'author': context_data.get('author'),
+                            'created_at': context_data.get('created_at'),
+                            'memory_id': memory.get('id'),
+                            'memory_content': memory.get('content'),
+                            'full_context': context_data
+                        }
+                        comments.append(comment_info)
+                except Exception as e:
+                    logger.warning(f"Error parsing comment memory: {e}")
+                    continue
+            
+            # Sort comments by creation time
+            comments.sort(key=lambda x: x.get('created_at', ''), reverse=False)
+            
+            return {
+                'success': True,
+                'ticket_id': ticket_id,
+                'comments': comments,
+                'total_comments': len(comments)
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting ticket comments: {e}")
+            return {'success': False, 'error': str(e)}
+
     async def get_ticket_metrics(self, project_id: str, days: int = 30) -> Dict[str, Any]:
         """Get ticket metrics and analytics"""
         try:
@@ -618,21 +673,23 @@ class EnhancedTicketSystem:
             logger.error(f"Error calculating metrics: {e}")
             return {'success': False, 'error': str(e)}
     
-    async def _store_ticket_memory(self, ticket_id: str, data: Dict[str, Any]):
-        """Store ticket event in hAIveMind memory"""
+    async def _store_ticket_memory(self, ticket_id: str, data: Dict[str, Any]) -> Optional[str]:
+        """Store ticket event in hAIveMind memory and return memory ID"""
         try:
             memory_content = f"Ticket {ticket_id}: {data.get('action', 'update')}"
             if 'title' in data:
                 memory_content = f"Ticket #{data.get('ticket_number', 'Unknown')}: {data['title']} - {data.get('action', 'update')}"
             
-            await self.storage.store_memory(
+            memory_id = await self.storage.store_memory(
                 content=memory_content,
                 context=json.dumps(data),
                 category='workflow',
                 tags=[f"ticket_{ticket_id}", "ticket_management", data.get('action', 'update')]
             )
+            return memory_id
         except Exception as e:
             logger.warning(f"Failed to store ticket memory: {e}")
+            return None
     
     async def _get_ticket_memory(self, ticket_id: str) -> List[Dict[str, Any]]:
         """Get ticket-related memories"""
