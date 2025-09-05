@@ -76,6 +76,61 @@ class CometDirectiveSystem:
         
         return True
     
+    def get_session_info(self, session_token: str) -> Optional[Dict[str, Any]]:
+        """Get session information for multi-agent handoff"""
+        if not session_token or session_token not in self.sessions:
+            return None
+            
+        session = self.sessions[session_token]
+        if not session.get('active', False):
+            return None
+            
+        return {
+            'token': session_token,
+            'created_at': session['created_at'].isoformat(),
+            'expires_at': session['expires_at'].isoformat(),
+            'user_agent': session.get('user_agent', 'Unknown'),
+            'ip_address': session.get('ip_address'),
+            'active': session['active'],
+            'session_duration_hours': self.config.get('authentication', {}).get('session_timeout_hours', 8)
+        }
+    
+    def get_session_memories(self, session_token: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """Get memories created in this session for context continuity"""
+        if not self.storage or not self.get_session_info(session_token):
+            return []
+            
+        try:
+            # Search for memories with this session in metadata
+            memories = []
+            if hasattr(self.storage, 'search_memories'):
+                # Search for memories tagged with comet-ai from this session
+                all_memories = []
+                all_memories = getattr(self.storage, 'search_memories', lambda *args, **kwargs: [])("", limit=100)
+                
+                # Filter memories from this session
+                for memory in all_memories:
+                    metadata = memory.get('metadata', {})
+                    if (isinstance(metadata, dict) and 
+                        metadata.get('session') == session_token[:8] + "..." or
+                        '#comet-ai' in metadata.get('tags', [])):
+                        memories.append({
+                            'memory_id': memory.get('id'),
+                            'content': memory.get('content', '')[:200],
+                            'category': memory.get('category'),
+                            'created_at': memory.get('created_at'),
+                            'session_context': True
+                        })
+                        
+                        if len(memories) >= limit:
+                            break
+                            
+            return memories
+            
+        except Exception as e:
+            logger.error(f"Error getting session memories: {e}")
+            return []
+    
     def create_directive(self, directive_type: str, content: Dict[str, Any], 
                         priority: str = "normal") -> str:
         """Create a new directive for Comet to execute"""
@@ -135,6 +190,109 @@ class CometDirectiveSystem:
                 return True
         
         return False
+    
+    async def get_memory_by_id(self, memory_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieve a specific memory by ID for browser display"""
+        if not self.storage:
+            return None
+            
+        try:
+            memory = await self.storage.retrieve_memory(memory_id)
+            if memory:
+                # Format for browser consumption
+                return {
+                    'id': memory.get('id'),
+                    'content': memory.get('content'),
+                    'context': memory.get('context'),
+                    'category': memory.get('category'),
+                    'tags': memory.get('tags', []),
+                    'created_at': memory.get('created_at'),
+                    'user_id': memory.get('user_id'),
+                    'machine_id': memory.get('machine_id'),
+                    'metadata': memory.get('metadata', {}),
+                    'browser_displayable': True
+                }
+        except Exception as e:
+            logger.error(f"🚀 Error retrieving memory {memory_id}: {e}")
+            return None
+    
+    async def get_comment_memories(self, ticket_id: str) -> List[Dict[str, Any]]:
+        """Get all comment-related memories for a ticket for browser display"""
+        if not self.storage:
+            return []
+            
+        try:
+            memories = await self.storage.search_memories(
+                query=f"ticket_{ticket_id} comment_added",
+                category='workflow',
+                limit=100,
+                semantic=False
+            )
+            
+            formatted_memories = []
+            for memory in memories:
+                try:
+                    import json
+                    context_data = json.loads(memory.get('context', '{}'))
+                    if context_data.get('action') == 'comment_added':
+                        formatted_memories.append({
+                            'memory_id': memory.get('id'),
+                            'content': memory.get('content'),
+                            'comment_id': context_data.get('comment_id'),
+                            'comment': context_data.get('comment'),
+                            'author': context_data.get('author'),
+                            'created_at': context_data.get('created_at'),
+                            'ticket_id': ticket_id,
+                            'full_context': context_data,
+                            'browser_displayable': True
+                        })
+                except Exception as e:
+                    logger.warning(f"🚀 Error parsing comment memory: {e}")
+                    continue
+            
+            return sorted(formatted_memories, key=lambda x: x.get('created_at', ''))
+            
+        except Exception as e:
+            logger.error(f"🚀 Error getting comment memories for ticket {ticket_id}: {e}")
+            return []
+
+    async def search_memories_for_browser(self, query: str, category: str = None, limit: int = 20) -> Dict[str, Any]:
+        """Search memories with browser-optimized formatting"""
+        if not self.storage:
+            return {'error': 'Storage not available'}
+            
+        try:
+            memories = await self.storage.search_memories(
+                query=query,
+                category=category,
+                limit=limit,
+                semantic=True
+            )
+            
+            formatted_results = []
+            for memory in memories:
+                formatted_results.append({
+                    'memory_id': memory.get('id'),
+                    'content': memory.get('content'),
+                    'category': memory.get('category'),
+                    'created_at': memory.get('created_at'),
+                    'tags': memory.get('tags', []),
+                    'machine_id': memory.get('machine_id'),
+                    'snippet': memory.get('content', '')[:200] + ('...' if len(memory.get('content', '')) > 200 else ''),
+                    'browser_displayable': True
+                })
+            
+            return {
+                'success': True,
+                'query': query,
+                'total_results': len(formatted_results),
+                'memories': formatted_results,
+                'browser_optimized': True
+            }
+            
+        except Exception as e:
+            logger.error(f"🚀 Error searching memories: {e}")
+            return {'error': str(e)}
     
     async def get_status_dashboard(self) -> Dict[str, Any]:
         """Get status dashboard data optimized for AI reading"""

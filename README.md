@@ -41,11 +41,9 @@ python src/remote_mcp_server.py &  # MCP/SSE endpoints on port 8900
 python src/dashboard_server.py &   # Dashboard on port 8901
 
 # 3. Access the services
-# Dashboard: http://localhost:8901/admin/    ⚠️ INCONSISTENT - NEEDS FIX
-# MCP SSE:   http://localhost:8900/sse
-# Health:    http://localhost:8900/health
-
-# ⚠️ WARNING: Architecture inconsistency - see ticket for unified port plan
+# Comet# Portal: http://localhost:8900/comet#  # AI-optimized interface
+# MCP SSE:       http://localhost:8900/sse     # MCP integration
+# Health:        http://localhost:8900/health  # System status
 
 # 4. Install MCP client
 cd mcp-client && ./install.sh
@@ -101,8 +99,9 @@ memory-mcp/
 
 ### 🔌 Universal MCP Integration
 - **Portable Client**: Works with Claude Desktop, cursor-agent, and any MCP system
-- **12 Core Tools**: Memory operations, agent coordination, infrastructure management
+- **57+ MCP Tools**: Memory operations, agent coordination, infrastructure management
 - **Multiple Configurations**: Development, production, and multi-environment setups
+- **Comet# Portal**: Ultra-lightweight AI-first interface for browser automation
 
 ### 🌐 Network Architecture
 - **Tailscale VPN**: Secure machine-to-machine communication
@@ -181,6 +180,40 @@ cp mcp-client/examples/production.json .cursor/mcp.json
 - `record_incident` - Log infrastructure incidents
 - `generate_runbook` - Create operational procedures
 - `sync_ssh_config` - Synchronize SSH configurations
+
+### 🚀 Comet# AI Browser Integration
+
+**Ultra-lightweight portal for AI browsers at `/comet#`**
+
+#### Key Features:
+- **90% smaller** than human-oriented interfaces
+- **JSON-LD structured data** for instant AI parsing
+- **Auto-tagging** with `#comet-ai` on all interactions
+- **Bidirectional data exchange** via `/comet#/exchange`
+- **Session continuity** for multi-agent handoff
+- **Real-time streaming** via `/comet#/stream`
+
+#### API Endpoints:
+- `GET /comet#` - AI-optimized portal interface
+- `POST /comet#/auth` - Lightweight authentication
+- `GET /comet#/context` - System context for AI consumption  
+- `POST /comet#/exchange` - Unified data exchange (store/query/execute)
+- `GET /comet#/sync` - State export for agent handoff
+- `POST /comet#/sync` - State import from other agents
+- `GET /comet#/stream` - SSE for real-time updates
+
+#### Universal Data Format:
+```json
+{
+  "comet_meta": {
+    "session": "token",
+    "source": "comet-browser|claude-desktop|martin-ai",
+    "capabilities": ["autonomous", "memory-access", "workflow"]
+  },
+  "intent": "store|query|execute|delegate",
+  "payload": {"content": "...", "category": "..."}
+}
+```
 
 ## 🔧 Configuration
 
