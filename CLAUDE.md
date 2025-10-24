@@ -417,3 +417,4 @@ gdpr_export_user_data user_id="john.doe@example.com" format="json"
 - also for each ticket can you add haivemind awareness so it can learn across the system when necessary fro this project:
 - then also put these in sequence with storyname -> ticket, and maybe order they should be done in. if they can be done in parallel add 1a, 1b to them or some kind of lettering .
 - all these tickets that can be done in parallel, do in parallel then update tickets when done. put in progress when doing.
+- when using xargs kill try not to kill claude code session

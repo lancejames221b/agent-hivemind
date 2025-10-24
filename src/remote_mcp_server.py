@@ -405,7 +405,7 @@ NETWORK TOPOLOGY:
                 logger.error(f"Error getting recent memories: {e}")
                 return f"Error getting recent memories: {str(e)}"
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def get_memory_stats() -> str:
             """Get memory statistics and counts"""
             try:
@@ -415,7 +415,7 @@ NETWORK TOPOLOGY:
                 logger.error(f"Error getting memory stats: {e}")
                 return f"Error getting memory stats: {str(e)}"
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def get_project_memories(
             category: Optional[str] = None,
             user_id: Optional[str] = None,
@@ -451,7 +451,7 @@ NETWORK TOPOLOGY:
                 logger.error(f"Error getting project memories: {e}")
                 return f"Error getting project memories: {str(e)}"
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def get_machine_context() -> str:
             """Get comprehensive context about the current machine and its configuration"""
             try:
@@ -461,7 +461,7 @@ NETWORK TOPOLOGY:
                 logger.error(f"Error getting machine context: {e}")
                 return f"Error getting machine context: {str(e)}"
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def list_memory_sources(
             category: Optional[str] = None,
             limit: int = 20,
@@ -494,7 +494,7 @@ NETWORK TOPOLOGY:
                 logger.error(f"Error listing memory sources: {e}")
                 return f"Error listing memory sources: {str(e)}"
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def import_conversation(
             conversation_text: str,
             title: Optional[str] = None,
@@ -516,7 +516,7 @@ NETWORK TOPOLOGY:
         
         # ============ ClaudeOps Agent Management Tools ============
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def register_agent(
             role: str,
             capabilities: Optional[List[str]] = None,
@@ -534,7 +534,7 @@ NETWORK TOPOLOGY:
                 logger.error(f"Error registering agent: {e}")
                 return f"Error registering agent: {str(e)}"
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def get_agent_roster(
             include_inactive: bool = False,
             limit: int = 20,
@@ -572,7 +572,7 @@ NETWORK TOPOLOGY:
                 logger.error(f"Error getting agent roster: {e}")
                 return f"Error getting agent roster: {str(e)}"
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def delegate_task(
             task_description: str,
             required_capabilities: Optional[List[str]] = None,
@@ -594,7 +594,7 @@ NETWORK TOPOLOGY:
                 logger.error(f"Error delegating task: {e}")
                 return f"Error delegating task: {str(e)}"
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def query_agent_knowledge(
             agent_id: str,
             query: str,
@@ -667,7 +667,7 @@ NETWORK TOPOLOGY:
                 logger.error(f"Error retrieving broadcasts: {e}")
                 return f"Error retrieving broadcasts: {str(e)}"
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def track_infrastructure_state(
             machine_id: str,
             state_data: Dict[str, Any],
@@ -687,7 +687,7 @@ NETWORK TOPOLOGY:
                 logger.error(f"Error tracking infrastructure state: {e}")
                 return f"Error tracking infrastructure state: {str(e)}"
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def record_incident(
             title: str,
             description: str,
@@ -711,7 +711,7 @@ NETWORK TOPOLOGY:
                 logger.error(f"Error recording incident: {e}")
                 return f"Error recording incident: {str(e)}"
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def generate_runbook(
             title: str,
             procedure: str,
@@ -733,7 +733,7 @@ NETWORK TOPOLOGY:
                 logger.error(f"Error generating runbook: {e}")
                 return f"Error generating runbook: {str(e)}"
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def sync_ssh_config(
             config_content: str,
             target_machines: Optional[List[str]] = None
@@ -749,7 +749,7 @@ NETWORK TOPOLOGY:
                 logger.error(f"Error syncing SSH config: {e}")
                 return f"Error syncing SSH config: {str(e)}"
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def sync_infrastructure_config(
             config_name: str,
             config_content: str,
@@ -771,7 +771,7 @@ NETWORK TOPOLOGY:
         
         # ============ ClaudeOps Playbook & External Connector Tools ============
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def upload_playbook(
             playbook_name: str,
             playbook_content: str,
@@ -795,7 +795,7 @@ NETWORK TOPOLOGY:
                 logger.error(f"Error uploading playbook: {e}")
                 return f"Error uploading playbook: {str(e)}"
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def fetch_from_confluence(
             space_key: str,
             page_title: Optional[str] = None,
@@ -815,7 +815,7 @@ NETWORK TOPOLOGY:
                 logger.error(f"Error fetching from Confluence: {e}")
                 return f"Error fetching from Confluence: {str(e)}"
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def fetch_from_jira(
             project_key: str,
             issue_types: Optional[List[str]] = None,
@@ -837,7 +837,7 @@ NETWORK TOPOLOGY:
                 logger.error(f"Error fetching from Jira: {e}")
                 return f"Error fetching from Jira: {str(e)}"
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def sync_external_knowledge(sources: Optional[List[str]] = None) -> str:
             """Sync knowledge from all configured external sources (Confluence, Jira, etc.)"""
             try:
@@ -847,7 +847,7 @@ NETWORK TOPOLOGY:
                 logger.error(f"Error syncing external knowledge: {e}")
                 return f"Error syncing external knowledge: {str(e)}"
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def upload_file(
             filename: str,
             content: str,
@@ -886,7 +886,7 @@ NETWORK TOPOLOGY:
                 logger.error(f"Error uploading file: {e}")
                 return f"❌ Error uploading file: {str(e)}"
 
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def sync_agent_commands(
             agent_id: Optional[str] = None,
             target_location: str = "auto",
@@ -916,7 +916,7 @@ NETWORK TOPOLOGY:
                 logger.error(f"Error syncing agent commands: {e}")
                 return f"❌ Error syncing commands: {str(e)}"
 
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def sync_agent_config(
             agent_id: Optional[str] = None,
             machine_id: Optional[str] = None,
@@ -993,7 +993,7 @@ This agent is automatically assigned capabilities based on the machine type and 
                 logger.error(f"Error syncing agent config: {e}")
                 return f"❌ Error syncing agent config: {str(e)}"
 
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def install_agent_commands(
             target_location: str = "auto",
             force: bool = False
@@ -1030,7 +1030,7 @@ You can now use hAIveMind commands like:
                 logger.error(f"Error in agent installation: {e}")
                 return f"❌ Agent installation error: {str(e)}"
 
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def check_agent_sync_status(
             agent_id: Optional[str] = None
         ) -> str:
@@ -1059,7 +1059,7 @@ You can now use hAIveMind commands like:
                 logger.error(f"Error checking sync status: {e}")
                 return f"❌ Error checking sync status: {str(e)}"
 
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def trigger_auto_sync(
             new_connection: bool = False
         ) -> str:
@@ -1095,7 +1095,7 @@ The agent is now synchronized with the hAIveMind collective. All commands and co
                 return f"❌ Auto-sync error: {str(e)}"
 
         # DevOps-Specific Sync Tools
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def sync_devops_tools(
             target_agents: Optional[List[str]] = None,
             tool_categories: Optional[List[str]] = None,
@@ -1163,7 +1163,7 @@ The agent is now synchronized with the hAIveMind collective. All commands and co
                 logger.error(f"Error syncing DevOps tools: {e}")
                 return f"❌ DevOps tools sync error: {str(e)}"
 
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def install_devops_capabilities(
             target_machines: Optional[List[str]] = None,
             capability_types: Optional[List[str]] = None,
@@ -1218,7 +1218,7 @@ The agent is now synchronized with the hAIveMind collective. All commands and co
                 logger.error(f"Error installing DevOps capabilities: {e}")
                 return f"❌ DevOps installation error: {str(e)}"
 
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def sync_tool_configurations(
             config_templates: Optional[Dict[str, Any]] = None,
             target_environments: Optional[List[str]] = None
@@ -1274,7 +1274,7 @@ Configuration templates distributed for: {', '.join(config_templates.keys())}"""
                 logger.error(f"Error syncing tool configurations: {e}")
                 return f"❌ Tool configuration sync error: {str(e)}"
 
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def validate_tool_installation(
             tools_to_check: Optional[List[str]] = None,
             run_health_checks: bool = True
@@ -1327,7 +1327,7 @@ Health checks: {'✅ Enabled' if run_health_checks else '❌ Skipped'}"""
                 logger.error(f"Error validating tool installation: {e}")
                 return f"❌ Tool validation error: {str(e)}"
 
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def rollback_tool_updates(
             tool_names: Optional[List[str]] = None,
             rollback_to_version: str = "previous"
@@ -1366,7 +1366,7 @@ Health checks: {'✅ Enabled' if run_health_checks else '❌ Skipped'}"""
                 logger.error(f"Error rolling back tools: {e}")
                 return f"❌ Tool rollback error: {str(e)}"
 
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def broadcast_tool_availability(
             tool_categories: Optional[List[str]] = None,
             target_roles: Optional[List[str]] = None
@@ -1400,7 +1400,7 @@ Health checks: {'✅ Enabled' if run_health_checks else '❌ Skipped'}"""
                 logger.error(f"Error broadcasting tool availability: {e}")
                 return f"❌ Broadcast error: {str(e)}"
 
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def check_tool_dependencies(
             tools_to_check: Optional[List[str]] = None
         ) -> str:
@@ -1454,7 +1454,7 @@ Health checks: {'✅ Enabled' if run_health_checks else '❌ Skipped'}"""
                 logger.error(f"Error checking dependencies: {e}")
                 return f"❌ Dependency check error: {str(e)}"
 
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def sync_tool_permissions(
             role_permissions: Optional[Dict[str, List[str]]] = None
         ) -> str:
@@ -1498,7 +1498,7 @@ RBAC permissions distributed across hAIveMind network!"""
                 return f"❌ Permission sync error: {str(e)}"
 
         # Memory Category Management Tools
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def create_memory_category(
             category_name: str,
             description: Optional[str] = None,
@@ -1576,7 +1576,7 @@ Category is now available for storing memories!"""
                 logger.error(f"Error creating memory category: {e}")
                 return f"❌ Category creation error: {str(e)}"
 
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def list_memory_categories(
             include_stats: bool = True,
             show_archived: bool = False
@@ -1626,7 +1626,7 @@ Category is now available for storing memories!"""
                 logger.error(f"Error listing categories: {e}")
                 return f"❌ Error listing categories: {str(e)}"
 
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def update_category_settings(
             category_name: str,
             new_description: Optional[str] = None,
@@ -1685,7 +1685,7 @@ Settings applied successfully!"""
                 logger.error(f"Error updating category settings: {e}")
                 return f"❌ Settings update error: {str(e)}"
 
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def archive_category(
             category_name: str,
             archive_reason: Optional[str] = None
@@ -1734,7 +1734,7 @@ Use `restore_category` to reactivate if needed."""
                 logger.error(f"Error archiving category: {e}")
                 return f"❌ Archive error: {str(e)}"
 
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def backup_category(
             category_name: str,
             include_memories: bool = True,
@@ -1798,7 +1798,7 @@ Backup stored successfully! Use `restore_category` with backup ID to restore."""
                 logger.error(f"Error backing up category: {e}")
                 return f"❌ Backup error: {str(e)}"
 
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def restore_category(
             backup_id: str,
             new_category_name: Optional[str] = None,
@@ -1938,7 +1938,7 @@ Category successfully restored from backup!"""
                 return {}
 
         # Project Management Integration Tools
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def create_project(
             project_name: str,
             git_repo_path: str,
@@ -2019,7 +2019,7 @@ Project is ready for DevOps operations! Use `switch_project_context` to activate
                 logger.error(f"Error creating project: {e}")
                 return f"❌ Project creation error: {str(e)}"
 
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def list_projects(
             include_devops_status: bool = True,
             show_archived: bool = False,
@@ -2118,7 +2118,7 @@ Use `create_project` to create your first DevOps-enabled project with:
                 logger.error(f"Error listing projects: {e}")
                 return f"❌ Error listing projects: {str(e)}"
 
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def switch_project_context(
             project_name: str
         ) -> str:
@@ -2188,7 +2188,7 @@ All DevOps operations will now be scoped to this project."""
                 logger.error(f"Error switching project context: {e}")
                 return f"❌ Context switch error: {str(e)}"
 
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def project_health_check(
             project_name: Optional[str] = None,
             include_recommendations: bool = True
@@ -2326,7 +2326,7 @@ All DevOps operations will now be scoped to this project."""
                 logger.error(f"Error in project health check: {e}")
                 return f"❌ Health check error: {str(e)}"
 
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def backup_project(
             project_name: Optional[str] = None,
             include_git_data: bool = True,
@@ -2422,7 +2422,7 @@ Use `restore_project {backup_id}` to restore from this backup."""
                 logger.error(f"Error backing up project: {e}")
                 return f"❌ Project backup error: {str(e)}"
 
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def restore_project(
             backup_id: str,
             new_project_name: Optional[str] = None,
@@ -2594,7 +2594,7 @@ Use `switch_project_context {target_name}` to activate."""
                 return "Unknown ⚪"
         
         # Agent directive system tools
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def get_agent_directive(agent_type: str = "claude_code_agent") -> str:
             """Get installation directive for specific agent type"""
             try:
@@ -2604,7 +2604,7 @@ Use `switch_project_context {target_name}` to activate."""
                 logger.error(f"Error getting agent directive: {e}")
                 return f"Error getting agent directive: {str(e)}"
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def get_installation_instructions(agent_id: Optional[str] = None) -> str:
             """Get human-readable installation instructions for connecting to hAIveMind"""
             try:
@@ -2614,7 +2614,7 @@ Use `switch_project_context {target_name}` to activate."""
                 logger.error(f"Error getting installation instructions: {e}")
                 return f"Error getting installation instructions: {str(e)}"
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def generate_installation_script(agent_type: str = "claude_code_agent") -> str:
             """Generate executable installation script from directive"""
             try:
@@ -2625,7 +2625,7 @@ Use `switch_project_context {target_name}` to activate."""
                 logger.error(f"Error generating installation script: {e}")
                 return f"Error generating installation script: {str(e)}"
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def execute_agent_directive(
             agent_type: str = "claude_code_agent",
             agent_id: Optional[str] = None,
@@ -2753,7 +2753,7 @@ Use `switch_project_context {target_name}` to activate."""
     def _register_hosting_tools(self):
         """Register MCP server hosting tools"""
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def upload_mcp_server(
             name: str,
             archive_base64: str,
@@ -2778,32 +2778,32 @@ Use `switch_project_context {target_name}` to activate."""
                 user_id=user_id
             )
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def start_mcp_server(server_id: str) -> str:
             """Start a hosted MCP server"""
             return await self.hosting_tools.start_mcp_server(server_id)
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def stop_mcp_server(server_id: str) -> str:
             """Stop a hosted MCP server"""
             return await self.hosting_tools.stop_mcp_server(server_id)
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def restart_mcp_server(server_id: str) -> str:
             """Restart a hosted MCP server"""
             return await self.hosting_tools.restart_mcp_server(server_id)
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def delete_mcp_server(server_id: str, force: bool = False) -> str:
             """Delete a hosted MCP server"""
             return await self.hosting_tools.delete_mcp_server(server_id, force)
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def get_mcp_server_status(server_id: str) -> str:
             """Get detailed status of a hosted MCP server"""
             return await self.hosting_tools.get_mcp_server_status(server_id)
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def list_mcp_servers(
             limit: int = 20,
             offset: int = 0
@@ -2857,17 +2857,17 @@ Use `switch_project_context {target_name}` to activate."""
             # Fallback: return original with pagination note
             return f"{all_servers_result}\n\n📄 Pagination: limit={limit}, offset={offset}"
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def get_mcp_server_logs(server_id: str, lines: int = 50) -> str:
             """Get logs for a hosted MCP server"""
             return await self.hosting_tools.get_mcp_server_logs(server_id, lines)
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def get_hosting_stats() -> str:
             """Get overall hosting statistics and performance insights"""
             return await self.hosting_tools.get_hosting_stats()
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def optimize_server_resources() -> str:
             """Analyze and provide optimization recommendations for hosted servers"""
             return await self.hosting_tools.optimize_server_resources()
@@ -2877,7 +2877,7 @@ Use `switch_project_context {target_name}` to activate."""
     def _register_backup_system_tools(self):
         """Register comprehensive backup system tools"""
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def backup_all_configs(
             include_chromadb: bool = True,
             include_redis: bool = True,
@@ -3055,7 +3055,7 @@ Backup stored in hAIveMind memory for tracking."""
             except Exception as e:
                 return f"❌ Backup failed: {str(e)}"
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def backup_agent_state(
             agent_id: Optional[str] = None,
             include_memories: bool = True,
@@ -3162,7 +3162,7 @@ Agent backup stored and indexed in hAIveMind."""
             except Exception as e:
                 return f"❌ Agent backup failed: {str(e)}"
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def backup_infrastructure(
             include_service_configs: bool = True,
             include_network_configs: bool = True,
@@ -3298,7 +3298,7 @@ Infrastructure backup ready for recovery scenarios."""
             except Exception as e:
                 return f"❌ Infrastructure backup failed: {str(e)}"
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def scheduled_backup(
             schedule_type: str,
             backup_types: List[str],
@@ -3388,7 +3388,7 @@ Schedule saved and will be processed by backup automation system."""
             else:
                 return timedelta(days=1)  # Default to daily
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def verify_backup(
             backup_path: str,
             check_integrity: bool = True,
@@ -3534,7 +3534,7 @@ Completeness: {self._format_check_status(results.get('completeness_check', 'not_
             }
             return f"{status_map.get(status, '❓')} {status.replace('_', ' ').title()}"
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def list_backups(
             backup_type: Optional[str] = None,
             sort_by: str = "date_desc",
@@ -3656,7 +3656,7 @@ Completeness: {self._format_check_status(results.get('completeness_check', 'not_
             else:
                 return f"{int(hours / (24 * 30))} months ago"
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def compare_backups(
             backup1_path: str,
             backup2_path: str,
@@ -3814,7 +3814,7 @@ Comparison: {comparison['comparison_type'].title()}
             
             return output
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def restore_from_backup(
             backup_path: str,
             restore_type: str = "selective",
@@ -4043,7 +4043,7 @@ Comparison: {comparison['comparison_type'].title()}
             except Exception as e:
                 return f"❌ Restore operation failed: {str(e)}"
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def backup_to_s3(
             backup_path: str,
             s3_bucket: str,
@@ -4128,7 +4128,7 @@ Cloud backup location stored in hAIveMind memory for disaster recovery scenarios
             except Exception as e:
                 return f"❌ Cloud backup upload failed: {str(e)}"
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def backup_rotation(
             retention_policy: str = "7d-4w-12m",
             backup_location: str = "data/backups",
@@ -4296,7 +4296,7 @@ Cloud backup location stored in hAIveMind memory for disaster recovery scenarios
     def _register_service_discovery_tools(self):
         """Register service discovery and registration tools"""
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def discover_services(
             discovery_methods: Optional[List[str]] = None,
             scan_ports: bool = True,
@@ -4760,7 +4760,7 @@ Cloud backup location stored in hAIveMind memory for disaster recovery scenarios
             except Exception:
                 return []
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def register_service(
             service_name: str,
             port: int,
@@ -4919,7 +4919,7 @@ Cloud backup location stored in hAIveMind memory for disaster recovery scenarios
                     "last_check": datetime.now().isoformat()
                 }
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def service_dependency_map(
             output_format: str = "text",
             include_health_status: bool = True,
@@ -5171,7 +5171,7 @@ Cloud backup location stored in hAIveMind memory for disaster recovery scenarios
             
             return output
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def health_check_all(
             timeout_seconds: int = 10,
             include_port_check: bool = True,
@@ -5390,7 +5390,7 @@ Cloud backup location stored in hAIveMind memory for disaster recovery scenarios
                     "check_timestamp": datetime.now().isoformat()
                 }
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def backup_service_configs(
             include_discovered: bool = True,
             include_registered: bool = True,
@@ -5576,7 +5576,7 @@ Cloud backup location stored in hAIveMind memory for disaster recovery scenarios
         import difflib
         import hashlib
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def create_config_template(
             template_name: str,
             config_type: str = "yaml",  # yaml, json, toml, ini, env, nginx, apache
@@ -5692,7 +5692,7 @@ server {
             except Exception as e:
                 return f"❌ Template creation failed: {str(e)}"
 
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def render_config_from_template(
             template_name: str,
             variables: Dict[str, Any],
@@ -5785,7 +5785,7 @@ server {
             except Exception as e:
                 return f"❌ Configuration rendering failed: {str(e)}"
 
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def validate_config_file(
             config_path: str,
             config_type: Optional[str] = None,
@@ -5909,7 +5909,7 @@ server {
             except Exception as e:
                 return f"❌ Configuration validation failed: {str(e)}"
 
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def diff_config_files(
             file1_path: str,
             file2_path: str,
@@ -5998,7 +5998,7 @@ server {
             except Exception as e:
                 return f"❌ Configuration diff failed: {str(e)}"
 
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def deploy_config(
             config_path: str,
             target_path: str,
@@ -6105,7 +6105,7 @@ server {
             except Exception as e:
                 return f"❌ Configuration deployment failed: {str(e)}"
 
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def list_config_templates(
             config_type: Optional[str] = None,
             search_query: Optional[str] = None,
@@ -6198,7 +6198,7 @@ server {
             
             return cmd_name, params
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def claude_shortcut(
             command: str,
             context: Optional[Dict[str, Any]] = None
@@ -6620,7 +6620,7 @@ server {
                 return f"❌ Shortcut command execution failed: {str(e)}"
         
         # Individual shortcut commands for better discoverability
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def backup_all_shortcut(
             encryption: bool = True,
             compression: bool = True,
@@ -6635,7 +6635,7 @@ server {
                 compression_enabled=compression
             )
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def services_discover_shortcut(
             scan_ports: bool = True,
             check_docker: bool = True,
@@ -6655,7 +6655,7 @@ server {
                 timeout_seconds=timeout
             )
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def system_status_shortcut() -> str:
             """Quick system status check - shortcut for /status"""
             try:
@@ -6712,7 +6712,7 @@ server {
             except Exception as e:
                 return f"❌ Status check failed: {str(e)}"
         
-        @self.mcp.tool() 
+        # # @self.mcp.tool() 
         async def emergency_backup_shortcut() -> str:
             """Emergency full system backup - shortcut for /emergency-backup"""
             return await self.backup_all_configs(
@@ -6737,7 +6737,7 @@ server {
         import asyncio
         import aiohttp
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def create_alert_rule(
             service_name: str,
             metric_name: str,
@@ -6842,7 +6842,7 @@ server {
             except Exception as e:
                 return f"❌ Alert rule creation failed: {str(e)}"
 
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def get_metrics(
             service_name: str,
             metric_names: Optional[List[str]] = None,
@@ -6960,7 +6960,7 @@ server {
             }
             return unit_mapping.get(metric_name, "")
 
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def correlate_events(
             incident_id: Optional[str] = None,
             time_window: str = "1h",
@@ -7091,7 +7091,7 @@ server {
             }
             return mapping.get(time_window, 3600)
 
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def predictive_analysis(
             service_name: str,
             metrics: Optional[List[str]] = None,
@@ -7259,7 +7259,7 @@ server {
             
             return recommendations[:3]  # Limit to top 3 recommendations
 
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def backup_monitoring_rules(
             backup_name: Optional[str] = None,
             include_prometheus: bool = True,
@@ -7454,7 +7454,7 @@ server {
         import hashlib
         from pathlib import Path
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def create_deployment_pipeline(
             pipeline_name: str,
             service_name: str,
@@ -7619,7 +7619,7 @@ server {
             except Exception as e:
                 return f"❌ Pipeline creation failed: {str(e)}"
 
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def execute_deployment(
             pipeline_id: str,
             version: str,
@@ -7805,7 +7805,7 @@ server {
             except Exception as e:
                 return f"❌ Deployment execution failed: {str(e)}"
 
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def rollback_deployment(
             service_name: str,
             target_version: Optional[str] = None,
@@ -7968,7 +7968,7 @@ server {
             except Exception as e:
                 return f"❌ Rollback execution failed: {str(e)}"
 
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def deployment_approval_workflow(
             execution_id: str,
             action: str = "approve",  # approve, reject
@@ -8053,7 +8053,7 @@ server {
             except Exception as e:
                 return f"❌ Approval workflow failed: {str(e)}"
 
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def backup_before_deployment(
             service_name: str,
             deployment_id: str,
@@ -8224,7 +8224,7 @@ server {
         # Initialize config backup system
         self.config_backup = ConfigBackupSystem()
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def register_config_system(
             system_id: str,
             system_name: str,
@@ -8269,7 +8269,7 @@ server {
             except Exception as e:
                 return f"❌ Error registering config system: {str(e)}"
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def create_config_snapshot(
             system_id: str,
             config_content: str,
@@ -8315,7 +8315,7 @@ server {
             except Exception as e:
                 return f"❌ Error creating config snapshot: {str(e)}"
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def get_config_history(
             system_id: str,
             limit: int = 20
@@ -8369,7 +8369,7 @@ server {
             except Exception as e:
                 return f"❌ Error retrieving config history: {str(e)}"
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def get_current_config(
             system_id: str
         ) -> str:
@@ -8404,7 +8404,7 @@ server {
             except Exception as e:
                 return f"❌ Error retrieving current config: {str(e)}"
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def detect_config_drift(
             system_id: Optional[str] = None,
             hours_back: int = 24
@@ -8486,7 +8486,7 @@ server {
             if analysis.get('recommendations'):
                 result.append(f"     💡 Actions: {', '.join(analysis['recommendations'][:2])}")
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def list_config_systems(self) -> str:
             """List all registered configuration systems"""
             try:
@@ -8519,7 +8519,7 @@ server {
             except Exception as e:
                 return f"❌ Error listing config systems: {str(e)}"
         
-        @self.mcp.tool() 
+        # # @self.mcp.tool() 
         async def get_config_alerts(
             system_id: Optional[str] = None
         ) -> str:
@@ -8566,7 +8566,7 @@ server {
             except Exception as e:
                 return f"❌ Error retrieving config alerts: {str(e)}"
 
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def analyze_config_drift_patterns(
             system_id: Optional[str] = None,
             hours_back: int = 24,
@@ -8692,7 +8692,7 @@ server {
             if recommendations:
                 result.append(f"     💡 Actions: {recommendations[0]}")
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def create_intelligent_config_alert(
             system_id: str,
             snapshot_id: str,
@@ -8798,7 +8798,7 @@ server {
             except Exception as e:
                 return f"❌ Error creating intelligent alert: {str(e)}"
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def get_drift_trend_analysis(
             system_id: Optional[str] = None,
             days_back: int = 7
@@ -9778,280 +9778,321 @@ server {
             
             return HTMLResponse("""<!DOCTYPE html>
 <html><head>
-<title>hAIveMind AI Portal</title>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "SoftwareApplication",
-  "name": "hAIveMind Single-Page Portal",
-  "description": "Unified AI interface for memory, context, and data exchange",
-  "capabilities": ["memory-access", "task-delegation", "context-preservation", "real-time-sync"],
-  "endpoints": {
-    "exchange": "/comet-ai/exchange",
-    "context": "/comet-ai/context", 
-    "sync": "/comet-ai/sync",
-    "stream": "/comet-ai/stream"
-  }
-}
-</script>
+<title>Comet Handoff | Simple</title>
 <style>
-body{font-family:system-ui;margin:10px;background:#0a0e1a;color:#e1e5e9;line-height:1.4;}
-.section{background:#1a1e30;border:1px solid #2d3748;padding:15px;margin:10px 0;border-radius:4px;}
-input,textarea,select,button{padding:8px;border:1px solid #4a5568;border-radius:4px;background:#2d3748;color:#e1e5e9;margin:3px 0;font-size:14px;}
-button{background:#00d4aa;color:#0a0e1a;cursor:pointer;border:none;font-weight:500;}
-textarea{width:100%;box-sizing:border-box;resize:vertical;}
-select{min-width:120px;}
-.data-output{background:#0f1419;border:1px solid #2d3748;padding:10px;margin:5px 0;border-radius:4px;white-space:pre-wrap;font-family:monospace;font-size:11px;max-height:200px;overflow-y:auto;}
-.inline{display:inline-block;margin:0 10px 10px 0;}
-.status{color:#00d4aa;font-size:12px;}
+body { font-family: monospace; margin: 20px; background: #0a0e1a; color: #e1e5e9; }
+.container { display: flex; gap: 20px; }
+.column { flex: 1; }
+.input-box { width: 100%; padding: 8px; background: #2d3748; color: #e1e5e9; border: 1px solid #4a5568; margin-bottom: 10px; }
+.paste-area { width: 100%; height: 300px; background: #2d3748; color: #e1e5e9; border: 1px solid #4a5568; padding: 10px; }
+.btn { background: #00d4aa; color: #0a0e1a; border: none; padding: 8px 16px; margin-right: 10px; cursor: pointer; }
 </style>
 </head><body>
 
-<h2>🚀 hAIveMind Single-Page Portal</h2>
+<div class="container">
+  <div class="column">
+    <h3>📝 Paste Work</h3>
+    <input type="text" id="subject" class="input-box" placeholder="Subject">
+    <textarea id="content" class="paste-area" placeholder="Content"></textarea>
+    <button class="btn" onclick="save()">Save</button>
+    <button class="btn" onclick="clearForm()">Clear</button>
+  </div>
+  <div class="column">
+    <h3>📤 Recent (click items to load)</h3>
+    <div style="margin-bottom: 10px;">
+      <input type="text" id="searchInput" placeholder="Search memories..."
+             style="background:#2d3748;color:#e1e5e9;border:1px solid #4a5568;padding:4px;width:200px;margin-right:10px;">
+      <button class="btn" onclick="loadRecent()" style="margin-right:5px;">Search</button>
+      <button class="btn" onclick="document.getElementById('searchInput').value='';loadRecent()" style="margin-right:10px;">Clear</button>
 
-<div class="section">
-<h3>🔐 Network Access</h3>
-<div class="status">✅ Connected via Tailscale - No authentication required</div>
-</div>
-
-<div class="section">
-<h3>📋 System Context</h3>
-<button onclick="loadContext()">Get Context</button>
-<div id="context-data" class="data-output">Click "Get Context" to load system information...</div>
-</div>
-
-<div class="section">
-<h3>💬 Data Exchange</h3>
-<textarea id="exchange-input" rows="2" placeholder="Enter your query, data to store, or task to delegate..."></textarea>
-<select id="intent-type" class="inline">
-<option value="query">Query Memory</option>
-<option value="store">Store Data</option>
-<option value="execute">Execute Task</option>
-<option value="delegate">Delegate Task</option>
-</select>
-<button onclick="exchange()" class="inline">Submit</button>
-<div id="exchange-result" class="data-output">Results will appear here...</div>
-</div>
-
-<div class="section">
-<h3>🔄 Agent Sync</h3>
-<button onclick="getSync()" class="inline">Export State</button>
-<button onclick="showImport()" class="inline">Import State</button>
-<div id="sync-controls" style="display:none;margin:10px 0;">
-<textarea id="import-data" rows="2" placeholder="Paste state data from another agent..."></textarea>
-<button onclick="importSync()">Import</button>
-</div>
-<div id="sync-result" class="data-output">Sync data will appear here...</div>
-</div>
-
-<div class="section">
-<h3>⚡ Live Stream</h3>
-<button onclick="toggleStream()" id="stream-btn">Connect Stream</button>
-<div id="stream-data" class="data-output">Click "Connect Stream" to start real-time updates</div>
+      Show: <select id="limitSelect" onchange="loadRecent()" style="background:#2d3748;color:#e1e5e9;border:1px solid #4a5568;padding:4px;">
+        <option value="5">5</option>
+        <option value="10" selected>10</option>
+        <option value="25">25</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+      </select> items
+    </div>
+    <div id="recent">Loading...</div>
+    <button class="btn" onclick="location.reload()">Refresh</button>
+  </div>
 </div>
 
 <script>
-let eventSource = null;
-let streamConnected = false;
+function save() {
+  const subject = document.getElementById('subject').value;
+  const content = document.getElementById('content').value;
 
-async function loadContext() {
-  try {
-    const response = await fetch('/comet-ai/context');
-    const context = await response.json();
-    document.getElementById('context-data').innerText = JSON.stringify(context, null, 2);
-  } catch(e) {
-    document.getElementById('context-data').innerText = 'Error loading context: ' + e.message;
-  }
-}
-
-async function exchange() {
-  
-  const input = document.getElementById('exchange-input').value.trim();
-  const intent = document.getElementById('intent-type').value;
-  
-  if (!input) {
-    document.getElementById('exchange-result').innerText = '❌ Please enter some content';
+  if (!subject && !content) {
+    // Show warning in recent div (visible to browser AI)
+    const div = document.getElementById('recent');
+    div.innerHTML = '<div style="background:#ffaa00;color:#0a0e1a;padding:20px;font-size:18px;font-weight:bold;text-align:center;border-radius:5px;margin:10px 0;">⚠️ NOTHING TO SAVE - Please enter content</div>';
     return;
   }
-  
-  try {
-    const payload = {
-      comet_meta: {
-        timestamp: new Date().toISOString(),
-        source: 'comet-playground',
-        capabilities: ['autonomous', 'memory-access', 'playground']
-      },
-      intent: intent,
-      payload: { 
-        content: input,
-        category: intent === 'store' ? 'comet_findings' : undefined
-      }
-    };
 
-    const response = await fetch('/comet-ai/exchange', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(payload)
-    });
-    
-    const result = await response.json();
-    document.getElementById('exchange-result').innerText = JSON.stringify(result, null, 2);
-    
-    // Clear input after successful submission
-    if (result.status === 'processed') {
-      document.getElementById('exchange-input').value = '';
+  const data = JSON.stringify({
+    subject: subject || 'Untitled',
+    content: content,
+    timestamp: new Date().toISOString()
+  });
+
+  fetch('/comet-ai/paste', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({content: data, category: 'comet_handoff'})
+  })
+  .then(r => r.json())
+  .then(result => {
+    if (result.success) {
+      // Show success with memory ID
+      const memId = result.memory_id ? result.memory_id.substring(0, 8) : 'unknown';
+      const successMsg = '✅ SAVED! ID: ' + memId;
+
+      // Show in recent div (visible to browser AI)
+      const div = document.getElementById('recent');
+      div.innerHTML = '<div style="background:#00d4aa;color:#0a0e1a;padding:20px;font-size:18px;font-weight:bold;text-align:center;border-radius:5px;margin:10px 0;">' + successMsg + '</div>';
+
+      // Clear form
+      document.getElementById('subject').value = '';
+      document.getElementById('content').value = '';
+
+      // Wait 1 second before reloading to ensure indexing is complete
+      setTimeout(() => {
+        loadRecent();
+      }, 1000);
+    } else {
+      // Show error in recent div (visible to browser AI)
+      const div = document.getElementById('recent');
+      div.innerHTML = '<div style="background:#ff5555;color:#fff;padding:20px;font-size:18px;font-weight:bold;text-align:center;border-radius:5px;margin:10px 0;">❌ SAVE FAILED</div>';
     }
-  } catch(e) {
-    document.getElementById('exchange-result').innerText = 'Error: ' + e.message;
-  }
+  })
+  .catch(e => {
+    // Show error in recent div (visible to browser AI)
+    const div = document.getElementById('recent');
+    div.innerHTML = '<div style="background:#ff5555;color:#fff;padding:20px;font-size:18px;font-weight:bold;text-align:center;border-radius:5px;margin:10px 0;">❌ ERROR: ' + e.message + '</div>';
+  });
 }
 
-async function getSync() {
-  try {
-    const response = await fetch('/comet-ai/sync');
-    const sync = await response.json();
-    document.getElementById('sync-result').innerText = JSON.stringify(sync, null, 2);
-  } catch(e) {
-    document.getElementById('sync-result').innerText = 'Error: ' + e.message;
-  }
+function clearForm() {
+  console.log('Clearing form');
+  document.getElementById('subject').value = '';
+  document.getElementById('content').value = '';
 }
 
-function showImport() {
-  const controls = document.getElementById('sync-controls');
-  controls.style.display = controls.style.display === 'none' ? 'block' : 'none';
+// Load recent function
+function loadRecent() {
+  console.log('loadRecent() called');
+  const limit = document.getElementById('limitSelect') ? document.getElementById('limitSelect').value : 10;
+  const query = document.getElementById('searchInput') ? document.getElementById('searchInput').value : '';
+  console.log('Search query:', query, 'Limit:', limit);
+  const url = '/comet-ai/recent?limit=' + limit + (query ? '&query=' + encodeURIComponent(query) : '');
+
+  // Show searching indicator
+  const div = document.getElementById('recent');
+  div.innerHTML = query ? 'Searching for "' + query + '"...' : 'Loading recent items...';
+
+  fetch(url)
+  .then(r => r.json())
+  .then(data => {
+    const div = document.getElementById('recent');
+    if (data.memories && data.memories.length > 0) {
+      div.innerHTML = data.memories.map(m => {
+        const source = m.metadata?.processed_by === 'simple-comet' ? '🌐 Web' :
+                      m.metadata?.source === 'simple-paste' ? '🌐 Web' :
+                      m.metadata?.processed_by ? '⚡ MCP' : '📝 Other';
+        const sourceColor = source.includes('Web') ? '#00d4aa' :
+                           source.includes('MCP') ? '#4fc3f7' : '#9ca3af';
+        return `<div style="border:1px solid #4a5568;padding:10px;margin:10px 0;cursor:pointer;background:#1a202c;" onclick="load('${m.id}')" onmouseover="this.style.background='#2d3748'" onmouseout="this.style.background='#1a202c'">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <strong>🔗 #${m.id.substring(0,8)}</strong>
+            <span style="color:${sourceColor};font-size:12px;">${source}</span>
+          </div>
+          <em>(click to load)</em><br>
+          ${m.content.substring(0,100)}...
+        </div>`;
+      }).join('');
+    } else {
+      div.innerHTML = 'No recent work found';
+    }
+  })
+  .catch(e => document.getElementById('recent').innerHTML = 'Load error');
 }
 
-async function importSync() {
-  const data = document.getElementById('import-data').value.trim();
-  if (!data) return;
-  
-  try {
-    const importData = JSON.parse(data);
-    const response = await fetch('/comet-ai/sync', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        state: importData,
-        source_agent: 'imported-agent'
-      })
-    });
-    const result = await response.json();
-    document.getElementById('sync-result').innerText = JSON.stringify(result, null, 2);
-    document.getElementById('import-data').value = '';
-    showImport();
-  } catch(e) {
-    document.getElementById('sync-result').innerText = 'Import error: ' + e.message;
-  }
-}
+// Load recent on page load
+window.onload = loadRecent;
 
-function toggleStream() {
-  if (streamConnected && eventSource) {
-    eventSource.close();
-    streamConnected = false;
-    document.getElementById('stream-btn').innerText = 'Connect Stream';
-    document.getElementById('stream-data').innerText = 'Stream disconnected';
-    return;
-  }
-  
-  eventSource = new EventSource('/comet-ai/stream');
-  eventSource.onopen = function() {
-    streamConnected = true;
-    document.getElementById('stream-btn').innerText = 'Disconnect Stream';
-    document.getElementById('stream-data').innerText = 'Stream connecting...';
-  };
-  eventSource.onmessage = function(event) {
-    const data = JSON.parse(event.data);
-    document.getElementById('stream-data').innerText = JSON.stringify(data, null, 2);
-  };
-  eventSource.onerror = function() {
-    streamConnected = false;
-    document.getElementById('stream-btn').innerText = 'Connect Stream';
-    document.getElementById('stream-data').innerText = 'Stream error - disconnected';
-  };
+function load(id) {
+  fetch('/comet-ai/get/' + id)
+  .then(r => r.json())
+  .then(result => {
+    if (result.success) {
+      try {
+        const parsed = JSON.parse(result.content);
+        document.getElementById('subject').value = parsed.subject || '';
+        document.getElementById('content').value = parsed.content || '';
+      } catch (e) {
+        document.getElementById('content').value = result.content;
+      }
+      // Show success in recent div (visible to browser AI)
+      const div = document.getElementById('recent');
+      div.innerHTML = '<div style="background:#00d4aa;color:#0a0e1a;padding:20px;font-size:18px;font-weight:bold;text-align:center;border-radius:5px;margin:10px 0;">✅ LOADED! ID: ' + id.substring(0,8) + '</div>';
+      setTimeout(loadRecent, 1000);
+    }
+  })
+  .catch(e => {
+    // Show error in recent div (visible to browser AI)
+    const div = document.getElementById('recent');
+    div.innerHTML = '<div style="background:#ff5555;color:#fff;padding:20px;font-size:18px;font-weight:bold;text-align:center;border-radius:5px;margin:10px 0;">❌ LOAD FAILED</div>';
+  });
 }
-
-// Allow Enter key in textarea to submit
-document.addEventListener('keydown', function(e) {
-  if (e.key === 'Enter' && e.ctrlKey && document.activeElement.id === 'exchange-input') {
-    exchange();
-  }
-});
 </script>
 </body></html>""")
 
-        @self.mcp.custom_route("/comet-ai/auth", methods=["POST"])
-        async def comet_ai_auth(request):
-            """Lightweight authentication for AI clients"""
+        @self.mcp.custom_route("/comet-ai/context", methods=["GET"])
+        async def comet_ai_context_DISABLED(request):
+            return JSONResponse({"error": "Simplified portal - context disabled"})
+
+        # Cleaned up - old HTML removed
+        async def comet_ai_paste(request):
+            """Quick paste endpoint for pastebin functionality"""
             try:
                 data = await request.json()
-                password = data.get('password')
-                
-                token = self.comet_system.authenticate_comet(password)
-                if token:
+                content = data.get('content', '').strip()
+
+                if not content:
+                    return JSONResponse({"error": "No content provided"}, status_code=400)
+
+                # Generate unique short ID
+                import hashlib
+                short_id = hashlib.md5(content.encode()).hexdigest()[:8]
+
+                # Store with pastebin metadata
+                if hasattr(self.storage, 'store_memory'):
+                    memory_id = await self.storage.store_memory(
+                        content=content,
+                        category='comet_handoff',
+                        metadata={
+                            "processed_by": "comet-pastebin",
+                            "processed_at": datetime.now().isoformat(),
+                            "tags": "#comet-handoff,#pastebin",
+                            "source": "comet-paste",
+                            "short_id": short_id,
+                            "paste_type": data.get('type', 'text')
+                        }
+                    )
+
                     return JSONResponse({
                         "success": True,
-                        "token": token,
-                        "comet_meta": {
-                            "source": "haivemind",
-                            "timestamp": datetime.now().isoformat(),
-                            "session_timeout_hours": 24
-                        }
+                        "memory_id": memory_id,
+                        "short_id": short_id,
+                        "content_length": len(content)
                     })
                 else:
-                    return JSONResponse({
-                        "success": False,
-                        "error": "Invalid credentials",
-                        "comet_meta": {"source": "haivemind", "error": True}
-                    }, status_code=401)
-                    
-            except Exception as e:
-                return JSONResponse({
-                    "success": False,
-                    "error": str(e),
-                    "comet_meta": {"source": "haivemind", "error": True}
-                }, status_code=500)
+                    return JSONResponse({"error": "Storage unavailable"}, status_code=500)
 
-        @self.mcp.custom_route("/comet-ai/context", methods=["GET"])
-        async def comet_ai_context(request):
-            """Get current system context in structured format"""
-            # No auth required - secured by Tailscale network
-            try:
-                # Get active agents and system status
-                active_agents = len(self.agent_directives.active_agents) if hasattr(self.agent_directives, 'active_agents') else 0
-                memory_stats = await self.get_memory_stats() if hasattr(self, 'get_memory_stats') else {"total": "unknown"}
-                
-                context = {
-                    "comet_meta": {
-                        "source": "haivemind",
-                        "timestamp": datetime.now().isoformat(),
-                        "format": "ai-optimized"
-                    },
-                    "system_status": {
-                        "comet_enabled": self.comet_system.enabled,
-                        "active_agents": active_agents,
-                        "memory_stats": memory_stats,
-                        "server_version": "1.0.0"
-                    },
-                    "available_operations": [
-                        "memory_search", "memory_store", "task_delegation", 
-                        "agent_communication", "context_preservation"
-                    ],
-                    "quick_templates": {
-                        "research_finding": {"intent": "store", "category": "comet_findings"},
-                        "memory_query": {"intent": "query", "type": "semantic_search"},
-                        "delegate_task": {"intent": "execute", "type": "task_delegation"}
-                    }
-                }
-                
-                return JSONResponse(context)
-                
             except Exception as e:
-                logger.error(f"Comet context error: {e}")
+                logger.error(f"Paste error: {e}")
+                return JSONResponse({"error": str(e)}, status_code=500)
+
+        @self.mcp.custom_route("/comet-ai/get/{item_id}", methods=["GET"])
+        async def comet_ai_get(request):
+            """Get specific paste by ID"""
+            try:
+                item_id = request.path_params['item_id']
+
+                if hasattr(self.storage, 'retrieve_memory'):
+                    memory = await self.storage.retrieve_memory(item_id)
+                    if memory:
+                        return JSONResponse({
+                            "success": True,
+                            "memory": memory,
+                            "content": memory.get('content', ''),
+                            "created_at": memory.get('created_at', ''),
+                            "short_id": memory.get('metadata', {}).get('short_id', item_id[:8])
+                        })
+                    else:
+                        return JSONResponse({"error": "Paste not found"}, status_code=404)
+                else:
+                    return JSONResponse({"error": "Retrieval unavailable"}, status_code=500)
+
+            except Exception as e:
+                logger.error(f"Get paste error: {e}")
+                return JSONResponse({"error": str(e)}, status_code=500)
+
+        @self.mcp.custom_route("/comet-ai/paste", methods=["POST"])
+        async def comet_ai_paste(request):
+            """Simple paste endpoint"""
+            try:
+                data = await request.json()
+                content = data.get('content', '').strip()
+                category = data.get('category', 'comet_handoff')
+
+                if not content:
+                    return JSONResponse({"success": False, "error": "No content provided"}, status_code=400)
+
+                # Store with simple metadata
+                if hasattr(self.storage, 'store_memory'):
+                    memory_id = await self.storage.store_memory(
+                        content=content,
+                        category=category,
+                        metadata={
+                            "processed_by": "simple-comet",
+                            "processed_at": datetime.now().isoformat(),
+                            "source": "simple-paste"
+                        }
+                    )
+                    return JSONResponse({
+                        "success": True,
+                        "memory_id": memory_id
+                    })
+                else:
+                    return JSONResponse({"success": False, "error": "Storage unavailable"}, status_code=500)
+
+            except Exception as e:
+                logger.error(f"Paste error: {e}")
+                return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+
+        @self.mcp.custom_route("/comet-ai/recent", methods=["GET"])
+        async def comet_ai_recent(request):
+            """Get recent pastes from all memories"""
+            try:
+                limit = int(request.query_params.get('limit', 10))
+                query = request.query_params.get('query', '').strip()
+
+                # Try different approaches to get recent memories
+                memories = []
+
+                if hasattr(self.storage, 'search_memories'):
+                    # Use search to get all recent memories
+                    try:
+                        all_memories = await self.storage.search_memories(
+                            query=query,  # Use actual search query
+                            limit=500,  # Get more to find recent ones
+                            category=None
+                        )
+
+                        # Sort by created_at and limit
+                        if all_memories:
+                            sorted_memories = sorted(all_memories,
+                                                   key=lambda x: x.get('created_at', ''),
+                                                   reverse=True)
+                            memories = sorted_memories[:limit]
+
+                    except Exception as e:
+                        logger.warning(f"Search fallback failed: {e}")
+
+                if not memories and hasattr(self.storage, 'get_recent_memories'):
+                    memories = await self.storage.get_recent_memories(limit=limit, hours=24*7)  # 7 days
+
                 return JSONResponse({
-                    "error": "Context retrieval failed",
-                    "comet_meta": {"source": "haivemind", "error": True}
-                }, status_code=500)
+                    "success": True,
+                    "memories": memories,
+                    "count": len(memories)
+                })
+
+            except Exception as e:
+                logger.error(f"Recent pastes error: {e}")
+                return JSONResponse({"error": str(e)}, status_code=500)
 
         @self.mcp.custom_route("/comet-ai/exchange", methods=["POST"])
         async def comet_ai_exchange(request):
@@ -10091,10 +10132,42 @@ document.addEventListener('keydown', function(e) {
                         result = {"stored": False, "error": "Storage unavailable"}
                         
                 elif intent == "query":
-                    # Search memories
+                    # Search memories or get recent messages
                     query = payload.get('content', '')
+                    limit = payload.get('limit', 5)
+
                     if hasattr(self.storage, 'search_memories'):
-                        memories = await self.storage.search_memories(query, limit=5)
+                        # Check if this is a "get last messages" request or recent work request
+                        if (query.lower().startswith('get last') and 'messages' in query.lower()) or 'recent work' in query.lower():
+                            # Get recent memories from comet category first, then fall back to general
+                            try:
+                                memories = await self.storage.get_recent_memories(category='comet_handoff', limit=limit)
+                                if not memories:
+                                    # Fallback to global category
+                                    memories = await self.storage.get_recent_memories(category='global', limit=limit)
+                            except:
+                                # Final fallback - get any recent memories
+                                memories = await self.storage.get_recent_memories(limit=limit)
+                        else:
+                            # Normal search - search in comet categories first
+                            try:
+                                memories = await self.storage.search_memories(query, category='comet_handoff', limit=limit)
+                                if not memories:
+                                    # Also search in related comet categories
+                                    comet_memories = []
+                                    for cat in ['comet_findings', 'comet_results', 'comet_feedback']:
+                                        try:
+                                            cat_memories = await self.storage.search_memories(query, category=cat, limit=limit//3)
+                                            comet_memories.extend(cat_memories)
+                                        except:
+                                            continue
+                                    memories = comet_memories[:limit] if comet_memories else []
+                                if not memories:
+                                    # Final fallback - search all categories
+                                    memories = await self.storage.search_memories(query, limit=limit)
+                            except:
+                                # Final fallback - search all categories
+                                memories = await self.storage.search_memories(query, limit=limit)
                         result = {"memories": memories}
                     else:
                         result = {"memories": [], "error": "Search unavailable"}
@@ -15293,7 +15366,7 @@ main "$@" """,
     def _register_enhanced_ticket_tools(self):
         """Register enhanced ticket management MCP tools"""
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def create_ticket(
             project_id: str,
             title: str,
@@ -15365,7 +15438,7 @@ The ticket has been created in Vibe Kanban and indexed in hAIveMind memory for e
             except Exception as e:
                 return f"❌ Error creating ticket: {str(e)}"
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def get_ticket(project_id: str, ticket_id: str) -> str:
             """
             Get comprehensive ticket details with hAIveMind context
@@ -15445,7 +15518,7 @@ Age: {age_display}
             except Exception as e:
                 return f"❌ Error retrieving ticket: {str(e)}"
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def list_tickets(
             project_id: str,
             status: Optional[str] = None,
@@ -15526,7 +15599,7 @@ Age: {age_display}
             except Exception as e:
                 return f"❌ Error listing tickets: {str(e)}"
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def update_ticket_status(
             project_id: str,
             ticket_id: str,
@@ -15574,7 +15647,7 @@ Status change has been recorded in both Vibe Kanban and hAIveMind memory for ful
             except Exception as e:
                 return f"❌ Error updating status: {str(e)}"
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def search_tickets(
             project_id: str,
             query: str,
@@ -15629,7 +15702,7 @@ Status change has been recorded in both Vibe Kanban and hAIveMind memory for ful
             except Exception as e:
                 return f"❌ Search error: {str(e)}"
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def get_my_tickets(
             project_id: str,
             assignee: str,
@@ -15701,7 +15774,7 @@ Status change has been recorded in both Vibe Kanban and hAIveMind memory for ful
             except Exception as e:
                 return f"❌ Error getting tickets: {str(e)}"
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def add_ticket_comment(
             project_id: str,
             ticket_id: str,
@@ -15753,7 +15826,7 @@ Status change has been recorded in both Vibe Kanban and hAIveMind memory for ful
             except Exception as e:
                 return f"❌ Error adding comment: {str(e)}"
 
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def get_ticket_comments(
             ticket_id: str
         ) -> str:
@@ -15805,7 +15878,7 @@ Status change has been recorded in both Vibe Kanban and hAIveMind memory for ful
             except Exception as e:
                 return f"❌ Error getting comments: {str(e)}"
         
-        @self.mcp.tool()
+        # # @self.mcp.tool()
         async def get_ticket_metrics(
             project_id: str,
             days: int = 30
