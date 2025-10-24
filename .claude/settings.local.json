@@ -34,7 +34,10 @@
       "Read(/home/lj/ewitness-stack/**)",
       "Read(/home/lj/ewitness-stack/**)",
       "Bash(npx @modelcontextprotocol/inspector:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "mcp__haivemind__search_memories",
+      "Bash(find:*)",
+      "Bash(python3:*)"
     ],
     "deny": [],
     "ask": [],
