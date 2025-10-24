@@ -109,13 +109,9 @@ curl http://localhost:8900/sse
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                     FastMCP HTTP/SSE Server                     │
-│                      (Port 8900) - 150+ Tools                   │
+│                      (Port 8900) - 6 Active Tools               │
 ├─────────────────────────────────────────────────────────────────┤
-│  Memory Mgmt │ Agent Coord │ Rules Engine │ Playbook Automation │
-├─────────────────────────────────────────────────────────────────┤
-│  Config Mgmt │ Backup/DR   │ MCP Hosting  │ Credential Vault    │
-├─────────────────────────────────────────────────────────────────┤
-│  Monitoring  │ Deployments │ Workflows    │ External Connectors │
+│           Memory Management  │  Agent Coordination              │
 ├─────────────────────────────────────────────────────────────────┤
 │            Sync Service (Port 8899) - REST API                  │
 │          Machine-to-Machine Synchronization                     │
@@ -337,48 +333,31 @@ Ultra-lightweight interface optimized for AI browser automation:
 
 ## 📊 MCP Tools Reference
 
-### Tool Categories (150+ Total)
+### Active Tools (6 Total)
 
-| Category | Active | Disabled | Description |
-|----------|--------|----------|-------------|
-| **Core Memory** | 9 | 0 | Store, retrieve, search memories |
-| **Agent Coordination** | 6 | 0 | Register agents, delegate tasks, broadcasts |
-| **Infrastructure Config** | 17 | 0 | Snapshots, drift detection, alerts |
-| **Project Management** | 0 | 6 | Project lifecycle (disabled) |
-| **MCP Hosting** | 8 | 0 | Host custom MCP servers |
-| **Agent Directives** | 0 | 4 | Agent setup (disabled) |
-| **Backup & DR** | 10 | 0 | Backups, verification, rotation |
-| **DevOps Tools Sync** | 1 | 12 | Tool sync (mostly disabled) |
-| **External Knowledge** | 1 | 3 | Sync external sources |
-| **Service Discovery** | 0 | 5 | Discover services (disabled) |
-| **Config Templates** | 0 | 6 | Template management (disabled) |
-| **Shortcuts** | 5 | 0 | Quick operational shortcuts |
-| **Monitoring & Alerting** | 0 | 5 | Metrics and alerts (disabled) |
-| **Deployment Management** | 0 | 5 | CI/CD pipelines (disabled) |
-| **Ticket Management** | 0 | 9 | Issue tracking (disabled) |
-| **Rules Engine** | 11 | 14 | Core + advanced rules |
-| **Playbook CRUD** | 20 | 0 | Playbook lifecycle management |
-| **Playbook Execution** | 8 | 0 | Execute and control playbooks |
-| **Playbook Auto-Gen** | 9 | 0 | Auto-generate from patterns |
-| **Confluence Integration** | 8 | 0 | Confluence sync |
-| **Marketplace** | 0 | 10 | Tool marketplace (disabled) |
-| **Workflow Automation** | 14 | 0 | Visual workflow automation |
-| **Interactive Help** | 18 | 0 | Context-aware help system |
-| **Vault Security** | 15 | 0 | Credential vault operations |
-| **Advanced Execution** | 8 | 0 | Advanced playbook execution |
+hAIveMind currently exposes 6 core MCP tools via FastMCP HTTP/SSE server:
 
-### Most Used Tools
+| Tool | Category | Description |
+|------|----------|-------------|
+| `store_memory` | Memory | Store persistent knowledge with tags and categories |
+| `retrieve_memory` | Memory | Get specific memory by ID |
+| `search_memories` | Memory | Full-text and semantic search across memories |
+| `get_recent_memories` | Memory | Retrieve memories within time window |
+| `broadcast_discovery` | Agent Coordination | Share findings with all network agents |
+| `get_broadcasts` | Agent Coordination | Retrieve recent broadcast messages |
 
-1. `store_memory` - Store persistent knowledge
-2. `search_memories` - Search collective memory
-3. `create_config_snapshot` - Track configuration changes
-4. `detect_config_drift` - Detect configuration drift
-5. `broadcast_discovery` - Share findings with agents
-6. `create_full_backup` - Create system backups
-7. `execute_playbook` - Execute automated playbooks
-8. `sync_external_knowledge` - Sync Confluence/Jira
-9. `get_agent_roster` - View active agents
-10. `delegate_task` - Route tasks to specialists
+### Tool Categories
+
+**Core Memory (4 tools)**
+- Persistent storage with ChromaDB vector embeddings
+- Full-text and semantic search
+- Category-based organization
+- Machine context tracking
+
+**Agent Coordination (2 tools)**
+- Network-wide broadcasts
+- Discovery sharing
+- Real-time agent communication
 
 ---
 
@@ -843,13 +822,13 @@ Built with:
 ## 📊 Statistics
 
 - **Lines of Code**: 94 Python source files
-- **MCP Tools**: 150+ across 25 subsystems
-- **Active Tools**: 30+ currently exposed
+- **MCP Tools**: 6 active tools (Memory + Agent Coordination)
 - **Test Coverage**: Comprehensive test suites
 - **Documentation**: 20+ detailed guides
 - **Machine Groups**: 7 specialized groups
 - **Network Machines**: 25+ production machines
 - **Memory Categories**: 14 specialized categories
+- **Storage**: ChromaDB (vectors) + Redis (cache) + SQLite (metadata)
 
 ---
 
