@@ -343,7 +343,7 @@
     }
   },
   "mcp_hosting": {
-    "enabled": true,
+    "enabled": false,
     "servers_dir": "data/mcp_servers",
     "uploads_dir": "data/mcp_uploads",
     "logs_dir": "data/mcp_logs",
