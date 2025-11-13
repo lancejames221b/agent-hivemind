@@ -1805,7 +1805,8 @@ class MemoryStorage:
             # Build JQL query
             jql = f"project = {project_key}"
             if issue_types:
-                jql += f" AND issueType IN ({','.join(f'\\"{t}\\"' for t in issue_types)})"
+                quoted_types = ','.join(f'"{t}"' for t in issue_types)
+                jql += f" AND issueType IN ({quoted_types})"
             jql += " ORDER BY updated DESC"
             
             url = f"{jira_url}/rest/api/2/search"
@@ -2034,6 +2035,159 @@ class MemoryStorage:
                 
         except Exception as e:
             logger.error(f"Memory deletion error: {e}")
+            return {"error": str(e), "memory_id": memory_id}
+
+    async def update_memory(self,
+                           memory_id: str,
+                           content: Optional[str] = None,
+                           metadata: Optional[Dict[str, Any]] = None,
+                           tags: Optional[List[str]] = None,
+                           context: Optional[str] = None,
+                           category: Optional[str] = None) -> Dict[str, Any]:
+        """Update an existing memory's content and/or metadata"""
+        try:
+            # First retrieve the existing memory to confirm it exists
+            existing_memory = await self.retrieve_memory(memory_id)
+            if not existing_memory:
+                return {"error": "Memory not found", "memory_id": memory_id}
+
+            # Check if memory is deleted
+            if existing_memory.get('metadata', {}).get('deleted_at'):
+                return {"error": "Cannot update deleted memory. Recover it first.", "memory_id": memory_id}
+
+            current_time = datetime.now()
+
+            # Prepare updated metadata
+            updated_metadata = existing_memory.get('metadata', {}).copy()
+
+            # Update metadata fields if provided
+            if metadata:
+                updated_metadata.update(metadata)
+
+            if tags is not None:
+                updated_metadata['tags'] = ",".join(tags)
+
+            if context is not None:
+                updated_metadata['context'] = context
+
+            # Add update tracking
+            updated_metadata['updated_at'] = current_time.isoformat()
+            updated_metadata['updated_by'] = self.machine_id
+
+            # Track update history
+            update_history = updated_metadata.get('update_history', [])
+            update_history.append({
+                'updated_at': current_time.isoformat(),
+                'updated_by': self.machine_id,
+                'fields_updated': []
+            })
+            # Keep only last 10 updates in history
+            updated_metadata['update_history'] = update_history[-10:]
+
+            # Determine which collection to update
+            old_category = existing_memory.get('category', 'global')
+            new_category = category if category else old_category
+
+            # Validate new category if changing
+            if new_category not in self.collections:
+                logger.warning(f"Unknown category '{new_category}' - using global")
+                new_category = 'global'
+
+            # Update content (use existing if not provided)
+            updated_content = content if content is not None else existing_memory.get('content', '')
+
+            # Apply authorship directives to new content
+            if content is not None:
+                updated_content = self._apply_authorship_directives(updated_content)
+
+            # If category changed, need to delete from old and add to new
+            if old_category != new_category:
+                # Delete from old collection
+                old_collection = self.collections.get(old_category, self.collections['global'])
+                try:
+                    old_collection.delete(ids=[memory_id])
+                except Exception as e:
+                    logger.warning(f"Failed to delete from old collection {old_category}: {e}")
+
+                # Add to new collection
+                updated_metadata['category'] = new_category
+                new_collection = self.collections[new_category]
+                try:
+                    new_collection.add(
+                        ids=[memory_id],
+                        documents=[updated_content],
+                        metadatas=[updated_metadata]
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to add to new collection {new_category}: {e}")
+                    return {"error": f"Failed to move to new category: {e}", "memory_id": memory_id}
+            else:
+                # Update in the same collection
+                collection = self.collections.get(old_category, self.collections['global'])
+                try:
+                    collection.update(
+                        ids=[memory_id],
+                        documents=[updated_content],
+                        metadatas=[updated_metadata]
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to update memory in collection: {e}")
+                    return {"error": f"Failed to update memory: {e}", "memory_id": memory_id}
+
+            # Update Redis cache
+            if self.redis_client:
+                try:
+                    updated_memory = {
+                        "memory_id": memory_id,
+                        "content": updated_content,
+                        "metadata": updated_metadata,
+                        "category": new_category
+                    }
+                    self.redis_client.setex(
+                        f"memory:{memory_id}",
+                        3600,  # 1 hour cache
+                        json.dumps(updated_memory)
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to update Redis cache: {e}")
+
+            # Log the update
+            update_log = {
+                "action": "update_memory",
+                "memory_id": memory_id,
+                "updated_at": current_time.isoformat(),
+                "updated_by": self.machine_id,
+                "content_changed": content is not None,
+                "category_changed": old_category != new_category,
+                "old_category": old_category,
+                "new_category": new_category
+            }
+
+            logger.info(f"Memory updated: {memory_id}")
+
+            # Broadcast update event to hAIveMind
+            if hasattr(self, 'broadcast_discovery'):
+                try:
+                    await self.broadcast_discovery(
+                        message=f"Memory {memory_id} updated",
+                        category="infrastructure",
+                        severity="info"
+                    )
+                except:
+                    pass  # Don't fail update if broadcast fails
+
+            return {
+                "success": True,
+                "action": "update_memory",
+                "memory_id": memory_id,
+                "updated_at": current_time.isoformat(),
+                "content_changed": content is not None,
+                "category_changed": old_category != new_category,
+                "category": new_category
+            }
+
+        except Exception as e:
+            logger.error(f"Memory update error: {e}")
             return {"error": str(e), "memory_id": memory_id}
 
     async def bulk_delete_memories(self, 
@@ -2916,6 +3070,22 @@ class MemoryMCPServer:
                     }
                 ),
                 Tool(
+                    name="update_memory",
+                    description="Update an existing memory's content and/or metadata",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "memory_id": {"type": "string", "description": "The memory ID to update"},
+                            "content": {"type": "string", "description": "Updated memory content (optional)"},
+                            "metadata": {"type": "object", "description": "Updated metadata fields (optional)"},
+                            "tags": {"type": "array", "items": {"type": "string"}, "description": "Updated tags (optional)"},
+                            "context": {"type": "string", "description": "Updated context information (optional)"},
+                            "category": {"type": "string", "description": "Updated category (optional)", "enum": ["project", "conversation", "agent", "global", "infrastructure", "incidents", "deployments", "monitoring", "runbooks", "security"]}
+                        },
+                        "required": ["memory_id"]
+                    }
+                ),
+                Tool(
                     name="search_memories",
                     description="Search memories with comprehensive filtering including machine, project, and sharing scope",
                     inputSchema={
@@ -3569,7 +3739,11 @@ class MemoryMCPServer:
                         return [TextContent(type="text", text=json.dumps(memory, indent=2))]
                     else:
                         return [TextContent(type="text", text="Memory not found")]
-                
+
+                elif name == "update_memory":
+                    result = await self.storage.update_memory(**arguments)
+                    return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
                 elif name == "search_memories":
                     memories = await self.storage.search_memories(**arguments)
                     return [TextContent(type="text", text=json.dumps(memories, indent=2))]
