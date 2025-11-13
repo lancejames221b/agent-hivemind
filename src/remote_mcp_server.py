@@ -317,7 +317,49 @@ NETWORK TOPOLOGY:
             except Exception as e:
                 logger.error(f"Error retrieving memory: {e}")
                 return f"Error retrieving memory: {str(e)}"
-        
+
+        @self.mcp.tool()
+        async def update_memory(
+            memory_id: str,
+            content: Optional[str] = None,
+            metadata: Optional[Dict[str, Any]] = None,
+            tags: Optional[List[str]] = None,
+            context: Optional[str] = None,
+            category: Optional[str] = None
+        ) -> str:
+            """Update an existing memory's content and/or metadata"""
+            try:
+                result = await self.storage.update_memory(
+                    memory_id=memory_id,
+                    content=content,
+                    metadata=metadata,
+                    tags=tags,
+                    context=context,
+                    category=category
+                )
+                return json.dumps(result, indent=2)
+            except Exception as e:
+                logger.error(f"Error updating memory: {e}")
+                return f"Error updating memory: {str(e)}"
+
+        @self.mcp.tool()
+        async def delete_memory(
+            memory_id: str,
+            hard_delete: bool = False,
+            reason: str = "User request"
+        ) -> str:
+            """Delete a memory by ID with soft delete (recoverable) or hard delete (permanent)"""
+            try:
+                result = await self.storage.delete_memory(
+                    memory_id=memory_id,
+                    hard_delete=hard_delete,
+                    reason=reason
+                )
+                return json.dumps(result, indent=2)
+            except Exception as e:
+                logger.error(f"Error deleting memory: {e}")
+                return f"Error deleting memory: {str(e)}"
+
         @self.mcp.tool()
         async def search_memories(
             query: str,
