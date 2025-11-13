@@ -169,6 +169,7 @@ The system supports comprehensive memory categories for DevOps operations:
 ### Core Memory Tools:
 - `store_memory`: Store memories with comprehensive machine tracking and sharing control
 - `retrieve_memory`: Get specific memory by ID
+- `update_memory`: Update existing memory's content and/or metadata (content, tags, context, category)
 - `search_memories`: Full-text and semantic search with machine/project filtering
 - `get_recent_memories`: Get memories within specified time window
 - `get_memory_stats`: Statistics about stored memories
@@ -370,6 +371,24 @@ fetch_from_jira project_key="INFRA" issue_types=["Bug", "Incident"] limit=25
 
 # Sync all external knowledge sources
 sync_external_knowledge sources=["confluence", "jira"]
+```
+
+### Memory Update & Modification:
+```bash
+# Update memory content
+update_memory memory_id="abc123" content="Updated content with corrections"
+
+# Update memory tags and context
+update_memory memory_id="abc123" tags=["fixed", "verified", "production"] context="Corrected information"
+
+# Update memory category
+update_memory memory_id="abc123" category="incidents"
+
+# Update multiple fields at once
+update_memory memory_id="abc123" content="New content" tags=["updated"] context="Fixed typo" category="infrastructure"
+
+# Update only metadata (content unchanged)
+update_memory memory_id="abc123" metadata={"priority": "high", "verified": true}
 ```
 
 ### Memory Deletion & Lifecycle Management:
