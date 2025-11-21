@@ -20,10 +20,9 @@ except ImportError:
     REDIS_AVAILABLE = False
     logging.warning("Redis not available - vault caching disabled")
 
-from vault.core_vault import CoreCredentialVault
+from vault.core_vault import CoreCredentialVault, VaultAccess
 from vault.encryption_engine import EncryptionEngine
 from vault.audit_manager import AuditManager
-from vault.access_control import VaultAccess
 
 logger = logging.getLogger(__name__)
 

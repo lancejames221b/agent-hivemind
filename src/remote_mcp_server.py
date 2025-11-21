@@ -15282,12 +15282,13 @@ main "$@" """,
                     import yaml
                     content_dict = yaml.safe_load(content)
 
-                result = await self.playbook_manager.store_playbook(
+                result = await self.playbook_manager.store_playbook_with_labels(
                     name=name,
                     content=content_dict,
                     category=category,
-                    labels=labels,
-                    format_type=format_type
+                    labels=labels or [],
+                    format_type=format_type,
+                    created_by=None  # Will use system user
                 )
 
                 return json.dumps(result, indent=2)
@@ -15399,7 +15400,7 @@ main "$@" """,
                 if not self.playbook_manager:
                     return json.dumps({"error": "Playbook storage not initialized"})
 
-                result = await self.playbook_manager.add_playbook_labels(
+                result = await self.playbook_manager.add_labels(
                     playbook_id=playbook_id,
                     labels=labels
                 )
@@ -15429,7 +15430,7 @@ main "$@" """,
                 if not self.playbook_manager:
                     return json.dumps({"error": "Playbook storage not initialized"})
 
-                result = await self.playbook_manager.remove_playbook_labels(
+                result = await self.playbook_manager.remove_labels(
                     playbook_id=playbook_id,
                     labels=labels
                 )
@@ -15459,12 +15460,11 @@ main "$@" """,
                 if not self.playbook_manager:
                     return json.dumps({"error": "Playbook storage not initialized"})
 
-                labels = await self.playbook_manager.list_playbook_labels(
-                    category=category,
-                    limit=limit
+                result = await self.playbook_manager.list_all_labels(
+                    category=category
                 )
 
-                return json.dumps({"labels": labels, "count": len(labels)}, indent=2)
+                return json.dumps(result, indent=2)
 
             except Exception as e:
                 logger.error(f"Error listing playbook labels: {e}")
