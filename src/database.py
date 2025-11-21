@@ -330,7 +330,42 @@ class ControlDatabase:
                     FOREIGN KEY (created_by) REFERENCES users (id)
                 )
             """)
-            
+
+            # Playbook labels table for semantic search and categorization
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS playbook_labels (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    playbook_id INTEGER NOT NULL,
+                    label_name TEXT NOT NULL,
+                    label_value TEXT,
+                    label_type TEXT NOT NULL DEFAULT 'user',
+                    category TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    created_by INTEGER,
+                    usage_count INTEGER DEFAULT 0,
+                    FOREIGN KEY (playbook_id) REFERENCES playbooks (id) ON DELETE CASCADE,
+                    FOREIGN KEY (created_by) REFERENCES users (id),
+                    UNIQUE (playbook_id, label_name, label_value)
+                )
+            """)
+
+            # Create indexes for playbook_labels performance
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_playbook_labels_name ON playbook_labels (label_name)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_playbook_labels_value ON playbook_labels (label_value)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_playbook_labels_playbook ON playbook_labels (playbook_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_playbook_labels_type ON playbook_labels (label_type)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_playbook_labels_category ON playbook_labels (category)")
+
+            # Add embedding and search columns to playbooks table if they don't exist
+            cursor = conn.execute("PRAGMA table_info(playbooks)")
+            existing_columns = {row[1] for row in cursor.fetchall()}
+
+            if 'embedding_metadata' not in existing_columns:
+                conn.execute("ALTER TABLE playbooks ADD COLUMN embedding_metadata TEXT")
+
+            if 'search_tokens' not in existing_columns:
+                conn.execute("ALTER TABLE playbooks ADD COLUMN search_tokens TEXT")
+
             # Create default admin user if none exists
             self._create_default_admin()
     

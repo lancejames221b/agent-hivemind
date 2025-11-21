@@ -143,7 +143,13 @@ class RemoteMemoryMCPServer:
         
         # Register configuration management tools
         self._register_configuration_management_tools()
-        
+
+        # Register playbook storage and management tools
+        self._register_playbook_storage_tools()
+
+        # Register vault credential management tools
+        self._register_vault_management_tools()
+
         # Register Claude shortcut commands
         self._register_claude_shortcut_commands()
         
@@ -15216,7 +15222,511 @@ main "$@" """,
                 
         except Exception as e:
             logger.error(f"Error saving configuration: {e}")
-    
+
+    def _register_playbook_storage_tools(self):
+        """Register playbook storage and management MCP tools"""
+        try:
+            from playbook_storage_manager import PlaybookStorageManager
+
+            # Initialize playbook storage manager
+            db_path = str(Path(__file__).parent.parent / "data" / "haivemind.db")
+            chroma_config = self.config.get('chromadb', {})
+            redis_config = self.config.get('redis', {})
+
+            self.playbook_manager = PlaybookStorageManager(
+                db_path=db_path,
+                chroma_path=chroma_config.get('path', './data/chroma'),
+                redis_host=redis_config.get('host', 'localhost'),
+                redis_port=redis_config.get('port', 6379),
+                redis_db=redis_config.get('db', 0),
+                redis_password=redis_config.get('password'),
+                embedding_model="all-MiniLM-L6-v2"
+            )
+            logger.info("PlaybookStorageManager initialized")
+
+        except Exception as e:
+            logger.error(f"Failed to initialize playbook storage manager: {e}")
+            self.playbook_manager = None
+            return
+
+        @self.mcp.tool()
+        async def store_playbook(
+            name: str,
+            content: str,
+            category: str = "general",
+            labels: Optional[List[str]] = None,
+            format_type: str = "yaml"
+        ) -> str:
+            """
+            Store playbook with labels and automatic semantic indexing using ChromaDB.
+
+            Args:
+                name: Playbook name
+                content: Playbook content (JSON string or YAML)
+                category: Playbook category (ansible, terraform, kubernetes, etc.)
+                labels: List of labels for categorization (format: "name" or "name:value")
+                format_type: Content format (yaml, json, toml)
+
+            Returns:
+                JSON string with playbook_id, slug, and metadata
+            """
+            try:
+                if not self.playbook_manager:
+                    return json.dumps({"error": "Playbook storage not initialized"})
+
+                # Parse content
+                try:
+                    content_dict = json.loads(content)
+                except json.JSONDecodeError:
+                    # Try YAML if JSON fails
+                    import yaml
+                    content_dict = yaml.safe_load(content)
+
+                result = await self.playbook_manager.store_playbook(
+                    name=name,
+                    content=content_dict,
+                    category=category,
+                    labels=labels,
+                    format_type=format_type
+                )
+
+                return json.dumps(result, indent=2)
+
+            except Exception as e:
+                logger.error(f"Error storing playbook: {e}")
+                return json.dumps({"error": str(e)})
+
+        @self.mcp.tool()
+        async def search_playbooks(
+            query: str = "",
+            labels: Optional[List[str]] = None,
+            category: Optional[str] = None,
+            semantic_search: bool = True,
+            similarity_threshold: float = 0.7,
+            match_all_labels: bool = True,
+            limit: int = 10
+        ) -> str:
+            """
+            Search playbooks with semantic search (all-MiniLM-L6-v2) and label filtering (AND/OR logic).
+
+            Args:
+                query: Search query for semantic search
+                labels: List of labels to filter by
+                category: Category filter
+                semantic_search: Use semantic search if True, else full-text
+                similarity_threshold: Minimum similarity score (0.0-1.0)
+                match_all_labels: If True, match ALL labels (AND), else ANY (OR)
+                limit: Maximum results to return
+
+            Returns:
+                JSON string with matching playbooks and metadata
+            """
+            try:
+                if not self.playbook_manager:
+                    return json.dumps({"error": "Playbook storage not initialized"})
+
+                results = await self.playbook_manager.search_playbooks(
+                    query=query,
+                    labels=labels,
+                    category=category,
+                    semantic_search=semantic_search,
+                    similarity_threshold=similarity_threshold,
+                    match_all_labels=match_all_labels,
+                    limit=limit
+                )
+
+                return json.dumps({"results": results, "count": len(results)}, indent=2)
+
+            except Exception as e:
+                logger.error(f"Error searching playbooks: {e}")
+                return json.dumps({"error": str(e)})
+
+        @self.mcp.tool()
+        async def get_playbook(
+            playbook_id: Optional[int] = None,
+            slug: Optional[str] = None,
+            name: Optional[str] = None,
+            memory_id: Optional[str] = None
+        ) -> str:
+            """
+            Retrieve specific playbook by ID, slug, name, or memory_id with Redis caching.
+
+            Args:
+                playbook_id: Playbook database ID
+                slug: Playbook slug
+                name: Playbook name
+                memory_id: Memory system ID
+
+            Returns:
+                JSON string with playbook data or error
+            """
+            try:
+                if not self.playbook_manager:
+                    return json.dumps({"error": "Playbook storage not initialized"})
+
+                playbook = await self.playbook_manager.get_playbook(
+                    playbook_id=playbook_id,
+                    slug=slug,
+                    name=name,
+                    memory_id=memory_id
+                )
+
+                if playbook:
+                    return json.dumps(playbook, indent=2)
+                else:
+                    return json.dumps({"error": "Playbook not found"})
+
+            except Exception as e:
+                logger.error(f"Error retrieving playbook: {e}")
+                return json.dumps({"error": str(e)})
+
+        @self.mcp.tool()
+        async def add_playbook_labels(
+            playbook_id: int,
+            labels: List[str]
+        ) -> str:
+            """
+            Add labels to existing playbooks with automatic ChromaDB metadata sync.
+
+            Args:
+                playbook_id: Playbook database ID
+                labels: List of labels to add (format: "name" or "name:value")
+
+            Returns:
+                JSON string with updated label information
+            """
+            try:
+                if not self.playbook_manager:
+                    return json.dumps({"error": "Playbook storage not initialized"})
+
+                result = await self.playbook_manager.add_playbook_labels(
+                    playbook_id=playbook_id,
+                    labels=labels
+                )
+
+                return json.dumps(result, indent=2)
+
+            except Exception as e:
+                logger.error(f"Error adding playbook labels: {e}")
+                return json.dumps({"error": str(e)})
+
+        @self.mcp.tool()
+        async def remove_playbook_labels(
+            playbook_id: int,
+            labels: List[str]
+        ) -> str:
+            """
+            Remove labels from playbooks with cache invalidation.
+
+            Args:
+                playbook_id: Playbook database ID
+                labels: List of labels to remove
+
+            Returns:
+                JSON string with remaining label information
+            """
+            try:
+                if not self.playbook_manager:
+                    return json.dumps({"error": "Playbook storage not initialized"})
+
+                result = await self.playbook_manager.remove_playbook_labels(
+                    playbook_id=playbook_id,
+                    labels=labels
+                )
+
+                return json.dumps(result, indent=2)
+
+            except Exception as e:
+                logger.error(f"Error removing playbook labels: {e}")
+                return json.dumps({"error": str(e)})
+
+        @self.mcp.tool()
+        async def list_playbook_labels(
+            category: Optional[str] = None,
+            limit: int = 100
+        ) -> str:
+            """
+            List all labels with usage statistics and filtering by category.
+
+            Args:
+                category: Filter labels by category (optional)
+                limit: Maximum number of labels to return
+
+            Returns:
+                JSON string with labels and usage statistics
+            """
+            try:
+                if not self.playbook_manager:
+                    return json.dumps({"error": "Playbook storage not initialized"})
+
+                labels = await self.playbook_manager.list_playbook_labels(
+                    category=category,
+                    limit=limit
+                )
+
+                return json.dumps({"labels": labels, "count": len(labels)}, indent=2)
+
+            except Exception as e:
+                logger.error(f"Error listing playbook labels: {e}")
+                return json.dumps({"error": str(e)})
+
+    def _register_vault_management_tools(self):
+        """Register vault credential management MCP tools"""
+        try:
+            from vault.vault_mcp_integration import VaultMCPIntegration
+
+            # Initialize vault MCP integration
+            vault_config = self.config.get('vault', {})
+            if not vault_config.get('enabled', True):
+                logger.info("Vault management disabled in configuration")
+                return
+
+            redis_client = self.storage.redis_client if hasattr(self.storage, 'redis_client') else None
+            self.vault_integration = VaultMCPIntegration(self.config, redis_client)
+            logger.info("VaultMCPIntegration initialized")
+
+        except Exception as e:
+            logger.error(f"Failed to initialize vault integration: {e}")
+            self.vault_integration = None
+            return
+
+        @self.mcp.tool()
+        async def store_credential(
+            name: str,
+            credential_data: str,
+            credential_type: str = "password",
+            environment: str = "production",
+            service: str = "",
+            project: str = "",
+            master_password: Optional[str] = None,
+            expires_in_days: Optional[int] = None,
+            tags: Optional[List[str]] = None
+        ) -> str:
+            """
+            Store encrypted credentials with AES-256-GCM encryption and scrypt key derivation.
+
+            Args:
+                name: Credential name/description
+                credential_data: Credential data as JSON string
+                credential_type: Type (password, api_key, certificate, ssh_key, token)
+                environment: Environment (production, staging, development)
+                service: Service name
+                project: Project name
+                master_password: Master password (uses configured if not provided)
+                expires_in_days: Days until expiration (optional)
+                tags: List of tags for categorization
+
+            Returns:
+                JSON string with credential_id and metadata
+            """
+            try:
+                if not self.vault_integration:
+                    return json.dumps({"error": "Vault not initialized"})
+
+                # Parse credential data
+                try:
+                    cred_data_dict = json.loads(credential_data)
+                except json.JSONDecodeError:
+                    return json.dumps({"error": "credential_data must be valid JSON"})
+
+                result = await self.vault_integration.store_credential(
+                    name=name,
+                    credential_data=cred_data_dict,
+                    credential_type=credential_type,
+                    environment=environment,
+                    service=service,
+                    project=project,
+                    master_password=master_password,
+                    expires_in_days=expires_in_days,
+                    tags=tags
+                )
+
+                return json.dumps(result, indent=2)
+
+            except Exception as e:
+                logger.error(f"Error storing credential: {e}")
+                return json.dumps({"error": str(e)})
+
+        @self.mcp.tool()
+        async def retrieve_credential(
+            credential_id: str,
+            master_password: Optional[str] = None,
+            audit_reason: str = ""
+        ) -> str:
+            """
+            Retrieve and decrypt credentials with mandatory audit trail logging.
+
+            Args:
+                credential_id: Credential ID to retrieve
+                master_password: Master password (uses configured if not provided)
+                audit_reason: Reason for access (MANDATORY for audit trail)
+
+            Returns:
+                JSON string with decrypted credential data
+            """
+            try:
+                if not self.vault_integration:
+                    return json.dumps({"error": "Vault not initialized"})
+
+                result = await self.vault_integration.retrieve_credential(
+                    credential_id=credential_id,
+                    master_password=master_password,
+                    audit_reason=audit_reason
+                )
+
+                return json.dumps(result, indent=2)
+
+            except Exception as e:
+                logger.error(f"Error retrieving credential: {e}")
+                return json.dumps({"error": str(e)})
+
+        @self.mcp.tool()
+        async def search_credentials(
+            query: str = "",
+            environment: Optional[str] = None,
+            service: Optional[str] = None,
+            credential_type: Optional[str] = None,
+            limit: int = 50
+        ) -> str:
+            """
+            Search credentials by metadata (environment, service, type) without decryption.
+
+            Args:
+                query: Search query for name/description
+                environment: Filter by environment
+                service: Filter by service
+                credential_type: Filter by type
+                limit: Maximum results
+
+            Returns:
+                JSON string with credential metadata (no secrets exposed)
+            """
+            try:
+                if not self.vault_integration:
+                    return json.dumps({"error": "Vault not initialized"})
+
+                results = await self.vault_integration.search_credentials(
+                    query=query,
+                    environment=environment,
+                    service=service,
+                    credential_type=credential_type,
+                    limit=limit
+                )
+
+                return json.dumps({"results": results, "count": len(results)}, indent=2)
+
+            except Exception as e:
+                logger.error(f"Error searching credentials: {e}")
+                return json.dumps({"error": str(e)})
+
+        @self.mcp.tool()
+        async def rotate_credential(
+            credential_id: str,
+            new_credential_data: str,
+            master_password: Optional[str] = None,
+            rotation_reason: str = ""
+        ) -> str:
+            """
+            Rotate credentials with history preservation and audit logging.
+
+            Args:
+                credential_id: Credential ID to rotate
+                new_credential_data: New credential data as JSON string
+                master_password: Master password (uses configured if not provided)
+                rotation_reason: Reason for rotation
+
+            Returns:
+                JSON string with rotation status and new version info
+            """
+            try:
+                if not self.vault_integration:
+                    return json.dumps({"error": "Vault not initialized"})
+
+                # Parse new credential data
+                try:
+                    new_cred_dict = json.loads(new_credential_data)
+                except json.JSONDecodeError:
+                    return json.dumps({"error": "new_credential_data must be valid JSON"})
+
+                result = await self.vault_integration.rotate_credential(
+                    credential_id=credential_id,
+                    new_credential_data=new_cred_dict,
+                    master_password=master_password,
+                    rotation_reason=rotation_reason
+                )
+
+                return json.dumps(result, indent=2)
+
+            except Exception as e:
+                logger.error(f"Error rotating credential: {e}")
+                return json.dumps({"error": str(e)})
+
+        @self.mcp.tool()
+        async def revoke_credential(
+            credential_id: str,
+            revocation_reason: str = ""
+        ) -> str:
+            """
+            Revoke credential access with reason tracking and audit trail.
+
+            Args:
+                credential_id: Credential ID to revoke
+                revocation_reason: Reason for revocation
+
+            Returns:
+                JSON string with revocation status
+            """
+            try:
+                if not self.vault_integration:
+                    return json.dumps({"error": "Vault not initialized"})
+
+                result = await self.vault_integration.revoke_credential(
+                    credential_id=credential_id,
+                    revocation_reason=revocation_reason
+                )
+
+                return json.dumps(result, indent=2)
+
+            except Exception as e:
+                logger.error(f"Error revoking credential: {e}")
+                return json.dumps({"error": str(e)})
+
+        @self.mcp.tool()
+        async def list_credentials(
+            environment: Optional[str] = None,
+            service: Optional[str] = None,
+            status: str = "active",
+            limit: int = 100
+        ) -> str:
+            """
+            List credential metadata (no secrets exposed) with filtering options.
+
+            Args:
+                environment: Filter by environment
+                service: Filter by service
+                status: Filter by status (active, revoked, expired)
+                limit: Maximum results
+
+            Returns:
+                JSON string with credential metadata list
+            """
+            try:
+                if not self.vault_integration:
+                    return json.dumps({"error": "Vault not initialized"})
+
+                results = await self.vault_integration.list_credentials(
+                    environment=environment,
+                    service=service,
+                    status=status,
+                    limit=limit
+                )
+
+                return json.dumps({"credentials": results, "count": len(results)}, indent=2)
+
+            except Exception as e:
+                logger.error(f"Error listing credentials: {e}")
+                return json.dumps({"error": str(e)})
+
     def run(self):
         """Run the remote MCP server"""
         try:

@@ -470,5 +470,34 @@
     "connection_status": "configured",
     "last_updated": 1756123042.4734287,
     "last_sync": 1756123052.151765
+  },
+  "vault": {
+    "enabled": true,
+    "database_path": "data/vault.db",
+    "master_password": "R3dca070111-001",
+    "encryption": {
+      "algorithm": "AES-256-GCM",
+      "key_derivation": "scrypt",
+      "security_level": "high",
+      "scrypt_n": 16384,
+      "scrypt_r": 8,
+      "scrypt_p": 1,
+      "key_rotation_days": 90,
+      "key_cache_ttl": 300,
+      "enable_caching": true,
+      "max_workers": 4
+    },
+    "audit": {
+      "enabled": true,
+      "mandatory_for_access": true,
+      "retention_days": 365,
+      "log_path": "data/vault_audit.log"
+    },
+    "access_control": {
+      "require_mfa": false,
+      "ip_restrictions": false,
+      "time_restrictions": false,
+      "emergency_access_enabled": true
+    }
   }
 }
