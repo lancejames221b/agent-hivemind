@@ -109,15 +109,16 @@ curl http://localhost:8900/sse
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                     FastMCP HTTP/SSE Server                     │
-│                      (Port 8900) - 6 Active Tools               │
+│                     (Port 8900) - 18 Active Tools               │
 ├─────────────────────────────────────────────────────────────────┤
-│           Memory Management  │  Agent Coordination              │
+│  Memory Management │ Agent Coordination │ Playbook Storage     │
+│                          Credential Vault                       │
 ├─────────────────────────────────────────────────────────────────┤
 │            Sync Service (Port 8899) - REST API                  │
 │          Machine-to-Machine Synchronization                     │
 ├─────────────────────────────────────────────────────────────────┤
 │              Storage Layer                                      │
-│  ChromaDB (Vectors) │ Redis (Cache) │ SQLite (Rules/Projects)  │
+│  ChromaDB (Vectors) │ Redis (Cache) │ SQLite (Metadata/Vault)  │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -264,22 +265,56 @@ AI Agent → MCP Client → HTTP/SSE (Port 8900) → FastMCP Server → Tools
 - `delete_mcp_server` - Remove hosted server
 - `get_hosting_stats` - Overall hosting statistics
 
-### 🔒 Credential Vault (Story 8b)
+### 📚 Playbook Storage & Management
 
-- **Enterprise Encryption**: AES-256-GCM authenticated encryption
-- **Multiple Key Derivation**: PBKDF2, Scrypt, HKDF support
-- **Access Control**: Role-based access with multi-signature approval
-- **Audit Trail**: Comprehensive logging with anomaly detection
-- **Key Rotation**: Automated key rotation with version management
-- **Compliance**: SOX, HIPAA, PCI-DSS, GDPR support
-- **hAIveMind Integration**: Threat intelligence and collaborative security
+- **Semantic Search**: ChromaDB-powered semantic search using all-MiniLM-L6-v2 embeddings
+- **Label Management**: Flexible labeling system with user/system/auto types
+- **Advanced Filtering**: AND/OR label logic with category and format filtering
+- **Redis Caching**: High-performance caching with automatic invalidation
+- **Multiple Identifiers**: Search by ID, slug, name, or memory_id
+- **Format Support**: YAML, JSON, TOML, and custom formats
+- **Category Organization**: Organize playbooks by category (ansible, terraform, kubernetes, etc.)
+- **Metadata Tracking**: Rich metadata with timestamps, versions, and usage statistics
 
-**Features:**
-- 15 vault security tools
-- PostgreSQL with row-level security
-- HSM integration support
-- Automated backup and recovery
-- Multi-factor authentication
+**Active Tools:**
+- `store_playbook` - Store playbooks with labels and automatic semantic indexing
+- `search_playbooks` - Semantic search with label filtering (AND/OR logic)
+- `get_playbook` - Retrieve by ID, slug, name, or memory_id with caching
+- `add_playbook_labels` - Add labels with automatic ChromaDB metadata sync
+- `remove_playbook_labels` - Remove labels with cache invalidation
+- `list_playbook_labels` - List all labels with usage statistics
+
+**Technical Architecture:**
+- Vector Database: ChromaDB with all-MiniLM-L6-v2 embeddings
+- Metadata Storage: SQLite with playbook_labels table
+- Cache Layer: Redis with TTL-based invalidation
+- Search Threshold: 0.7 (configurable)
+- Label Format: "name" or "name:value" pairs
+
+### 🔒 Secure Credential Vault Management
+
+- **Enterprise Encryption**: AES-256-GCM authenticated encryption with scrypt key derivation
+- **Master Password Protection**: Configurable master password (default: R3dca070111-001)
+- **Comprehensive Audit Trail**: All credential access logged with reason tracking
+- **Credential Rotation**: Automated rotation with history preservation
+- **Metadata Search**: Search credentials without decryption exposure
+- **Access Revocation**: Immediate revocation with audit logging
+- **Environment Isolation**: Separate credentials by environment (production, staging, development)
+- **Service Organization**: Group credentials by service and project
+
+**Active Tools:**
+- `store_credential` - Store encrypted credentials with AES-256-GCM
+- `retrieve_credential` - Retrieve and decrypt credentials (audit required)
+- `search_credentials` - Search by metadata without decryption
+- `rotate_credential` - Rotate credentials with history preservation
+- `revoke_credential` - Revoke credential access with reason tracking
+- `list_credentials` - List credential metadata (no secrets exposed)
+
+**Encryption Details:**
+- Algorithm: AES-256-GCM
+- Key Derivation: Scrypt (N=16384, r=8, p=1)
+- Master Password: Configurable in config.json
+- Database: SQLite with encrypted credential storage
 
 ### 🔄 Workflow Automation
 
