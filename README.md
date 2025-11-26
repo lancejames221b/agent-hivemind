@@ -407,17 +407,34 @@ hAIveMind currently exposes 6 core MCP tools via FastMCP HTTP/SSE server:
 
 ### Environment Variables
 
+Required environment variables for hAIveMind configuration:
+
 ```bash
+# COMET Authentication
+# Password for COMET AI portal access (CRITICAL - protects AI directives and memory search)
+export COMET_AUTH_PASSWORD="your-secure-password-here"
+
 # JWT secret for authentication
 export HAIVEMIND_JWT_SECRET="your-secret-key"
 
 # Admin API token
 export HAIVEMIND_ADMIN_TOKEN="your-admin-token"
 
-# Confluence/Jira tokens
+# Read-only and agent API tokens
+export HAIVEMIND_READONLY_TOKEN="your-readonly-token"
+export HAIVEMIND_AGENT_TOKEN="your-agent-token"
+
+# Confluence/Jira tokens (optional - only needed if connectors enabled)
 export CONFLUENCE_API_TOKEN="your-confluence-token"
 export JIRA_API_TOKEN="your-jira-token"
 ```
+
+**Security Notes:**
+- Copy `.env.example` to `.env` and set your actual values
+- Never commit `.env` file to version control
+- Use strong, randomly generated passwords for authentication
+- Rotate credentials periodically (recommend 90 days)
+- Keep COMET_AUTH_PASSWORD secure - it provides access to all AI directives and memory operations
 
 ### Machine Groups
 

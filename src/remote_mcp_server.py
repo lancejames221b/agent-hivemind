@@ -7,6 +7,8 @@ Provides remote access to the agent hivemind via MCP protocol
 import asyncio
 import json
 import logging
+import os
+import re
 import sys
 import time
 import uuid
@@ -41,6 +43,35 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+def substitute_env_vars(config_text: str) -> str:
+    """Substitute environment variables in config text.
+
+    Supports ${VAR_NAME} and ${VAR_NAME:-default_value} syntax.
+
+    Args:
+        config_text: Config file text with env var placeholders
+
+    Returns:
+        Config text with environment variables substituted
+    """
+    def replace_var(match):
+        var_expr = match.group(1)
+
+        # Handle default value syntax: ${VAR:-default}
+        if ':-' in var_expr:
+            var_name, default = var_expr.split(':-', 1)
+            return os.getenv(var_name.strip(), default.strip())
+        else:
+            # Simple variable reference: ${VAR}
+            value = os.getenv(var_expr.strip())
+            if value is None:
+                logger.warning(f"Environment variable {var_expr} not set, leaving placeholder")
+                return match.group(0)  # Return original placeholder
+            return value
+
+    # Replace ${VAR} and ${VAR:-default} patterns
+    return re.sub(r'\$\{([^}]+)\}', replace_var, config_text)
+
 class RemoteMemoryMCPServer:
     """Remote MCP Server using FastMCP for HTTP/SSE transport"""
     
@@ -48,9 +79,13 @@ class RemoteMemoryMCPServer:
         # Load configuration
         if config_path is None:
             config_path = str(Path(__file__).parent.parent / "config" / "config.json")
-        
+
         with open(config_path) as f:
-            self.config = json.load(f)
+            config_text = f.read()
+
+        # Substitute environment variables
+        config_text = substitute_env_vars(config_text)
+        self.config = json.loads(config_text)
         
         # Initialize memory storage and auth
         self.storage = MemoryStorage(self.config)
