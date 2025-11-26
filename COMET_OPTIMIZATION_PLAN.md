@@ -20,7 +20,7 @@
 #### Current hAIveMind Integration
 - Existing `comet_integration.py` with directive system already built
 - Portal available at `/comet` endpoint serving hAIveMind Comet Portal
-- Authentication using password `R3dca070111-001` with 24-hour sessions
+- Authentication using environment variable `COMET_AUTH_PASSWORD` with 24-hour sessions
 - Directive system supporting priority levels, task delegation, memory search
 - Rate limiting: 60 requests/minute with 1024KB max response size
 
@@ -107,7 +107,7 @@ submitData = {...userInput, comet_meta: cometTag};
 "comet": {
   "enabled": true,
   "authentication": {
-    "password": "R3dca070111-001",
+    "password": "${COMET_AUTH_PASSWORD}",
     "session_timeout_hours": 24,
     "auto_logout": true
   },
