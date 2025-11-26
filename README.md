@@ -407,7 +407,12 @@ hAIveMind currently exposes 6 core MCP tools via FastMCP HTTP/SSE server:
 
 ### Environment Variables
 
+Required environment variables must be set before starting hAIveMind services:
+
 ```bash
+# COMET authentication password (required)
+export COMET_AUTH_PASSWORD="your-comet-password"
+
 # JWT secret for authentication
 export HAIVEMIND_JWT_SECRET="your-secret-key"
 
@@ -417,6 +422,19 @@ export HAIVEMIND_ADMIN_TOKEN="your-admin-token"
 # Confluence/Jira tokens
 export CONFLUENCE_API_TOKEN="your-confluence-token"
 export JIRA_API_TOKEN="your-jira-token"
+```
+
+Create a `.env` file (not committed to git) for local development:
+
+```bash
+# Copy from example
+cp .env.example .env
+
+# Edit with your actual credentials
+nano .env
+
+# Source before starting services
+source .env
 ```
 
 ### Machine Groups
