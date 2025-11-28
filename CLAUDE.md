@@ -243,8 +243,24 @@ The system supports comprehensive memory categories for DevOps operations:
 ### Automation & Playbook Tools:
 - `upload_playbook`: Upload and store Ansible/Terraform/Kubernetes playbooks
 - `fetch_from_confluence`: Fetch documentation from Confluence and store as knowledge
-- `fetch_from_jira`: Fetch issues from Jira and store as incident/task knowledge  
+- `fetch_from_jira`: Fetch issues from Jira and store as incident/task knowledge
 - `sync_external_knowledge`: Sync from all configured external sources automatically
+
+### Playbook Storage & Management Tools:
+- `store_playbook`: Store playbooks with labels and automatic semantic indexing using ChromaDB
+- `search_playbooks`: Search playbooks with semantic search (all-MiniLM-L6-v2) and label filtering (AND/OR logic)
+- `get_playbook`: Retrieve specific playbook by ID, slug, name, or memory_id with Redis caching
+- `add_playbook_labels`: Add labels to existing playbooks with automatic ChromaDB metadata sync
+- `remove_playbook_labels`: Remove labels from playbooks with cache invalidation
+- `list_playbook_labels`: List all labels with usage statistics and filtering by category
+
+### Secure Credential Vault Management Tools:
+- `store_credential`: Store encrypted credentials with AES-256-GCM encryption and scrypt key derivation
+- `retrieve_credential`: Retrieve and decrypt credentials with mandatory audit trail logging
+- `search_credentials`: Search credentials by metadata (environment, service, type) without decryption
+- `rotate_credential`: Rotate credentials with history preservation and audit logging
+- `revoke_credential`: Revoke credential access with reason tracking and audit trail
+- `list_credentials`: List credential metadata (no secrets exposed) with filtering options
 
 ### Agent Capabilities by Machine Group:
 - **Orchestrators** (`lance-dev`): `coordination`, `deployment`, `infrastructure_management`
@@ -363,7 +379,7 @@ generate_runbook title="Elasticsearch Restart Procedure" procedure="1. Stop serv
 # Upload Ansible playbook
 upload_playbook playbook_name="Deploy Nginx" playbook_content="<yaml_content>" playbook_type="ansible" target_systems=["web-servers"]
 
-# Fetch documentation from Confluence  
+# Fetch documentation from Confluence
 fetch_from_confluence space_key="DEVOPS" page_title="Deployment Guide"
 
 # Fetch incidents from Jira
@@ -371,6 +387,63 @@ fetch_from_jira project_key="INFRA" issue_types=["Bug", "Incident"] limit=25
 
 # Sync all external knowledge sources
 sync_external_knowledge sources=["confluence", "jira"]
+```
+
+### Playbook Storage with Semantic Search:
+```bash
+# Store playbook with labels and automatic semantic indexing
+store_playbook name="Elasticsearch Recovery" content='{"tasks": [...]}' category="elasticsearch" labels=["recovery", "ops", "cluster:prod"] format_type="yaml"
+
+# Semantic search for similar playbooks
+search_playbooks query="how to recover elasticsearch cluster" semantic_search=true similarity_threshold=0.7 limit=5
+
+# Search by labels with AND logic (must match all)
+search_playbooks labels=["recovery", "cluster:prod"] match_all_labels=true limit=10
+
+# Search by labels with OR logic (match any)
+search_playbooks labels=["recovery", "deployment", "backup"] match_all_labels=false limit=10
+
+# Combined semantic + label search
+search_playbooks query="database backup procedures" labels=["backup", "database"] category="database" semantic_search=true limit=5
+
+# Get specific playbook by ID or slug
+get_playbook playbook_id="123" # or get_playbook slug="elasticsearch-recovery"
+
+# Add labels to existing playbook
+add_playbook_labels playbook_id="123" labels=["verified", "production", "priority:high"]
+
+# Remove labels from playbook
+remove_playbook_labels playbook_id="123" labels=["draft"]
+
+# List all labels with usage statistics
+list_playbook_labels category="elasticsearch" limit=50
+```
+
+### Secure Credential Vault Management:
+```bash
+# Store encrypted credential (AES-256-GCM + scrypt)
+store_credential name="Elasticsearch Admin" credential_data='{"username": "admin", "password": "secret123"}' credential_type="password" environment="production" service="elasticsearch" project="ewitness" expires_in_days=90 tags=["critical", "admin"]
+
+# Retrieve credential with audit trail
+retrieve_credential credential_id="cred_123456789" audit_reason="Elasticsearch maintenance on elastic1"
+
+# Search credentials by metadata (no decryption)
+search_credentials query="elasticsearch" environment="production" service="elasticsearch" limit=10
+
+# Search by type and service
+search_credentials credential_type="api_key" service="grafana" environment="production"
+
+# Rotate credential with history preservation
+rotate_credential credential_id="cred_123456789" new_credential_data='{"username": "admin", "password": "newSecret456"}' rotation_reason="90-day rotation policy"
+
+# Revoke credential access
+revoke_credential credential_id="cred_123456789" revocation_reason="Service decommissioned"
+
+# List all credentials (metadata only)
+list_credentials environment="production" status="active" limit=50
+
+# List by service
+list_credentials service="elasticsearch" environment="production"
 ```
 
 ### Memory Update & Modification:
