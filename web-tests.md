@@ -14,7 +14,7 @@
 - **Admin URL**: http://lance-dev:8900/admin/login.html
 - **Username**: `admin`
 - **Password**: `adminpassword` (from config.json line 372-373)
-- **Vault Password**: `R3dca070111-001` (if vault access required)
+- **Comet Auth Password**: Set via `COMET_AUTH_PASSWORD` environment variable (see docs/security-setup.md)
 - **API Base URL**: http://lance-dev:8900
 - **Alternative Port**: 8901 (if port conflicts occur)
 
@@ -204,7 +204,7 @@
 **Access Testing**:
 1. **Vault Authentication**:
    - [ ] Additional password prompt (if required)
-   - [ ] Vault password: `R3dca070111-001`
+   - [ ] Vault password: Set via environment variable (see docs/security-setup.md)
    - [ ] Two-factor authentication (if enabled)
    - [ ] Session security measures
 

@@ -428,7 +428,7 @@
   "comet": {
     "enabled": true,
     "authentication": {
-      "password": "R3dca070111-001",
+      "password": "${COMET_AUTH_PASSWORD}",
       "session_timeout_hours": 24,
       "auto_logout": true
     },

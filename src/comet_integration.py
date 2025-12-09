@@ -35,9 +35,23 @@ class CometDirectiveSystem:
         """Authenticate Comet browser and return session token"""
         if not self.enabled:
             return None
-            
-        expected_password = self.config.get('authentication', {}).get('password', 'R3dca070111-001')
-        
+
+        expected_password = self.config.get('authentication', {}).get('password')
+
+        if not expected_password:
+            raise ValueError(
+                "Comet authentication password not configured. "
+                "Set COMET_AUTH_PASSWORD environment variable or configure in config.json. "
+                "See docs/security-setup.md for security guidelines."
+            )
+
+        # Validate password strength on first check
+        if len(expected_password) < 16:
+            raise ValueError(
+                f"Comet authentication password must be at least 16 characters. "
+                f"Current length: {len(expected_password)}. Use a strong, randomly generated password."
+            )
+
         if password != expected_password:
             logger.warning("🚀 Comet authentication failed - incorrect password")
             return None
