@@ -4109,7 +4109,9 @@ def main():
 ╰─────────────────────────────────────────────────────────────╯
     """)
     
-    config_path = "/home/lj/haivemind-mcp-server/config/config.json"
+    # Use relative path from script location for deployment flexibility
+    default_config = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../config/config.json')
+    config_path = os.getenv('HAIVEMIND_CONFIG_PATH', default_config)
     if len(sys.argv) > 1:
         config_path = sys.argv[1]
     
