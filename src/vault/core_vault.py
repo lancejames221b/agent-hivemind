@@ -391,8 +391,8 @@ class CoreCredentialVault:
                 
                 conn.commit()
             
-            # Log audit event
-            await self._log_audit_event(user_id, metadata.credential_id, "store_credential", 
+            # Log audit event (SECURITY: Only log metadata, NEVER log credential_data)
+            await self._log_audit_event(user_id, metadata.credential_id, "store_credential",
                                       {"credential_type": metadata.credential_type.value}, True)
             
             # Cache metadata in Redis for performance
@@ -476,17 +476,17 @@ class CoreCredentialVault:
                     updated_at=datetime.fromisoformat(encrypted_row[9])
                 )
                 
-                # Decrypt credential data
+                # Decrypt credential data (SECURITY: DO NOT LOG - contains plaintext passwords/secrets)
                 credential_data = self.decrypt_credential_data(encrypted_cred, master_password)
-                
+
                 # Update last accessed time
                 cursor.execute('''
                     UPDATE credential_metadata SET last_accessed = ? WHERE credential_id = ?
                 ''', (datetime.utcnow(), credential_id))
                 conn.commit()
-                
-                # Log audit event
-                await self._log_audit_event(user_id, credential_id, "retrieve_credential", 
+
+                # Log audit event (SECURITY: Only log metadata, NEVER log decrypted credential_data)
+                await self._log_audit_event(user_id, credential_id, "retrieve_credential",
                                           {"credential_type": metadata.credential_type.value}, True)
                 
                 return metadata, credential_data
@@ -641,7 +641,15 @@ class CoreCredentialVault:
     async def _log_audit_event(self, user_id: str, credential_id: Optional[str], action: str,
                              details: Dict[str, Any], success: bool, ip_address: str = None,
                              user_agent: str = None):
-        """Log audit event"""
+        """
+        Log audit event
+
+        SECURITY: The details dict MUST contain only metadata (IDs, types, timestamps).
+        NEVER include credential_data, passwords, API keys, decrypted values, or encryption artifacts.
+        Audit logs are stored in plaintext and may be backed up, replicated, and archived.
+
+        See docs/audit-log-security.md for safe vs unsafe patterns.
+        """
         try:
             audit_id = secrets.token_urlsafe(32)
             

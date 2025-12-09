@@ -598,7 +598,7 @@ async def rotate_credential(
         # Rotate credential
         rotation_result = await core_vault.rotate_credential(credential_id)
         
-        # Log rotation
+        # Log rotation (SECURITY: Only log version numbers, NEVER log old/new credential values)
         await audit_manager.log_event(
             AuditEventType.CREDENTIAL_ROTATED,
             user_id=current_user['id'],
@@ -607,8 +607,9 @@ async def rotate_credential(
             resource_name=credential['name'],
             metadata={
                 'rotation_method': rotation_result.get('method', 'manual'),
-                'previous_version': rotation_result.get('previous_version'),
-                'new_version': rotation_result.get('new_version')
+                'previous_version': rotation_result.get('previous_version'),  # Version number only, safe
+                'new_version': rotation_result.get('new_version')  # Version number only, safe
+                # DO NOT LOG: old_credential, new_credential, credential_data
             }
         )
         
