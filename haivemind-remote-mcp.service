@@ -1,0 +1,19 @@
+[Unit]
+Description=hAIveMind Remote MCP Server
+After=network.target redis-server.service
+
+[Service]
+Type=simple
+User=lj
+WorkingDirectory=/home/lj/dev/haivemind/haivemind-mcp-server/src
+ExecStart=/home/lj/dev/haivemind/haivemind-mcp-server/venv/bin/python remote_mcp_server.py --host 0.0.0.0 --port 8900
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=haivemind-remote-mcp
+
+Environment="PYTHONUNBUFFERED=1"
+
+[Install]
+WantedBy=multi-user.target
