@@ -317,7 +317,56 @@ NETWORK TOPOLOGY:
             except Exception as e:
                 logger.error(f"Error retrieving memory: {e}")
                 return f"Error retrieving memory: {str(e)}"
-        
+
+        @self.mcp.tool()
+        async def update_memory(
+            memory_id: str,
+            content: Optional[str] = None,
+            tags: Optional[List[str]] = None,
+            context: Optional[str] = None,
+            category: Optional[str] = None,
+            metadata: Optional[Dict[str, Any]] = None
+        ) -> str:
+            """Update an existing memory's content and/or metadata"""
+            try:
+                success = await self.storage.update_memory(
+                    memory_id=memory_id,
+                    content=content,
+                    tags=tags,
+                    context=context,
+                    category=category,
+                    metadata=metadata
+                )
+                if success:
+                    return f"Memory {memory_id} updated successfully"
+                else:
+                    return f"Failed to update memory {memory_id}"
+            except Exception as e:
+                logger.error(f"Error updating memory: {e}")
+                return f"Error updating memory: {str(e)}"
+
+        @self.mcp.tool()
+        async def delete_memory(
+            memory_id: str,
+            hard_delete: bool = False,
+            reason: Optional[str] = None
+        ) -> str:
+            """Delete a memory (soft delete by default, hard delete if specified)"""
+            try:
+                success = await self.storage.delete_memory(
+                    memory_id=memory_id,
+                    hard_delete=hard_delete,
+                    reason=reason
+                )
+                delete_type = "permanently deleted" if hard_delete else "moved to recycle bin"
+                if success:
+                    return f"Memory {memory_id} {delete_type}"
+                else:
+                    return f"Failed to delete memory {memory_id}"
+            except Exception as e:
+                logger.error(f"Error deleting memory: {e}")
+                return f"Error deleting memory: {str(e)}"
+
         @self.mcp.tool()
         async def search_memories(
             query: str,
