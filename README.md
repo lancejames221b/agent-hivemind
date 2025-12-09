@@ -31,6 +31,7 @@
 **License:** MIT
 **Version:** 2.0.0
 **Status:** Production Ready
+**MCP Tools:** 20 Active Production Tools
 
 ---
 
@@ -81,22 +82,36 @@ curl http://localhost:8899/api/status
 ### Configure MCP Client
 
 ```bash
-# For Claude Desktop
-cat > ~/.config/claude/claude_desktop_config.json <<EOF
+# For Claude Code / Claude Desktop (Global Config)
+# Add to ~/.claude.json in the "mcpServers" section:
 {
   "mcpServers": {
     "haivemind": {
       "command": "npx",
-      "args": ["@modelcontextprotocol/server-http", "http://localhost:8900/sse"]
+      "args": ["-y", "mcp-remote", "http://localhost:8900/sse"],
+      "env": {"HTTP_TIMEOUT": "60000"}
     }
   }
 }
-EOF
 
-# For Cursor AI
-cp mcp-client/config/cursor-agent.json .cursor/mcp.json
+# For Project-Specific MCP (.mcp.json in project root):
+{
+  "mcpServers": {
+    "haivemind": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "http://localhost:8900/sse"],
+      "env": {
+        "HTTP_TIMEOUT": "60000",
+        "RETRY_DELAY": "1000",
+        "MAX_RETRIES": "5",
+        "KEEP_ALIVE": "true"
+      }
+    }
+  }
+}
 
 # Test connection
+curl http://localhost:8900/health
 curl http://localhost:8900/sse
 ```
 
@@ -109,15 +124,15 @@ curl http://localhost:8900/sse
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                     FastMCP HTTP/SSE Server                     │
-│                      (Port 8900) - 6 Active Tools               │
+│                    (Port 8900) - 20 Active Tools                │
 ├─────────────────────────────────────────────────────────────────┤
-│           Memory Management  │  Agent Coordination              │
+│  Memory (8) │ Playbooks (6) │ Vault (6) │ Agent Coordination   │
 ├─────────────────────────────────────────────────────────────────┤
 │            Sync Service (Port 8899) - REST API                  │
 │          Machine-to-Machine Synchronization                     │
 ├─────────────────────────────────────────────────────────────────┤
-│              Storage Layer                                      │
-│  ChromaDB (Vectors) │ Redis (Cache) │ SQLite (Rules/Projects)  │
+│                      Storage Layer                              │
+│  ChromaDB │ Redis │ SQLite │ AES-256-GCM Vault │ Audit Logs   │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -156,12 +171,15 @@ AI Agent → MCP Client → HTTP/SSE (Port 8900) → FastMCP Server → Tools
 - **Sharing Control**: Fine-grained control over memory sharing and synchronization
 - **Project Tracking**: Automatic project context detection and scoping
 
-**Active Tools:**
+**Active Tools (8):**
 - `store_memory` - Store memories with machine tracking and sharing control
 - `retrieve_memory` - Get specific memory by ID
+- `update_memory` - Update memory content, tags, context, category, or metadata
+- `delete_memory` - Soft delete (recycle bin) or hard delete with reason tracking
 - `search_memories` - Full-text and semantic search with filters
 - `get_recent_memories` - Time-based memory retrieval
-- `get_memory_stats` - Statistics about stored memories
+- `broadcast_discovery` - Share findings with all hAIveMind agents
+- `get_broadcasts` - Retrieve recent network-wide broadcasts
 
 ### 🤖 Agent Coordination
 
@@ -177,6 +195,40 @@ AI Agent → MCP Client → HTTP/SSE (Port 8900) → FastMCP Server → Tools
 - `delegate_task` - Assign tasks to specialized agents
 - `broadcast_discovery` - Share findings with all agents
 - `get_broadcasts` - Retrieve recent broadcasts
+
+### 📚 Playbook Storage & Management
+
+- **Semantic Search**: ChromaDB with all-MiniLM-L6-v2 embeddings for intelligent playbook discovery
+- **Label System**: Flexible categorization with AND/OR logic filtering
+- **Redis Caching**: High-performance playbook retrieval with intelligent caching
+- **SQLite Backend**: Robust metadata storage with full-text search
+- **Auto-Indexing**: Automatic semantic indexing on playbook storage
+- **Slug Generation**: Human-readable identifiers for easy access
+
+**Active Tools (6):**
+- `store_playbook` - Store playbooks with automatic semantic indexing
+- `search_playbooks` - Semantic + label-based search with similarity scoring
+- `get_playbook` - Retrieve by ID/slug/name with Redis caching
+- `add_playbook_labels` - Add labels with automatic metadata sync
+- `remove_playbook_labels` - Remove labels with cache invalidation
+- `list_playbook_labels` - Usage statistics and filtering by category
+
+### 🔐 Secure Credential Vault
+
+- **AES-256-GCM Encryption**: Military-grade encryption with scrypt key derivation
+- **Mandatory Audit Trail**: All access logged with timestamp, reason, and accessor
+- **Credential Rotation**: Automated rotation with history preservation
+- **Metadata Search**: Search without decryption exposure
+- **Expiration Management**: Automatic expiry tracking and alerting
+- **Access Control**: Fine-grained permission management
+
+**Active Tools (6):**
+- `store_credential` - Encrypted storage with metadata and expiration
+- `retrieve_credential` - Secure retrieval with mandatory audit logging
+- `search_credentials` - Metadata search (no secrets exposed)
+- `rotate_credential` - Rotation with history preservation
+- `revoke_credential` - Revocation with reason tracking
+- `list_credentials` - Metadata listing (secrets never exposed)
 
 ### 🔧 Infrastructure Configuration Management
 
