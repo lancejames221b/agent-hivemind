@@ -139,8 +139,8 @@ class TeamsAndVaultsSystem:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_database()
 
-        # Initialize encryption
-        self.encryption = VaultEncryption()
+        # Initialize encryption with database path
+        self.encryption = VaultEncryption(db_path=str(self.db_path))
 
     def _init_database(self):
         """Initialize SQLite database with schema from design doc"""
@@ -1068,10 +1068,11 @@ class VaultEncryption:
     with a master key.
     """
 
-    def __init__(self, master_key_path: str = "data/.vault_master_key"):
+    def __init__(self, master_key_path: str = "data/.vault_master_key", db_path: str = "data/teams_vaults.db"):
         # Always enable encryption (use XOR fallback if cryptography not available)
         self.enabled = True
         self.use_fernet = CRYPTO_AVAILABLE
+        self.db_path = Path(db_path)
         self.master_key_path = Path(master_key_path)
         self.master_key_path.parent.mkdir(parents=True, exist_ok=True)
         self._ensure_master_key()
@@ -1105,8 +1106,7 @@ class VaultEncryption:
         key_id = f"vaultkey_{secrets.token_hex(8)}"
 
         # Save to database
-        db_path = Path("data/teams_vaults.db")
-        with sqlite3.connect(db_path) as conn:
+        with sqlite3.connect(self.db_path) as conn:
             conn.execute("""
                 INSERT INTO encryption_keys (key_id, encrypted_key)
                 VALUES (?, ?)
@@ -1121,8 +1121,7 @@ class VaultEncryption:
         if not self.enabled:
             return b"disabled"
 
-        db_path = Path("data/teams_vaults.db")
-        with sqlite3.connect(db_path) as conn:
+        with sqlite3.connect(self.db_path) as conn:
             row = conn.execute("""
                 SELECT encrypted_key FROM encryption_keys WHERE key_id = ?
             """, (key_id,)).fetchone()
