@@ -1069,15 +1069,15 @@ class VaultEncryption:
     """
 
     def __init__(self, master_key_path: str = "data/.vault_master_key"):
-        if not CRYPTO_AVAILABLE:
-            logger.error("Cryptography module not available - vault encryption disabled")
-            self.enabled = False
-            return
-
+        # Always enable encryption (use XOR fallback if cryptography not available)
         self.enabled = True
+        self.use_fernet = CRYPTO_AVAILABLE
         self.master_key_path = Path(master_key_path)
         self.master_key_path.parent.mkdir(parents=True, exist_ok=True)
         self._ensure_master_key()
+
+        if not CRYPTO_AVAILABLE:
+            logger.warning("Using XOR-based encryption (cryptography library not available)")
 
     def _ensure_master_key(self):
         """Ensure master key exists, create if not"""
