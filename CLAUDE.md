@@ -8,6 +8,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### hAIveMind Features:
 - **Collective Intelligence**: Claude agents share knowledge, delegate tasks, and coordinate responses across infrastructure
+- **Teams & Vaults**: Secure collaborative workspaces with encrypted secret storage and role-based access control
+- **Operating Modes**: Solo, Vault, and Team modes for context-aware memory storage and retrieval
 - **Infrastructure Configuration Sync**: SSH configs, service configs, and other critical DevOps assets synchronized across the network
 - **DevOps Memory Categories**: Specialized storage for infrastructure, incidents, deployments, monitoring, runbooks, and security
 - **Real-Time Collaboration**: Agents broadcast discoveries, query each other's knowledge, and coordinate autonomous responses
@@ -18,9 +20,49 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **memory_server.py**: Main MCP server that interfaces with Claude Code via stdio protocol
 - **remote_mcp_server.py**: FastMCP-based remote server for HTTP/SSE access via Tailscale network
 - **sync_service.py**: FastAPI REST service for machine-to-machine synchronization via Tailscale network
+- **teams_and_vaults_system.py**: Team collaboration and secure vault management system
 - **ChromaDB**: Vector database for semantic search and embeddings storage at `/data/chroma/`
 - **Redis**: Caching layer for fast memory access and real-time sync capabilities
 - **Tailscale Integration**: Secure network communication between machines (lance-dev, ljs-macbook-pro, m2, max)
+
+## Teams & Vaults System
+
+The Teams and Vaults system enables secure collaboration and secret management for hAIveMind agents.
+
+### Operating Modes
+
+**Solo Mode** (Default - Safest):
+- Private work - memories visible only to you
+- No sharing - isolated context
+- Use for personal notes and private work
+
+**Vault Mode**:
+- Access encrypted vaults for secrets and credentials
+- All operations logged in audit trail
+- Requires explicit vault access grants
+
+**Team Mode**:
+- Collaborative workspace with shared memories
+- Team members can access shared context
+- Role-based access control (owner, admin, member, readonly, guest)
+
+### Teams
+
+Teams enable collaborative work with role-based access:
+
+- **Roles**: Owner (full control), Admin (manage members), Member (read/write), Readonly (view only), Guest (temporary)
+- **Activity Tracking**: All team actions logged for transparency
+- **Membership Management**: Invite, remove members with capability-based permissions
+
+### Vaults
+
+Vaults provide encrypted storage for sensitive data:
+
+- **Types**: Personal (private), Team (shared), Project (scoped), Shared (cross-team)
+- **Encryption**: XOR-based encryption with per-vault keys (upgradeable to AES-GCM/Fernet)
+- **Audit Trail**: Every secret access logged with actor, reason, and timestamp
+- **Access Levels**: Read, Write, Admin permissions with expiration support
+- **Secret Storage**: API keys, passwords, credentials, SSH keys, certificates
 
 ## Development Commands
 
@@ -243,8 +285,33 @@ The system supports comprehensive memory categories for DevOps operations:
 ### Automation & Playbook Tools:
 - `upload_playbook`: Upload and store Ansible/Terraform/Kubernetes playbooks
 - `fetch_from_confluence`: Fetch documentation from Confluence and store as knowledge
-- `fetch_from_jira`: Fetch issues from Jira and store as incident/task knowledge  
+- `fetch_from_jira`: Fetch issues from Jira and store as incident/task knowledge
 - `sync_external_knowledge`: Sync from all configured external sources automatically
+
+### Teams & Vaults Management Tools:
+
+#### Mode Management (3 tools):
+- `get_mode`: Get current operating mode and context (solo/vault/team)
+- `set_mode`: Switch operating mode with context validation
+- `list_available_modes`: List all available teams, vaults, and modes
+
+#### Team Management (6 tools):
+- `create_team`: Create new collaborative team with owner role
+- `list_teams`: List teams you belong to with membership details
+- `get_team`: Get team details including members and activity
+- `add_team_member`: Add member with specific role (admin/member/readonly/guest)
+- `remove_team_member`: Remove member from team (requires admin role)
+- `get_team_activity`: Get recent team activity log
+
+#### Vault Management (8 tools):
+- `create_vault`: Create encrypted vault (personal/team/project/shared)
+- `list_vaults`: List all vaults you have access to
+- `store_in_vault`: Store encrypted secret with metadata (API keys, passwords, etc.)
+- `retrieve_from_vault`: Retrieve and decrypt secret (requires audit reason)
+- `list_vault_secrets`: List secret keys without values (metadata only)
+- `delete_vault_secret`: Delete secret from vault (logged in audit trail)
+- `share_vault`: Grant vault access to user or team (read/write/admin)
+- `vault_audit_log`: View complete audit trail for vault operations
 
 ### Agent Capabilities by Machine Group:
 - **Orchestrators** (`lance-dev`): `coordination`, `deployment`, `infrastructure_management`
@@ -371,6 +438,113 @@ fetch_from_jira project_key="INFRA" issue_types=["Bug", "Incident"] limit=25
 
 # Sync all external knowledge sources
 sync_external_knowledge sources=["confluence", "jira"]
+```
+
+### Teams & Vaults Management:
+```bash
+# === Mode Management ===
+
+# Get current operating mode
+get_mode
+
+# Switch to solo mode (private work)
+set_mode mode="solo"
+
+# Switch to team mode (collaborative work)
+set_mode mode="team" context_id="team_engineering_001"
+
+# Switch to vault mode (access secrets)
+set_mode mode="vault" context_id="vault_prod_secrets"
+
+# List available modes and contexts
+list_available_modes
+
+# === Team Collaboration ===
+
+# Create a new team
+create_team name="Engineering Team" description="Main engineering team for product development"
+
+# List your teams
+list_teams
+
+# Get detailed team information
+get_team team_id="team_engineering_001" include_members=true include_activity=true
+
+# Add a team member
+add_team_member team_id="team_engineering_001" user_id="bob@example.com" role="member"
+
+# Add an admin
+add_team_member team_id="team_engineering_001" user_id="alice@example.com" role="admin"
+
+# Remove a team member
+remove_team_member team_id="team_engineering_001" user_id="bob@example.com"
+
+# Get team activity
+get_team_activity team_id="team_engineering_001" hours=24 limit=50
+
+# === Vault Secret Management ===
+
+# Create a personal vault
+create_vault name="Personal Secrets" vault_type="personal"
+
+# Create a team vault
+create_vault name="Production Secrets" vault_type="team" team_id="team_engineering_001"
+
+# List your vaults
+list_vaults
+
+# Store a secret (API key, password, etc.)
+store_in_vault vault_id="vault_abc123" key="stripe_api_key" value="sk_live_xxxxx" metadata={"service": "stripe", "environment": "production"}
+
+# Store database password
+store_in_vault vault_id="vault_abc123" key="db_password" value="super_secret_password" metadata={"database": "postgresql", "host": "db.example.com"}
+
+# Retrieve a secret (requires audit reason for compliance)
+retrieve_from_vault vault_id="vault_abc123" key="stripe_api_key" audit_reason="Deploying payment integration"
+
+# List secrets in vault (shows keys only, not values)
+list_vault_secrets vault_id="vault_abc123"
+
+# Delete a secret
+delete_vault_secret vault_id="vault_abc123" key="old_api_key"
+
+# Share vault with another user (read access)
+share_vault vault_id="vault_abc123" share_with="bob@example.com" share_type="user" access_level="read"
+
+# Share vault with team (write access)
+share_vault vault_id="vault_abc123" share_with="team_engineering_001" share_type="team" access_level="write"
+
+# Grant temporary access (expires in 24 hours)
+share_vault vault_id="vault_abc123" share_with="contractor@example.com" share_type="user" access_level="read" expires_at="2025-12-21T10:00:00Z"
+
+# View audit log (security compliance)
+vault_audit_log vault_id="vault_abc123" hours=168 limit=100
+
+# === Complete Workflow Example ===
+
+# 1. Create team for project
+create_team name="Payment Integration" description="Team handling payment system integration"
+
+# 2. Create team vault for secrets
+create_vault name="Payment Secrets" vault_type="team" team_id="team_payment_001"
+
+# 3. Add team members
+add_team_member team_id="team_payment_001" user_id="alice@dev.com" role="admin"
+add_team_member team_id="team_payment_001" user_id="bob@dev.com" role="member"
+
+# 4. Switch to team mode
+set_mode mode="team" context_id="team_payment_001"
+
+# 5. Store secrets in team vault
+store_in_vault vault_id="vault_team_payment" key="stripe_secret" value="sk_live_xxxxx"
+store_in_vault vault_id="vault_team_payment" key="webhook_secret" value="whsec_xxxxx"
+
+# 6. Team members can now access secrets
+# (automatically logged in audit trail)
+retrieve_from_vault vault_id="vault_team_payment" key="stripe_secret" audit_reason="Setting up payment processing"
+
+# 7. Review security audit trail
+vault_audit_log vault_id="vault_team_payment" hours=168
 ```
 
 ### Memory Update & Modification:

@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f5f5f5;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2rem;
+        }
+        .header-content { max-width: 1400px; margin: 0 auto; }
+        nav {
+            background: white;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        nav ul {
+            max-width: 1400px;
+            margin: 0 auto;
+            list-style: none;
+            display: flex;
+            gap: 2rem;
+            padding: 1rem 2rem;
+        }
+        nav a { text-decoration: none; color: #666; }
+        nav a:hover { color: #667eea; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 2rem; }
+        .section {
+            background: white;
+            padding: 2rem;
+            border-radius: 10px;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        .btn {
+            background: #667eea;
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .secrets-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .secrets-table th,
+        .secrets-table td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        .secrets-table th { background: #f5f5f5; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-content">
+            <h1>{{ vault.name }}</h1>
+            <p>Vault Type: {{ vault.vault_type }} | Access Level: {{ access_level }}</p>
+        </div>
+    </div>
+
+    <nav>
+        <ul>
+            <li><a href="/">Dashboard</a></li>
+            <li><a href="/teams">Teams</a></li>
+            <li><a href="/vaults">Vaults</a></li>
+        </ul>
+    </nav>
+
+    <div class="container">
+        <div class="section">
+            <h2 style="margin-bottom: 1rem;">Secrets ({{ secrets|length }})</h2>
+            <button class="btn" onclick="openStoreModal()">Store New Secret</button>
+
+            {% if secrets %}
+            <table class="secrets-table" style="margin-top: 1.5rem;">
+                <thead>
+                    <tr>
+                        <th>Key</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for secret in secrets %}
+                    <tr>
+                        <td><strong>{{ secret.key }}</strong></td>
+                        <td>{{ secret.created_at }}</td>
+                        <td>
+                            <button class="btn" onclick="revealSecret('{{ vault.vault_id }}', '{{ secret.key }}')">
+                                Reveal
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p style="margin-top: 1.5rem; color: #999;">No secrets stored yet</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div id="storeModal" class="modal" style="display: none;">
+        <div style="background: white; padding: 2rem; border-radius: 10px; max-width: 500px;">
+            <h2>Store New Secret</h2>
+            <form action="/vaults/{{ vault.vault_id }}/secrets/store" method="POST">
+                <div style="margin: 1rem 0;">
+                    <label>Key Name</label>
+                    <input type="text" name="key" required style="width: 100%; padding: 0.5rem;">
+                </div>
+                <div style="margin: 1rem 0;">
+                    <label>Secret Value</label>
+                    <textarea name="value" required style="width: 100%; padding: 0.5rem; height: 100px;"></textarea>
+                </div>
+                <button type="submit" class="btn">Store Secret</button>
+                <button type="button" class="btn" onclick="closeStoreModal()">Cancel</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function openStoreModal() {
+            document.getElementById('storeModal').style.display = 'flex';
+        }
+        function closeStoreModal() {
+            document.getElementById('storeModal').style.display = 'none';
+        }
+        async function revealSecret(vaultId, key) {
+            const response = await fetch(`/api/vaults/${vaultId}/secrets/${key}?reason=Web UI reveal`);
+            const data = await response.json();
+            if (data.success) {
+                alert(`Secret value: ${data.value}`);
+            } else {
+                alert(`Error: ${data.error}`);
+            }
+        }
+    </script>
+</body>
+</html>
