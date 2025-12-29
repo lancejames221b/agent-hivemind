@@ -76,6 +76,15 @@ except ImportError as e:
     TEAMS_VAULTS_AVAILABLE = False
     logger.warning(f"Teams and Vaults system not available: {e}")
 
+# Import Confidence System
+try:
+    from confidence_system import ConfidenceSystem, Context
+    from confidence_mcp_tools import get_confidence_tools, ConfidenceMCPTools
+    CONFIDENCE_AVAILABLE = True
+except ImportError as e:
+    CONFIDENCE_AVAILABLE = False
+    logger.warning(f"Confidence system not available: {e}")
+
 # Logger already setup above
 
 class MemoryStorage:
@@ -213,7 +222,40 @@ class MemoryStorage:
                     return 'sentinel_node'
         
         return 'worker_drone'
-    
+
+    def _enrich_with_confidence(self, memories: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Enrich memory results with confidence scores"""
+        if not self.confidence_system:
+            return memories
+
+        for memory in memories:
+            try:
+                # Get stored confidence score if available
+                confidence_score = self.confidence_system.get_confidence_score(memory['id'])
+
+                if confidence_score:
+                    memory['confidence'] = {
+                        'score': confidence_score['final_score'],
+                        'level': confidence_score['confidence_level'],
+                        'description': confidence_score['description']
+                    }
+                else:
+                    # No confidence score calculated yet
+                    memory['confidence'] = {
+                        'score': 0.5,
+                        'level': 'unknown',
+                        'description': 'Confidence not yet calculated'
+                    }
+            except Exception as e:
+                logger.warning(f"Failed to get confidence for memory {memory['id']}: {e}")
+                memory['confidence'] = {
+                    'score': 0.5,
+                    'level': 'unknown',
+                    'description': 'Error retrieving confidence'
+                }
+
+        return memories
+
     def _get_system_context(self) -> Dict[str, Any]:
         """Get comprehensive system context including machine, network, and environment info"""
         import platform
@@ -641,7 +683,30 @@ class MemoryStorage:
                 
             except Exception as e:
                 logger.warning(f"Failed to cache memory in Redis: {e}")
-        
+
+        # Auto-calculate confidence score if confidence system is available
+        if self.confidence_system:
+            try:
+                # Prepare memory data for confidence calculation
+                confidence_memory_data = {
+                    "created_at": memory_metadata['created_at'],
+                    "category": category,
+                    "creator_id": self.storage.agent_id,
+                    "source_type": metadata.get('source_type', 'observation') if metadata else 'observation',
+                    "creator_role": metadata.get('creator_role') if metadata else None,
+                }
+
+                # Calculate confidence score
+                confidence = self.confidence_system.calculate_confidence(
+                    memory_id=memory_id,
+                    memory_data=confidence_memory_data,
+                    context=None  # No specific context on creation
+                )
+
+                logger.info(f"📊 Confidence calculated: {confidence.final_score:.2f} ({confidence.level.value})")
+            except Exception as e:
+                logger.warning(f"Failed to calculate confidence for memory {memory_id}: {e}")
+
         return memory_id
     
     async def retrieve_memory(self, memory_id: str) -> Optional[Dict[str, Any]]:
@@ -794,6 +859,10 @@ class MemoryStorage:
                 logger.error(f"Search failed in collection {cat_name}: {e}")
                 continue
         
+        # Enrich with confidence scores if available
+        if self.confidence_system:
+            memories = self._enrich_with_confidence(memories)
+
         # Sort by relevance score and limit results
         memories.sort(key=lambda x: x.get('score', 0), reverse=True)
         return memories[:limit]
@@ -854,7 +923,11 @@ class MemoryStorage:
             except Exception as e:
                 logger.error(f"Failed to get recent memories from {cat_name}: {e}")
                 continue
-        
+
+        # Enrich with confidence scores if available
+        if self.confidence_system:
+            memories = self._enrich_with_confidence(memories)
+
         # Sort by creation time (newest first) and limit
         memories.sort(key=lambda x: x.get('created_at', ''), reverse=True)
         return memories[:limit]
@@ -3062,6 +3135,27 @@ class MemoryMCPServer:
                 self.teams_vaults_tools = None
                 self.teams_vaults_system = None
 
+        # Initialize Confidence System if available
+        self.confidence_tools = None
+        self.confidence_system = None
+        if CONFIDENCE_AVAILABLE:
+            try:
+                # Initialize the confidence scoring system
+                self.confidence_system = ConfidenceSystem(
+                    db_path=self.config.get('confidence_db_path', 'data/confidence.db')
+                )
+
+                # Initialize the MCP tools wrapper
+                self.confidence_tools = ConfidenceMCPTools(
+                    system=self.confidence_system,
+                    default_agent_id=self.storage.agent_id
+                )
+                logger.info("📊 Confidence System initialized - Multi-dimensional reliability scoring active")
+            except Exception as e:
+                logger.error(f"Failed to initialize Confidence System: {e}")
+                self.confidence_tools = None
+                self.confidence_system = None
+
         # Register tools
         self._register_tools()
     
@@ -3763,6 +3857,12 @@ class MemoryMCPServer:
                 tools.extend(teams_vaults_tools)
                 logger.info(f"Added {len(teams_vaults_tools)} Teams and Vaults tools")
 
+            # Add Confidence System tools if available
+            if self.confidence_tools:
+                confidence_tools = get_confidence_tools()
+                tools.extend(confidence_tools)
+                logger.info(f"Added {len(confidence_tools)} Confidence System tools")
+
             return tools
         
         @self.server.call_tool()
@@ -4308,6 +4408,24 @@ class MemoryMCPServer:
                             limit=arguments.get('limit', 100)
                         )
                         result = {"audit_log": audit_log, "total_entries": len(audit_log)}
+
+                    # Handle Confidence System tools
+                    elif name == "get_memory_confidence":
+                        result = await self.confidence_tools.handle_get_memory_confidence(arguments)
+                    elif name == "verify_memory":
+                        result = await self.confidence_tools.handle_verify_memory(arguments)
+                    elif name == "report_memory_usage":
+                        result = await self.confidence_tools.handle_report_memory_usage(arguments)
+                    elif name == "search_high_confidence":
+                        result = await self.confidence_tools.handle_search_high_confidence(arguments)
+                    elif name == "flag_outdated_memories":
+                        result = await self.confidence_tools.handle_flag_outdated_memories(arguments)
+                    elif name == "resolve_contradiction":
+                        result = await self.confidence_tools.handle_resolve_contradiction(arguments)
+                    elif name == "vote_on_fact":
+                        result = await self.confidence_tools.handle_vote_on_fact(arguments)
+                    elif name == "get_agent_credibility":
+                        result = await self.confidence_tools.handle_get_agent_credibility(arguments)
 
                     return [TextContent(type="text", text=json.dumps(result, indent=2))]
 

@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>hAIveMind Admin - Dashboard</title>
     <link rel="stylesheet" href="/admin/static/admin.css">
+    <link rel="stylesheet" href="/static/confidence.css">
 </head>
 <body class="dashboard">
     <nav class="nav-header">
@@ -16,6 +17,7 @@
         <div class="nav-links">
             <a href="/admin/dashboard.html" class="active">Dashboard</a>
             <a href="/admin/memory.html">Memory Browser</a>
+            <a href="/templates/confidence_dashboard.html">Confidence</a>
             <a href="/admin/mcp_servers.html">MCP Servers</a>
             <a href="/admin/mcp_bridge.html">MCP Bridge</a>
             <a href="/admin/vault">Vault Management</a>
@@ -141,6 +143,7 @@
     </main>
 
     <script src="/admin/static/admin.js"></script>
+    <script src="/static/confidence.js"></script>
     <script>
         // Dashboard-specific functionality
         async function loadDashboardData() {
@@ -200,16 +203,33 @@
 
         function displaySearchResults(memories) {
             const resultsDiv = document.getElementById('search-results');
-            
+
             if (!memories || memories.length === 0) {
                 resultsDiv.innerHTML = '<p style="color: #666; text-align: center;">No memories found</p>';
                 return;
             }
 
-            resultsDiv.innerHTML = memories.map(memory => `
-                <div style="border: 1px solid #e1e5e9; border-radius: 6px; padding: 15px; margin-bottom: 15px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                        <span class="status online">${memory.category}</span>
+            resultsDiv.innerHTML = '';
+            memories.forEach(memory => {
+                const memoryCard = document.createElement('div');
+                memoryCard.style.cssText = 'border: 1px solid #e1e5e9; border-radius: 6px; padding: 15px; margin-bottom: 15px;';
+
+                // Create confidence badge if available
+                let confidenceBadgeHTML = '';
+                if (memory.confidence && typeof window.Confidence !== 'undefined') {
+                    const badge = window.Confidence.createBadge(
+                        memory.confidence.score,
+                        memory.confidence.level
+                    );
+                    confidenceBadgeHTML = badge.outerHTML;
+                }
+
+                memoryCard.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <span class="status online">${memory.category}</span>
+                            ${confidenceBadgeHTML}
+                        </div>
                         <small style="color: #666;">${formatTime(memory.created_at)}</small>
                     </div>
                     <div style="margin-bottom: 10px;">
@@ -221,8 +241,10 @@
                         ID: ${memory.id} | Machine: ${memory.metadata?.machine_id || 'unknown'}
                         ${memory.score ? ` | Similarity: ${(Math.abs(memory.score) * 100).toFixed(1)}%` : ''}
                     </div>
-                </div>
-            `).join('');
+                `;
+
+                resultsDiv.appendChild(memoryCard);
+            });
         }
 
         async function addMemory() {

@@ -1074,3 +1074,129 @@ class ConfidenceSystem:
                 """, (freshness_threshold,)).fetchall()
 
         return [r[0] for r in results]
+
+    # ========================================================================
+    # Monitoring & Statistics
+    # ========================================================================
+
+    def get_confidence_stats(self) -> Dict[str, Any]:
+        """Get comprehensive confidence statistics for monitoring"""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+
+            # Average confidence score
+            avg_result = conn.execute("""
+                SELECT AVG(final_score) as avg_score
+                FROM memory_confidence
+            """).fetchone()
+            average_confidence = avg_result['avg_score'] or 0.5
+
+            # Count by confidence level
+            level_counts = {}
+            level_results = conn.execute("""
+                SELECT confidence_level, COUNT(*) as count
+                FROM memory_confidence
+                GROUP BY confidence_level
+            """).fetchall()
+            for row in level_results:
+                level_counts[row['confidence_level']] = row['count']
+
+            # High confidence count (>= 0.70)
+            high_conf_result = conn.execute("""
+                SELECT COUNT(*) as count
+                FROM memory_confidence
+                WHERE final_score >= 0.70
+            """).fetchone()
+            high_confidence_count = high_conf_result['count']
+
+            # Needs verification (low freshness)
+            needs_verify_result = conn.execute("""
+                SELECT COUNT(*) as count
+                FROM memory_confidence
+                WHERE freshness_score < 0.3
+            """).fetchone()
+            needs_verification_count = needs_verify_result['count']
+
+            # Recent verifications (last 24 hours)
+            recent_verify_result = conn.execute("""
+                SELECT COUNT(*) as count
+                FROM memory_verifications
+                WHERE verified_at > datetime('now', '-24 hours')
+            """).fetchone()
+            recent_verifications = recent_verify_result['count']
+
+            # Total memories with confidence scores
+            total_result = conn.execute("""
+                SELECT COUNT(*) as count
+                FROM memory_confidence
+            """).fetchone()
+            total_memories = total_result['count']
+
+            # Contradictions count
+            contradictions_result = conn.execute("""
+                SELECT COUNT(*) as count
+                FROM memory_contradictions
+                WHERE resolved_at IS NULL
+            """).fetchone()
+            unresolved_contradictions = contradictions_result['count']
+
+        return {
+            "average_confidence": average_confidence,
+            "total_memories": total_memories,
+            "high_confidence_count": high_confidence_count,
+            "needs_verification_count": needs_verification_count,
+            "recent_verifications": recent_verifications,
+            "unresolved_contradictions": unresolved_contradictions,
+            "distribution": level_counts,
+            "timestamp": datetime.now().isoformat()
+        }
+
+    def get_low_confidence_memories(self,
+                                   threshold: float = 0.4,
+                                   limit: int = 10) -> List[Dict[str, Any]]:
+        """Get memories with low confidence scores for review"""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+
+            results = conn.execute("""
+                SELECT memory_id, final_score, confidence_level,
+                       freshness_score, source_score, verification_score,
+                       calculated_at
+                FROM memory_confidence
+                WHERE final_score < ?
+                ORDER BY final_score ASC
+                LIMIT ?
+            """, (threshold, limit)).fetchall()
+
+        return [dict(row) for row in results]
+
+    def get_confidence_trends(self, days: int = 30) -> Dict[str, Any]:
+        """Get confidence score trends over time"""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+
+            # Daily average confidence
+            daily_avg = conn.execute("""
+                SELECT DATE(calculated_at) as date, AVG(final_score) as avg_score
+                FROM memory_confidence
+                WHERE calculated_at > datetime('now', ? || ' days')
+                GROUP BY DATE(calculated_at)
+                ORDER BY date
+            """, (-days,)).fetchall()
+
+            # Verification trend
+            verify_trend = conn.execute("""
+                SELECT DATE(verified_at) as date, COUNT(*) as count
+                FROM memory_verifications
+                WHERE verified_at > datetime('now', ? || ' days')
+                GROUP BY DATE(verified_at)
+                ORDER BY date
+            """, (-days,)).fetchall()
+
+        return {
+            "daily_average": [{"date": r['date'], "score": r['avg_score']}
+                             for r in daily_avg],
+            "verification_trend": [{"date": r['date'], "count": r['count']}
+                                  for r in verify_trend],
+            "period_days": days
+        }
