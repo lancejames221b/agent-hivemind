@@ -9,6 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### hAIveMind Features:
 - **Collective Intelligence**: Claude agents share knowledge, delegate tasks, and coordinate responses across infrastructure
 - **Teams & Vaults**: Secure collaborative workspaces with encrypted secret storage and role-based access control
+- **Confidence Scoring**: Multi-dimensional reliability scoring helps agents trust information and reduce mistakes
 - **Operating Modes**: Solo, Vault, and Team modes for context-aware memory storage and retrieval
 - **Infrastructure Configuration Sync**: SSH configs, service configs, and other critical DevOps assets synchronized across the network
 - **DevOps Memory Categories**: Specialized storage for infrastructure, incidents, deployments, monitoring, runbooks, and security
@@ -21,6 +22,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **remote_mcp_server.py**: FastMCP-based remote server for HTTP/SSE access via Tailscale network
 - **sync_service.py**: FastAPI REST service for machine-to-machine synchronization via Tailscale network
 - **teams_and_vaults_system.py**: Team collaboration and secure vault management system
+- **confidence_system.py**: Multi-dimensional confidence scoring for information reliability
 - **ChromaDB**: Vector database for semantic search and embeddings storage at `/data/chroma/`
 - **Redis**: Caching layer for fast memory access and real-time sync capabilities
 - **Tailscale Integration**: Secure network communication between machines (lance-dev, ljs-macbook-pro, m2, max)
@@ -63,6 +65,76 @@ Vaults provide encrypted storage for sensitive data:
 - **Audit Trail**: Every secret access logged with actor, reason, and timestamp
 - **Access Levels**: Read, Write, Admin permissions with expiration support
 - **Secret Storage**: API keys, passwords, credentials, SSH keys, certificates
+
+## Confidence System
+
+The Confidence System provides multi-dimensional scoring to help agents determine information reliability and make better decisions.
+
+### Why Confidence Scoring?
+
+**Problem**: All memories currently treated equally - 6-month-old info weighs same as yesterday's, expert knowledge = novice guesses
+**Solution**: Calculate 0.0-1.0 confidence score from 7 factors to help agents avoid mistakes
+
+### 7 Confidence Factors
+
+Each memory scored on 7 dimensions (weights in parentheses):
+
+1. **Freshness (20%)**: Time decay with category-specific half-lives
+   - Infrastructure: 30-day half-life (changes frequently)
+   - Security: 20 days (critical freshness)
+   - Runbooks: 90 days (stable procedures)
+   - Formula: `score = 0.5^(age / half_life)`
+
+2. **Source Credibility (20%)**: Agent expertise and track record
+   - Expert agents > novice agents
+   - Historical accuracy rate tracked
+   - Role-based trust (owner > admin > member)
+
+3. **Verification Status (15%)**: Peer verification and consensus
+   - Unverified: 0.3, Peer-verified: 0.7
+   - Multi-verified: 0.85, System-verified: 1.0
+
+4. **Consensus Level (15%)**: Multiple agents agreeing independently
+   - Semantic similarity clustering
+   - Voting mechanism with credibility weighting
+
+5. **Contradiction Penalty (10%)**: Conflicting info detection
+   - Auto-detects: "Redis port 6379" vs "Redis port 6380"
+   - Auto-resolves using temporal/trust/consensus strategies
+
+6. **Usage Success Rate (10%)**: Outcomes from using information
+   - Tracks: success/failure when acting on memory
+   - High success rate = boost confidence
+   - High failure rate = flag for review
+
+7. **Context Relevance (10%)**: Relevance to current task
+   - Project/team match
+   - Category alignment
+   - System/machine relevance
+
+### Confidence Levels
+
+- 🟢 **Very High (0.85-1.0)**: Highly reliable - use with confidence
+- 🟡 **High (0.70-0.84)**: Reliable - likely accurate
+- 🟠 **Medium (0.55-0.69)**: Moderately reliable - verify if critical
+- 🔴 **Low (0.40-0.54)**: Low confidence - verify before use
+- ⚫ **Very Low (0.0-0.39)**: Very low confidence - likely outdated
+
+### Risk-Based Decision Making
+
+Required confidence thresholds by action risk:
+- **Low risk** (e.g., viewing logs): 0.40 confidence
+- **Medium risk** (e.g., restarting service): 0.60 confidence
+- **High risk** (e.g., changing config): 0.75 confidence
+- **Critical risk** (e.g., deleting data): 0.90 confidence
+
+### Smart Features
+
+- **Verification Extension**: Verifying old info resets freshness clock
+- **Auto Error Detection**: Failed actions automatically tracked
+- **Contradiction Resolution**: System auto-resolves conflicts when possible
+- **Continuous Learning**: System learns from outcomes to improve scoring
+- **Confidence-Aware Search**: Filter search by minimum confidence level
 
 ## Development Commands
 
@@ -312,6 +384,16 @@ The system supports comprehensive memory categories for DevOps operations:
 - `delete_vault_secret`: Delete secret from vault (logged in audit trail)
 - `share_vault`: Grant vault access to user or team (read/write/admin)
 - `vault_audit_log`: View complete audit trail for vault operations
+
+### Confidence System Tools (8 tools):
+- `get_memory_confidence`: Get detailed confidence score breakdown for a memory
+- `verify_memory`: Explicitly verify memory as accurate, outdated, or incorrect
+- `report_memory_usage`: Report outcome when using memory for an action
+- `search_high_confidence`: Search for memories above confidence threshold
+- `flag_outdated_memories`: Find memories needing verification due to age
+- `resolve_contradiction`: Manually resolve detected contradiction
+- `vote_on_fact`: Vote on whether a memory/fact is accurate
+- `get_agent_credibility`: Get credibility score for an agent in a category
 
 ### Agent Capabilities by Machine Group:
 - **Orchestrators** (`lance-dev`): `coordination`, `deployment`, `infrastructure_management`
@@ -596,6 +678,139 @@ gdpr_delete_user_data user_id="john.doe@example.com" confirm=true
 
 # GDPR data export (data portability)
 gdpr_export_user_data user_id="john.doe@example.com" format="json"
+```
+
+### Confidence System Usage:
+```bash
+# === Get Confidence Score ===
+
+# Get detailed confidence breakdown
+get_memory_confidence memory_id="mem_abc123"
+
+# Returns:
+# - final_score: 0.87
+# - level: "high"
+# - factors: {freshness: 0.95, source: 0.90, verification: 0.85, ...}
+# - description: "Reliable information - likely accurate"
+
+# === Verify Information ===
+
+# Verify memory is still accurate
+verify_memory memory_id="mem_abc123" verification_type="confirmed" notes="Tested connection, works correctly"
+
+# Mark old info as still valid (resets freshness clock)
+verify_memory memory_id="mem_old123" verification_type="still_valid"
+
+# Mark outdated information
+verify_memory memory_id="mem_bad123" verification_type="outdated" notes="Port changed to 6380"
+
+# === Track Usage Outcomes ===
+
+# Report successful use
+report_memory_usage memory_id="mem_abc123" action="Connected to Redis on port 6379" outcome="success"
+
+# Report failure (lowers confidence)
+report_memory_usage memory_id="mem_bad456" action="Tried to connect" outcome="failure" details={"error": "Connection refused"}
+
+# === Search by Confidence ===
+
+# Find only high-confidence info for critical operations
+search_high_confidence query="Redis configuration" min_confidence=0.75 limit=10
+
+# Get all verified facts about Elasticsearch
+search_high_confidence query="Elasticsearch cluster" min_confidence=0.90 category="infrastructure"
+
+# === Maintain Information Quality ===
+
+# Find outdated infrastructure info
+flag_outdated_memories category="infrastructure" freshness_threshold=0.3
+
+# Find all stale security information (20-day half-life)
+flag_outdated_memories category="security"
+
+# === Resolve Conflicts ===
+
+# Resolve contradiction - newer wins
+resolve_contradiction \
+  contradiction_id="conflict_xyz789" \
+  winner_memory_id="mem_new123" \
+  strategy="temporal" \
+  reason="Newer information from last week supersedes 3-month-old data"
+
+# Resolve by source trust
+resolve_contradiction \
+  contradiction_id="conflict_abc456" \
+  winner_memory_id="mem_expert123" \
+  strategy="source_trust" \
+  reason="Information from elasticsearch specialist more reliable"
+
+# === Consensus Voting ===
+
+# Vote that information is correct
+vote_on_fact \
+  memory_id="mem_abc123" \
+  vote="agree" \
+  confidence=0.9 \
+  reasoning="I just verified this configuration is correct"
+
+# Disagree with information
+vote_on_fact \
+  memory_id="mem_wrong456" \
+  vote="disagree" \
+  confidence=0.8 \
+  reasoning="Port is actually 6380, not 6379"
+
+# === Check Agent Trust ===
+
+# Get agent credibility in specific domain
+get_agent_credibility agent_id="elasticsearch-specialist" category="infrastructure"
+
+# Returns:
+# - credibility_score: 0.92
+# - verified_correct: 47
+# - verified_incorrect: 3
+# - contribution_count: 50
+
+# === Complete Confidence Workflow ===
+
+# 1. Store new memory with metadata
+store_memory \
+  content="Redis cluster has 6 nodes on ports 6379-6384" \
+  category="infrastructure" \
+  source_type="verified_fact" \
+  tags=["redis", "cluster", "production"]
+
+# 2. Multiple agents verify
+verify_memory memory_id="mem_new789" verification_type="confirmed" notes="Agent A: Confirmed via redis-cli"
+verify_memory memory_id="mem_new789" verification_type="confirmed" notes="Agent B: Verified with cluster info"
+verify_memory memory_id="mem_new789" verification_type="confirmed" notes="Agent C: Checked ansible inventory"
+
+# 3. Agents vote consensus
+vote_on_fact memory_id="mem_new789" vote="agree" confidence=1.0
+vote_on_fact memory_id="mem_new789" vote="agree" confidence=0.95
+vote_on_fact memory_id="mem_new789" vote="agree" confidence=0.90
+
+# 4. Track successful usage
+report_memory_usage memory_id="mem_new789" action="Connected to all cluster nodes" outcome="success"
+report_memory_usage memory_id="mem_new789" action="Ran cluster health check" outcome="success"
+
+# 5. Check final confidence
+get_memory_confidence memory_id="mem_new789"
+# Result: Very high confidence (0.92) - Safe to use for critical operations
+
+# === Risk-Based Decision Making ===
+
+# Low risk: Just viewing logs (min_confidence: 0.40)
+search_high_confidence query="recent errors" min_confidence=0.40
+
+# Medium risk: Restarting service (min_confidence: 0.60)
+search_high_confidence query="restart procedure" min_confidence=0.60
+
+# High risk: Changing production config (min_confidence: 0.75)
+search_high_confidence query="nginx configuration" min_confidence=0.75
+
+# Critical risk: Deleting data (min_confidence: 0.90)
+search_high_confidence query="database cleanup procedure" min_confidence=0.90
 ```
 
 ## Troubleshooting
