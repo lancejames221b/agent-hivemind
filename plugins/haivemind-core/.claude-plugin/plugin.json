@@ -1,0 +1,30 @@
+{
+  "name": "haivemind-core",
+  "version": "1.0.0",
+  "description": "Core hAIveMind commands for collective intelligence - memory management, agent coordination, and knowledge sharing",
+  "author": {
+    "name": "hAIveMind Collective",
+    "organization": "Unit 221B"
+  },
+  "haivemind": {
+    "machine_groups": [],
+    "required_capabilities": [],
+    "min_haivemind_version": "1.0.0"
+  },
+  "components": {
+    "commands": "./commands/",
+    "agents": "./agents/",
+    "skills": "./skills/"
+  },
+  "dependencies": {
+    "plugins": {},
+    "mcp_servers": ["haivemind"]
+  },
+  "keywords": [
+    "haivemind",
+    "memory",
+    "collective",
+    "agents",
+    "coordination"
+  ]
+}

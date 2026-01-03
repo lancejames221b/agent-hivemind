@@ -34,6 +34,15 @@ from enhanced_ticket_system import EnhancedTicketSystem
 from agent_directives import AgentDirectiveSystem
 from comet_integration import CometDirectiveSystem
 
+# Plugin system import
+try:
+    from plugin_mcp_tools import register_plugin_tools
+    PLUGIN_SYSTEM_AVAILABLE = True
+except ImportError:
+    PLUGIN_SYSTEM_AVAILABLE = False
+    logger = logging.getLogger(__name__)
+    logger.warning("Plugin system not available - missing dependencies")
+
 # Setup logging
 logging.basicConfig(
     level=logging.INFO,
@@ -158,7 +167,16 @@ class RemoteMemoryMCPServer:
         
         # Register enhanced ticket management tools
         self._register_enhanced_ticket_tools()
-        
+
+        # Register plugin system tools
+        self.plugin_tools = None
+        if PLUGIN_SYSTEM_AVAILABLE:
+            try:
+                self.plugin_tools = register_plugin_tools(self.mcp, self.storage, self.config)
+                logger.info("🔌 Plugin system tools registered")
+            except Exception as e:
+                logger.warning(f"Failed to initialize plugin system: {e}")
+
         # Add admin interface routes
         self._add_admin_routes()
         

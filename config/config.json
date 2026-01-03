@@ -71,7 +71,8 @@
       "security",
       "rules",
       "patterns",
-      "playbook_suggestions"
+      "playbook_suggestions",
+      "plugins"
     ],
     "max_age_days": 365,
     "auto_consolidate": true,
@@ -190,6 +191,19 @@
       "monitoring_integration": true,
       "playbook_auto_generation": true
     }
+  },
+  "plugins": {
+    "enabled": true,
+    "registry_db": "data/plugins.db",
+    "install_path": "~/.claude/plugins",
+    "auto_sync": true,
+    "sync_interval": 3600,
+    "auto_install_updates": false,
+    "verify_checksums": true,
+    "allowed_sources": ["haivemind", "local"],
+    "machine_group_auto_install": true,
+    "max_plugin_size_mb": 50,
+    "backup_before_update": true
   },
   "playbook_auto_generation": {
     "enabled": true,

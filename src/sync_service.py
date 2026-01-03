@@ -541,6 +541,177 @@ async def trigger_sync(_: str = Depends(verify_token)):
     
     return {"sync_results": results}
 
+# ==========================================
+# Plugin Sync Endpoints
+# ==========================================
+
+# Plugin models
+class PluginSyncRequest(BaseModel):
+    plugin_id: str
+    plugin_data: Dict[str, Any]
+    source_machine: str
+
+class PluginInstallRequest(BaseModel):
+    plugin_id: str
+    force: bool = False
+
+# Plugin system instance (lazy loaded)
+_plugin_system = None
+
+def get_plugin_system():
+    """Get or create plugin system instance"""
+    global _plugin_system
+    if _plugin_system is None:
+        try:
+            from plugin_system import PluginSystem
+            _plugin_system = PluginSystem(db_path="data/plugins.db")
+        except Exception as e:
+            logger.error(f"Failed to initialize plugin system: {e}")
+            raise HTTPException(status_code=500, detail="Plugin system not available")
+    return _plugin_system
+
+@app.get("/api/plugins")
+async def list_plugins(
+    status: Optional[str] = None,
+    machine_group: Optional[str] = None,
+    _: str = Depends(verify_token)
+):
+    """List available plugins with optional filtering"""
+    plugin_sys = get_plugin_system()
+    result = plugin_sys.list_plugins(
+        status_filter=status,
+        machine_group=machine_group
+    )
+    return result
+
+@app.get("/api/plugins/{plugin_id}")
+async def get_plugin(plugin_id: str, _: str = Depends(verify_token)):
+    """Get detailed plugin information"""
+    plugin_sys = get_plugin_system()
+    plugin = plugin_sys.get_plugin(plugin_id)
+    if not plugin:
+        raise HTTPException(status_code=404, detail=f"Plugin not found: {plugin_id}")
+    return {"success": True, "plugin": plugin}
+
+@app.get("/api/plugins/{plugin_id}/sync-payload")
+async def get_plugin_sync_payload(plugin_id: str, _: str = Depends(verify_token)):
+    """Get plugin data for distribution to other machines"""
+    plugin_sys = get_plugin_system()
+    payload = plugin_sys.get_sync_payload(plugin_id)
+    if not payload:
+        raise HTTPException(status_code=404, detail=f"Plugin not found: {plugin_id}")
+    return {"success": True, "payload": payload}
+
+@app.post("/api/plugins/sync")
+async def sync_plugin(request: PluginSyncRequest, _: str = Depends(verify_token)):
+    """Receive plugin data from another machine and import it"""
+    plugin_sys = get_plugin_system()
+    result = plugin_sys.import_plugin_from_sync(request.plugin_data)
+
+    if result.get('success'):
+        # Broadcast plugin availability to connected machines
+        await connection_manager.broadcast_sync_event({
+            "type": "plugin_synced",
+            "plugin_id": request.plugin_id,
+            "source_machine": request.source_machine
+        })
+
+    return result
+
+@app.post("/api/plugins/{plugin_id}/install")
+async def install_plugin(
+    plugin_id: str,
+    request: PluginInstallRequest,
+    _: str = Depends(verify_token)
+):
+    """Install a plugin on this machine"""
+    plugin_sys = get_plugin_system()
+    machine_id = sync_service.machine_id if sync_service else socket.gethostname()
+
+    result = plugin_sys.install_plugin(
+        plugin_id=plugin_id,
+        machine_id=machine_id,
+        force=request.force
+    )
+    return result
+
+@app.delete("/api/plugins/{plugin_id}")
+async def uninstall_plugin(
+    plugin_id: str,
+    keep_data: bool = False,
+    _: str = Depends(verify_token)
+):
+    """Uninstall a plugin from this machine"""
+    plugin_sys = get_plugin_system()
+    machine_id = sync_service.machine_id if sync_service else socket.gethostname()
+
+    result = plugin_sys.uninstall_plugin(
+        plugin_id=plugin_id,
+        machine_id=machine_id,
+        keep_data=keep_data
+    )
+    return result
+
+@app.post("/api/plugins/distribute/{plugin_id}")
+async def distribute_plugin(
+    plugin_id: str,
+    target_machines: Optional[List[str]] = None,
+    _: str = Depends(verify_token)
+):
+    """Distribute a plugin to other machines in the collective"""
+    plugin_sys = get_plugin_system()
+
+    # Get plugin sync payload
+    payload = plugin_sys.get_sync_payload(plugin_id)
+    if not payload:
+        raise HTTPException(status_code=404, detail=f"Plugin not found: {plugin_id}")
+
+    # Determine target machines
+    machines = target_machines or list(sync_service.known_machines) if sync_service else []
+
+    results = {}
+    source_machine = sync_service.machine_id if sync_service else socket.gethostname()
+
+    async with httpx.AsyncClient() as client:
+        for machine in machines:
+            try:
+                response = await client.post(
+                    f"http://{machine}:8899/api/plugins/sync",
+                    json={
+                        "plugin_id": plugin_id,
+                        "plugin_data": payload,
+                        "source_machine": source_machine
+                    },
+                    headers={"Authorization": f"Bearer {config.get('security', {}).get('api_tokens', {}).get('agent_token', '')}"},
+                    timeout=30.0
+                )
+                results[machine] = "success" if response.status_code == 200 else f"failed: {response.status_code}"
+            except Exception as e:
+                results[machine] = f"error: {str(e)}"
+
+    return {
+        "plugin_id": plugin_id,
+        "distributed_to": len([r for r in results.values() if r == "success"]),
+        "results": results
+    }
+
+@app.get("/api/plugins/status")
+async def get_plugin_status(_: str = Depends(verify_token)):
+    """Get plugin installation status for this machine"""
+    plugin_sys = get_plugin_system()
+    machine_id = sync_service.machine_id if sync_service else socket.gethostname()
+    return plugin_sys.get_installation_status(machine_id)
+
+@app.get("/api/plugins/stats")
+async def get_plugin_stats(_: str = Depends(verify_token)):
+    """Get plugin system statistics"""
+    plugin_sys = get_plugin_system()
+    return {"success": True, "stats": plugin_sys.get_stats()}
+
+# ==========================================
+# WebSocket Endpoints
+# ==========================================
+
 @app.websocket("/ws/{machine_id}")
 async def websocket_endpoint(websocket: WebSocket, machine_id: str):
     """WebSocket endpoint for real-time sync notifications"""

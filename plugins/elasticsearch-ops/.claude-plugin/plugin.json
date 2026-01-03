@@ -1,0 +1,32 @@
+{
+  "name": "elasticsearch-ops",
+  "version": "1.0.0",
+  "description": "Elasticsearch cluster management, monitoring, and troubleshooting for hAIveMind agents",
+  "author": {
+    "name": "hAIveMind Collective",
+    "organization": "Unit 221B"
+  },
+  "haivemind": {
+    "machine_groups": ["elasticsearch", "orchestrators"],
+    "required_capabilities": ["elasticsearch_ops"],
+    "min_haivemind_version": "1.0.0"
+  },
+  "components": {
+    "commands": "./commands/",
+    "agents": "./agents/",
+    "skills": "./skills/"
+  },
+  "dependencies": {
+    "plugins": {
+      "haivemind-core": "^1.0.0"
+    },
+    "mcp_servers": ["haivemind"]
+  },
+  "keywords": [
+    "elasticsearch",
+    "search",
+    "cluster",
+    "monitoring",
+    "devops"
+  ]
+}
