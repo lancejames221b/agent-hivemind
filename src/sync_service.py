@@ -19,12 +19,21 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Depends, Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import httpx
 
 # Import rules sync components (disabled for basic operation)
 RulesSyncService = None
 create_rules_sync_router = None
+
+# Import Confidence System
+try:
+    from confidence_system import ConfidenceSystem
+    CONFIDENCE_AVAILABLE = True
+except ImportError:
+    CONFIDENCE_AVAILABLE = False
+    logger.warning("Confidence system not available")
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -441,6 +450,7 @@ app.add_middleware(
 config = {}
 sync_service = None
 rules_sync_service = None
+confidence_system = None
 connection_manager = ConnectionManager()
 security = HTTPBearer()
 
@@ -452,28 +462,37 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Security(security))
 @app.on_event("startup")
 async def startup_event():
     """Initialize service on startup"""
-    global config, sync_service, rules_sync_service
-    
+    global config, sync_service, rules_sync_service, confidence_system
+
     config_path = "/home/lj/haivemind-mcp-server/config/config.json"
     with open(config_path, 'r') as f:
         config = json.load(f)
-    
+
     sync_service = MemorySyncService(config)
-    
+
+    # Initialize Confidence System if available
+    if CONFIDENCE_AVAILABLE:
+        try:
+            confidence_db_path = config.get('confidence_db_path', 'data/confidence.db')
+            confidence_system = ConfidenceSystem(db_path=confidence_db_path)
+            logger.info("📊 Confidence System initialized for API endpoints")
+        except Exception as e:
+            logger.error(f"Failed to initialize Confidence System: {e}")
+
     # Initialize rules sync service if enabled (disabled for basic operation)
     # if config.get('rules', {}).get('enable_haivemind_integration', True):
     #     try:
     #         # Import memory storage (would need to be passed from main memory server)
     #         rules_sync_service = RulesSyncService(config, memory_storage=None)
-    #         
+    #
     #         # Add rules sync router to the app
     #         rules_router = create_rules_sync_router(rules_sync_service)
     #         app.include_router(rules_router)
-    #         
+    #
     #         logger.info("Rules Sync Service initialized and integrated")
     #     except Exception as e:
     #         logger.error(f"Failed to initialize Rules Sync Service: {e}")
-    
+
     logger.info("Memory Sync Service started")
 
 @app.get("/")
@@ -530,7 +549,7 @@ async def trigger_sync(_: str = Depends(verify_token)):
     """Manually trigger sync with all known machines"""
     if not sync_service:
         raise HTTPException(status_code=500, detail="Sync service not initialized")
-    
+
     results = {}
     for machine in sync_service.known_machines:
         try:
@@ -538,8 +557,131 @@ async def trigger_sync(_: str = Depends(verify_token)):
             results[machine] = "success" if success else "failed"
         except Exception as e:
             results[machine] = f"error: {str(e)}"
-    
+
     return {"sync_results": results}
+
+# Confidence System API Endpoints
+
+@app.get("/api/confidence/stats")
+async def get_confidence_stats():
+    """Get comprehensive confidence statistics for dashboard"""
+    if not confidence_system:
+        raise HTTPException(status_code=503, detail="Confidence system not available")
+
+    try:
+        # Get stats from confidence system
+        stats = confidence_system.get_confidence_stats()
+
+        # Get low confidence memories
+        low_confidence = confidence_system.get_low_confidence_memories(threshold=0.4, limit=10)
+
+        return {
+            "average_confidence": stats.get("average_confidence", 0.5),
+            "high_confidence_count": stats.get("high_confidence_count", 0),
+            "needs_verification_count": stats.get("needs_verification_count", 0),
+            "recent_verifications": stats.get("recent_verifications", 0),
+            "distribution": stats.get("distribution", {}),
+            "low_confidence_memories": low_confidence
+        }
+    except Exception as e:
+        logger.error(f"Failed to get confidence stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/confidence/export")
+async def export_confidence_report():
+    """Export comprehensive confidence report"""
+    if not confidence_system:
+        raise HTTPException(status_code=503, detail="Confidence system not available")
+
+    try:
+        # Get comprehensive stats
+        stats = confidence_system.get_confidence_stats()
+
+        # Get trends
+        trends = confidence_system.get_confidence_trends(days=30)
+
+        # Get low confidence memories
+        low_confidence = confidence_system.get_low_confidence_memories(threshold=0.5, limit=50)
+
+        report = {
+            "generated_at": datetime.now().isoformat(),
+            "summary": {
+                "total_memories": stats.get("total_memories", 0),
+                "average_confidence": stats.get("average_confidence", 0.5),
+                "distribution": stats.get("distribution", {})
+            },
+            "trends": trends,
+            "low_confidence_items": low_confidence,
+            "recommendations": []
+        }
+
+        # Add recommendations based on stats
+        if stats.get("needs_verification_count", 0) > 10:
+            report["recommendations"].append({
+                "priority": "high",
+                "message": f"{stats['needs_verification_count']} memories need verification due to age"
+            })
+
+        if stats.get("average_confidence", 0.5) < 0.6:
+            report["recommendations"].append({
+                "priority": "medium",
+                "message": "Average confidence is low - consider verifying critical information"
+            })
+
+        return JSONResponse(content=report)
+    except Exception as e:
+        logger.error(f"Failed to export confidence report: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/confidence/contradictions")
+async def get_contradictions():
+    """Get list of unresolved contradictions"""
+    if not confidence_system:
+        raise HTTPException(status_code=503, detail="Confidence system not available")
+
+    try:
+        # Query unresolved contradictions from the database
+        conn = confidence_system.contradiction_calc.conn
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT
+                id,
+                memory_id_1,
+                memory_id_2,
+                contradiction_type,
+                similarity_score,
+                detected_at,
+                resolution_strategy,
+                resolution_notes
+            FROM contradictions
+            WHERE resolved = 0
+            ORDER BY detected_at DESC
+            LIMIT 50
+        """)
+
+        rows = cursor.fetchall()
+        contradictions = []
+
+        for row in rows:
+            contradictions.append({
+                "id": row[0],
+                "memory_id_1": row[1],
+                "memory_id_2": row[2],
+                "type": row[3],
+                "similarity": row[4],
+                "detected_at": row[5],
+                "suggested_strategy": row[6] or "manual_review",
+                "notes": row[7]
+            })
+
+        return {
+            "total_unresolved": len(contradictions),
+            "contradictions": contradictions
+        }
+    except Exception as e:
+        logger.error(f"Failed to get contradictions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.websocket("/ws/{machine_id}")
 async def websocket_endpoint(websocket: WebSocket, machine_id: str):

@@ -67,6 +67,24 @@ except ImportError:
     ADVANCED_RULES_AVAILABLE = False
     logger.warning("Advanced rules system not available - missing dependencies")
 
+# Import Teams and Vaults System
+try:
+    from teams_and_vaults_system import TeamsAndVaultsSystem
+    from teams_vaults_mcp_tools import get_teams_vaults_tools, TeamsVaultsMCPTools
+    TEAMS_VAULTS_AVAILABLE = True
+except ImportError as e:
+    TEAMS_VAULTS_AVAILABLE = False
+    logger.warning(f"Teams and Vaults system not available: {e}")
+
+# Import Confidence System
+try:
+    from confidence_system import ConfidenceSystem, Context
+    from confidence_mcp_tools import get_confidence_tools, ConfidenceMCPTools
+    CONFIDENCE_AVAILABLE = True
+except ImportError as e:
+    CONFIDENCE_AVAILABLE = False
+    logger.warning(f"Confidence system not available: {e}")
+
 # Logger already setup above
 
 class MemoryStorage:
@@ -204,7 +222,40 @@ class MemoryStorage:
                     return 'sentinel_node'
         
         return 'worker_drone'
-    
+
+    def _enrich_with_confidence(self, memories: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Enrich memory results with confidence scores"""
+        if not self.confidence_system:
+            return memories
+
+        for memory in memories:
+            try:
+                # Get stored confidence score if available
+                confidence_score = self.confidence_system.get_confidence_score(memory['id'])
+
+                if confidence_score:
+                    memory['confidence'] = {
+                        'score': confidence_score['final_score'],
+                        'level': confidence_score['confidence_level'],
+                        'description': confidence_score['description']
+                    }
+                else:
+                    # No confidence score calculated yet
+                    memory['confidence'] = {
+                        'score': 0.5,
+                        'level': 'unknown',
+                        'description': 'Confidence not yet calculated'
+                    }
+            except Exception as e:
+                logger.warning(f"Failed to get confidence for memory {memory['id']}: {e}")
+                memory['confidence'] = {
+                    'score': 0.5,
+                    'level': 'unknown',
+                    'description': 'Error retrieving confidence'
+                }
+
+        return memories
+
     def _get_system_context(self) -> Dict[str, Any]:
         """Get comprehensive system context including machine, network, and environment info"""
         import platform
@@ -632,7 +683,30 @@ class MemoryStorage:
                 
             except Exception as e:
                 logger.warning(f"Failed to cache memory in Redis: {e}")
-        
+
+        # Auto-calculate confidence score if confidence system is available
+        if self.confidence_system:
+            try:
+                # Prepare memory data for confidence calculation
+                confidence_memory_data = {
+                    "created_at": memory_metadata['created_at'],
+                    "category": category,
+                    "creator_id": self.storage.agent_id,
+                    "source_type": metadata.get('source_type', 'observation') if metadata else 'observation',
+                    "creator_role": metadata.get('creator_role') if metadata else None,
+                }
+
+                # Calculate confidence score
+                confidence = self.confidence_system.calculate_confidence(
+                    memory_id=memory_id,
+                    memory_data=confidence_memory_data,
+                    context=None  # No specific context on creation
+                )
+
+                logger.info(f"📊 Confidence calculated: {confidence.final_score:.2f} ({confidence.level.value})")
+            except Exception as e:
+                logger.warning(f"Failed to calculate confidence for memory {memory_id}: {e}")
+
         return memory_id
     
     async def retrieve_memory(self, memory_id: str) -> Optional[Dict[str, Any]]:
@@ -785,6 +859,10 @@ class MemoryStorage:
                 logger.error(f"Search failed in collection {cat_name}: {e}")
                 continue
         
+        # Enrich with confidence scores if available
+        if self.confidence_system:
+            memories = self._enrich_with_confidence(memories)
+
         # Sort by relevance score and limit results
         memories.sort(key=lambda x: x.get('score', 0), reverse=True)
         return memories[:limit]
@@ -845,7 +923,11 @@ class MemoryStorage:
             except Exception as e:
                 logger.error(f"Failed to get recent memories from {cat_name}: {e}")
                 continue
-        
+
+        # Enrich with confidence scores if available
+        if self.confidence_system:
+            memories = self._enrich_with_confidence(memories)
+
         # Sort by creation time (newest first) and limit
         memories.sort(key=lambda x: x.get('created_at', ''), reverse=True)
         return memories[:limit]
@@ -3028,7 +3110,52 @@ class MemoryMCPServer:
             except Exception as e:
                 logger.error(f"Failed to initialize Advanced Rules System: {e}")
                 self.advanced_rules_tools = None
-        
+
+        # Initialize Teams and Vaults System if available
+        self.teams_vaults_tools = None
+        self.teams_vaults_system = None
+        if TEAMS_VAULTS_AVAILABLE:
+            try:
+                # Initialize the teams and vaults system
+                self.teams_vaults_system = TeamsAndVaultsSystem(
+                    db_path=self.config.get('teams_vaults_db_path', 'data/teams_vaults.db')
+                )
+
+                # Initialize the MCP tools wrapper
+                import getpass
+                default_user = getpass.getuser()
+                self.teams_vaults_tools = TeamsVaultsMCPTools(
+                    system=self.teams_vaults_system,
+                    default_user_id=default_user,
+                    default_agent_id=self.storage.agent_id
+                )
+                logger.info("👥 Teams and Vaults System initialized - Collaborative workspaces and secure secrets active")
+            except Exception as e:
+                logger.error(f"Failed to initialize Teams and Vaults System: {e}")
+                self.teams_vaults_tools = None
+                self.teams_vaults_system = None
+
+        # Initialize Confidence System if available
+        self.confidence_tools = None
+        self.confidence_system = None
+        if CONFIDENCE_AVAILABLE:
+            try:
+                # Initialize the confidence scoring system
+                self.confidence_system = ConfidenceSystem(
+                    db_path=self.config.get('confidence_db_path', 'data/confidence.db')
+                )
+
+                # Initialize the MCP tools wrapper
+                self.confidence_tools = ConfidenceMCPTools(
+                    system=self.confidence_system,
+                    default_agent_id=self.storage.agent_id
+                )
+                logger.info("📊 Confidence System initialized - Multi-dimensional reliability scoring active")
+            except Exception as e:
+                logger.error(f"Failed to initialize Confidence System: {e}")
+                self.confidence_tools = None
+                self.confidence_system = None
+
         # Register tools
         self._register_tools()
     
@@ -3723,7 +3850,19 @@ class MemoryMCPServer:
             if self.advanced_rules_tools:
                 advanced_rules_tools = self.advanced_rules_tools.get_tools()
                 tools.extend(advanced_rules_tools)
-                    
+
+            # Add Teams and Vaults tools if available
+            if self.teams_vaults_tools:
+                teams_vaults_tools = get_teams_vaults_tools()
+                tools.extend(teams_vaults_tools)
+                logger.info(f"Added {len(teams_vaults_tools)} Teams and Vaults tools")
+
+            # Add Confidence System tools if available
+            if self.confidence_tools:
+                confidence_tools = get_confidence_tools()
+                tools.extend(confidence_tools)
+                logger.info(f"Added {len(confidence_tools)} Confidence System tools")
+
             return tools
         
         @self.server.call_tool()
@@ -4070,7 +4209,226 @@ class MemoryMCPServer:
                     
                     # Return the result directly since advanced rules tools return TextContent
                     return result if isinstance(result, list) else [TextContent(type="text", text=str(result))]
-                
+
+                # ============ Teams and Vaults System Handlers ============
+                elif self.teams_vaults_tools and name in [
+                    "get_mode", "set_mode", "list_available_modes",
+                    "create_team", "list_teams", "get_team", "add_team_member",
+                    "remove_team_member", "get_team_activity",
+                    "create_vault", "list_vaults", "store_in_vault", "retrieve_from_vault",
+                    "list_vault_secrets", "delete_vault_secret", "share_vault", "vault_audit_log"
+                ]:
+                    # Handle Teams and Vaults tools
+                    if name == "get_mode":
+                        result = await self.teams_vaults_tools.handle_get_mode(arguments)
+                    elif name == "set_mode":
+                        result = await self.teams_vaults_tools.handle_set_mode(arguments)
+                    elif name == "list_available_modes":
+                        result = await self.teams_vaults_tools.handle_list_available_modes(arguments)
+                    elif name == "create_team":
+                        result = self.teams_vaults_system.create_team(
+                            name=arguments['name'],
+                            description=arguments['description'],
+                            owner_id=arguments.get('owner_id', self.teams_vaults_tools.default_user_id),
+                            settings=arguments.get('settings'),
+                            metadata=arguments.get('metadata')
+                        )
+                        result = {
+                            "success": True,
+                            "team": {
+                                "team_id": result.team_id,
+                                "name": result.name,
+                                "description": result.description,
+                                "owner_id": result.owner_id,
+                                "created_at": result.created_at
+                            }
+                        }
+                    elif name == "list_teams":
+                        teams = self.teams_vaults_system.list_teams(
+                            user_id=arguments.get('user_id', self.teams_vaults_tools.default_user_id)
+                        )
+                        result = {
+                            "teams": [{
+                                "team_id": t.team_id,
+                                "name": t.name,
+                                "description": t.description,
+                                "owner_id": t.owner_id,
+                                "created_at": t.created_at
+                            } for t in teams]
+                        }
+                    elif name == "get_team":
+                        team = self.teams_vaults_system.get_team(arguments['team_id'])
+                        if team:
+                            result = {
+                                "team": {
+                                    "team_id": team.team_id,
+                                    "name": team.name,
+                                    "description": team.description,
+                                    "owner_id": team.owner_id,
+                                    "created_at": team.created_at,
+                                    "settings": team.settings,
+                                    "metadata": team.metadata
+                                }
+                            }
+                            if arguments.get('include_members', True):
+                                members = self.teams_vaults_system.get_team_members(arguments['team_id'])
+                                result['members'] = [{
+                                    "user_id": m.user_id,
+                                    "role": m.role,
+                                    "joined_at": m.joined_at
+                                } for m in members]
+                            if arguments.get('include_activity', True):
+                                activity = self.teams_vaults_system.get_team_activity(arguments['team_id'])
+                                result['activity'] = activity[:10]  # Latest 10
+                        else:
+                            result = {"error": "Team not found"}
+                    elif name == "add_team_member":
+                        member = self.teams_vaults_system.add_team_member(
+                            team_id=arguments['team_id'],
+                            user_id=arguments['user_id'],
+                            role=arguments.get('role', 'member'),
+                            invited_by=arguments.get('invited_by', self.teams_vaults_tools.default_user_id),
+                            capabilities=arguments.get('capabilities')
+                        )
+                        result = {
+                            "success": True,
+                            "member": {
+                                "team_id": member.team_id,
+                                "user_id": member.user_id,
+                                "role": member.role,
+                                "joined_at": member.joined_at
+                            }
+                        }
+                    elif name == "remove_team_member":
+                        success = self.teams_vaults_system.remove_team_member(
+                            team_id=arguments['team_id'],
+                            user_id=arguments['user_id'],
+                            removed_by=arguments.get('removed_by', self.teams_vaults_tools.default_user_id)
+                        )
+                        result = {"success": success}
+                    elif name == "get_team_activity":
+                        activity = self.teams_vaults_system.get_team_activity(
+                            team_id=arguments['team_id'],
+                            hours=arguments.get('hours', 24),
+                            limit=arguments.get('limit', 50)
+                        )
+                        result = {"activity": activity}
+                    elif name == "create_vault":
+                        vault = self.teams_vaults_system.create_vault(
+                            name=arguments['name'],
+                            vault_type=arguments.get('vault_type', 'personal'),
+                            owner_id=arguments.get('owner_id', self.teams_vaults_tools.default_user_id),
+                            team_id=arguments.get('team_id'),
+                            access_policy=arguments.get('access_policy'),
+                            metadata=arguments.get('metadata')
+                        )
+                        result = {
+                            "success": True,
+                            "vault": {
+                                "vault_id": vault.vault_id,
+                                "name": vault.name,
+                                "vault_type": vault.vault_type,
+                                "owner_id": vault.owner_id,
+                                "created_at": vault.created_at
+                            }
+                        }
+                    elif name == "list_vaults":
+                        vaults = self.teams_vaults_system.list_vaults(
+                            user_id=arguments.get('user_id', self.teams_vaults_tools.default_user_id)
+                        )
+                        result = {
+                            "vaults": [{
+                                "vault_id": v.vault_id,
+                                "name": v.name,
+                                "vault_type": v.vault_type,
+                                "owner_id": v.owner_id,
+                                "created_at": v.created_at
+                            } for v in vaults]
+                        }
+                    elif name == "store_in_vault":
+                        secret = self.teams_vaults_system.store_in_vault(
+                            vault_id=arguments['vault_id'],
+                            key=arguments['key'],
+                            value=arguments['value'],
+                            created_by=arguments.get('created_by', self.teams_vaults_tools.default_user_id),
+                            metadata=arguments.get('metadata'),
+                            expires_at=arguments.get('expires_at')
+                        )
+                        result = {
+                            "success": True,
+                            "secret_key": secret.key,
+                            "vault_id": secret.vault_id,
+                            "created_at": secret.created_at,
+                            "message": "Secret stored and encrypted successfully"
+                        }
+                    elif name == "retrieve_from_vault":
+                        value = self.teams_vaults_system.retrieve_from_vault(
+                            vault_id=arguments['vault_id'],
+                            key=arguments['key'],
+                            actor_id=arguments.get('actor_id', self.teams_vaults_tools.default_user_id),
+                            audit_reason=arguments['audit_reason']
+                        )
+                        if value:
+                            result = {
+                                "success": True,
+                                "value": value,
+                                "message": "Secret retrieved and decrypted (logged in audit trail)"
+                            }
+                        else:
+                            result = {"error": "Secret not found"}
+                    elif name == "list_vault_secrets":
+                        secrets = self.teams_vaults_system.list_vault_secrets(arguments['vault_id'])
+                        result = {"secrets": secrets}
+                    elif name == "delete_vault_secret":
+                        success = self.teams_vaults_system.delete_vault_secret(
+                            vault_id=arguments['vault_id'],
+                            key=arguments['key'],
+                            actor_id=arguments.get('actor_id', self.teams_vaults_tools.default_user_id)
+                        )
+                        result = {"success": success}
+                    elif name == "share_vault":
+                        grant = self.teams_vaults_system.grant_vault_access(
+                            vault_id=arguments['vault_id'],
+                            grantee_id=arguments['share_with'],
+                            grantee_type=arguments.get('share_type', 'user'),
+                            access_level=arguments.get('access_level', 'read'),
+                            granted_by=arguments.get('granted_by', self.teams_vaults_tools.default_user_id),
+                            expires_at=arguments.get('expires_at')
+                        )
+                        result = {
+                            "success": True,
+                            "grant_id": grant.grant_id,
+                            "access_level": grant.access_level,
+                            "message": f"Vault access granted to {grant.grantee_id}"
+                        }
+                    elif name == "vault_audit_log":
+                        audit_log = self.teams_vaults_system.get_vault_audit_log(
+                            vault_id=arguments['vault_id'],
+                            hours=arguments.get('hours', 24),
+                            limit=arguments.get('limit', 100)
+                        )
+                        result = {"audit_log": audit_log, "total_entries": len(audit_log)}
+
+                    # Handle Confidence System tools
+                    elif name == "get_memory_confidence":
+                        result = await self.confidence_tools.handle_get_memory_confidence(arguments)
+                    elif name == "verify_memory":
+                        result = await self.confidence_tools.handle_verify_memory(arguments)
+                    elif name == "report_memory_usage":
+                        result = await self.confidence_tools.handle_report_memory_usage(arguments)
+                    elif name == "search_high_confidence":
+                        result = await self.confidence_tools.handle_search_high_confidence(arguments)
+                    elif name == "flag_outdated_memories":
+                        result = await self.confidence_tools.handle_flag_outdated_memories(arguments)
+                    elif name == "resolve_contradiction":
+                        result = await self.confidence_tools.handle_resolve_contradiction(arguments)
+                    elif name == "vote_on_fact":
+                        result = await self.confidence_tools.handle_vote_on_fact(arguments)
+                    elif name == "get_agent_credibility":
+                        result = await self.confidence_tools.handle_get_agent_credibility(arguments)
+
+                    return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
                 else:
                     raise ValueError(f"Unknown tool: {name}")
             
