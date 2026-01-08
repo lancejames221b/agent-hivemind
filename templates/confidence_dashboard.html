@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Confidence Dashboard - hAIveMind</title>
+    <link rel="stylesheet" href="/static/confidence.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #f9fafb;
+            color: #111827;
+        }
+
+        .header {
+            background: white;
+            border-bottom: 1px solid #e5e7eb;
+            padding: 1.5rem 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .header h1 {
+            font-size: 1.875rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .header p {
+            color: #6b7280;
+            font-size: 0.875rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem 2rem;
+        }
+
+        .nav-links {
+            margin-top: 1rem;
+        }
+
+        .nav-links a {
+            color: #3b82f6;
+            text-decoration: none;
+            margin-right: 1rem;
+            font-size: 0.875rem;
+        }
+
+        .nav-links a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📊 Confidence Dashboard</h1>
+        <p>Multi-dimensional reliability scoring for hAIveMind memories</p>
+        <div class="nav-links">
+            <a href="/dashboard">← Back to Dashboard</a>
+            <a href="/teams">Teams</a>
+            <a href="/vaults">Vaults</a>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Stats Grid -->
+        <div class="confidence-stats-grid">
+            <div class="confidence-stat-card">
+                <div class="confidence-stat-label">Average Confidence</div>
+                <div class="confidence-stat-value" id="avgConfidence">--</div>
+                <div class="confidence-stat-label" style="text-transform: none; color: #22c55e;">🟢 Trending</div>
+            </div>
+
+            <div class="confidence-stat-card">
+                <div class="confidence-stat-label">High Confidence</div>
+                <div class="confidence-stat-value" id="highConfidence">--</div>
+                <div class="confidence-stat-label" style="text-transform: none; color: #6b7280;">≥ 0.70 Score</div>
+            </div>
+
+            <div class="confidence-stat-card">
+                <div class="confidence-stat-label">Needs Verification</div>
+                <div class="confidence-stat-value" id="needsVerification">--</div>
+                <div class="confidence-stat-label" style="text-transform: none; color: #f59e0b;">Outdated Info</div>
+            </div>
+
+            <div class="confidence-stat-card">
+                <div class="confidence-stat-label">Verifications (24h)</div>
+                <div class="confidence-stat-value" id="recentVerifications">--</div>
+                <div class="confidence-stat-label" style="text-transform: none; color: #3b82f6;">Recent Activity</div>
+            </div>
+        </div>
+
+        <!-- Confidence Distribution Chart -->
+        <div class="confidence-chart-container">
+            <div class="confidence-chart-title">Confidence Score Distribution</div>
+            <div id="distributionChart" style="height: 300px;"></div>
+        </div>
+
+        <!-- Recent Low Confidence Memories -->
+        <div class="confidence-chart-container">
+            <div class="confidence-chart-title">Memories Needing Attention</div>
+            <div id="lowConfidenceList">
+                <p style="color: #6b7280; font-size: 0.875rem;">Loading...</p>
+            </div>
+        </div>
+
+        <!-- Confidence Actions -->
+        <div class="confidence-chart-container">
+            <div class="confidence-chart-title">Quick Actions</div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
+                <button onclick="verifyOutdatedMemories()" style="padding: 1rem; border: 1px solid #e5e7eb; border-radius: 0.5rem; background: white; cursor: pointer; text-align: left;">
+                    <div style="font-weight: 600; margin-bottom: 0.25rem;">🔍 Find Outdated Info</div>
+                    <div style="font-size: 0.75rem; color: #6b7280;">Identify memories needing verification</div>
+                </button>
+
+                <button onclick="searchHighConfidence()" style="padding: 1rem; border: 1px solid #e5e7eb; border-radius: 0.5rem; background: white; cursor: pointer; text-align: left;">
+                    <div style="font-weight: 600; margin-bottom: 0.25rem;">🎯 Search Reliable Info</div>
+                    <div style="font-size: 0.75rem; color: #6b7280;">Find high-confidence memories</div>
+                </button>
+
+                <button onclick="viewContradictions()" style="padding: 1rem; border: 1px solid #e5e7eb; border-radius: 0.5rem; background: white; cursor: pointer; text-align: left;">
+                    <div style="font-weight: 600; margin-bottom: 0.25rem;">⚠️ View Contradictions</div>
+                    <div style="font-size: 0.75rem; color: #6b7280;">Resolve conflicting information</div>
+                </button>
+
+                <button onclick="exportConfidenceReport()" style="padding: 1rem; border: 1px solid #e5e7eb; border-radius: 0.5rem; background: white; cursor: pointer; text-align: left;">
+                    <div style="font-weight: 600; margin-bottom: 0.25rem;">📊 Export Report</div>
+                    <div style="font-size: 0.75rem; color: #6b7280;">Generate confidence analytics</div>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/confidence.js"></script>
+    <script>
+        // Load confidence statistics
+        async function loadStats() {
+            try {
+                const response = await fetch('/api/confidence/stats');
+                const data = await response.json();
+
+                // Update stat cards
+                document.getElementById('avgConfidence').textContent =
+                    (data.average_confidence * 100).toFixed(0) + '%';
+                document.getElementById('highConfidence').textContent =
+                    data.high_confidence_count || 0;
+                document.getElementById('needsVerification').textContent =
+                    data.needs_verification_count || 0;
+                document.getElementById('recentVerifications').textContent =
+                    data.recent_verifications || 0;
+
+                // Load distribution chart
+                loadDistributionChart(data.distribution || {});
+
+                // Load low confidence list
+                loadLowConfidenceList(data.low_confidence_memories || []);
+            } catch (error) {
+                console.error('Failed to load confidence stats:', error);
+            }
+        }
+
+        function loadDistributionChart(distribution) {
+            const chart = document.getElementById('distributionChart');
+            chart.innerHTML = '';
+
+            const levels = [
+                { name: 'Very High', count: distribution.very_high || 0, color: '#22c55e' },
+                { name: 'High', count: distribution.high || 0, color: '#84cc16' },
+                { name: 'Medium', count: distribution.medium || 0, color: '#f59e0b' },
+                { name: 'Low', count: distribution.low || 0, color: '#ef4444' },
+                { name: 'Very Low', count: distribution.very_low || 0, color: '#6b7280' }
+            ];
+
+            const total = levels.reduce((sum, l) => sum + l.count, 0);
+            if (total === 0) {
+                chart.innerHTML = '<p style="color: #6b7280; text-align: center; padding: 2rem;">No data available</p>';
+                return;
+            }
+
+            levels.forEach(level => {
+                const percentage = (level.count / total * 100).toFixed(1);
+                const bar = document.createElement('div');
+                bar.style.cssText = `
+                    margin-bottom: 1rem;
+                `;
+                bar.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.25rem; font-size: 0.875rem;">
+                        <span>${level.name}</span>
+                        <span style="color: #6b7280;">${level.count} (${percentage}%)</span>
+                    </div>
+                    <div style="width: 100%; height: 2rem; background: #f3f4f6; border-radius: 0.25rem; overflow: hidden;">
+                        <div style="width: ${percentage}%; height: 100%; background: ${level.color}; transition: width 0.5s ease;"></div>
+                    </div>
+                `;
+                chart.appendChild(bar);
+            });
+        }
+
+        function loadLowConfidenceList(memories) {
+            const list = document.getElementById('lowConfidenceList');
+            list.innerHTML = '';
+
+            if (memories.length === 0) {
+                list.innerHTML = '<p style="color: #6b7280; font-size: 0.875rem;">✓ No low-confidence memories found</p>';
+                return;
+            }
+
+            memories.slice(0, 10).forEach(memory => {
+                const item = document.createElement('div');
+                item.style.cssText = `
+                    padding: 1rem;
+                    border: 1px solid #e5e7eb;
+                    border-radius: 0.5rem;
+                    margin-bottom: 0.75rem;
+                    background: #fef3c7;
+                `;
+
+                const badge = window.Confidence.createBadge(memory.confidence_score, memory.confidence_level);
+
+                item.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
+                        <div style="flex: 1;">
+                            <div style="font-size: 0.875rem; color: #374151; margin-bottom: 0.25rem;">
+                                ${memory.content.substring(0, 100)}...
+                            </div>
+                            <div style="font-size: 0.75rem; color: #6b7280;">
+                                Category: ${memory.category} • ${memory.age_days} days old
+                            </div>
+                        </div>
+                        <div style="margin-left: 1rem;"></div>
+                    </div>
+                    <button onclick="verifyMemory('${memory.memory_id}')" style="padding: 0.25rem 0.5rem; border: 1px solid #d97706; border-radius: 0.25rem; background: white; color: #d97706; font-size: 0.75rem; cursor: pointer;">
+                        Verify Now
+                    </button>
+                `;
+
+                item.querySelector('div > div').appendChild(badge);
+                list.appendChild(item);
+            });
+        }
+
+        // Action functions
+        function verifyOutdatedMemories() {
+            alert('This will open a list of outdated memories for verification.');
+        }
+
+        function searchHighConfidence() {
+            window.location.href = '/search?min_confidence=0.7';
+        }
+
+        function viewContradictions() {
+            window.location.href = '/api/confidence/contradictions';
+        }
+
+        function exportConfidenceReport() {
+            window.location.href = '/api/confidence/export';
+        }
+
+        function verifyMemory(memoryId) {
+            alert(`Verifying memory ${memoryId}...`);
+            // In production, this would call the API to verify the memory
+        }
+
+        // Load stats on page load
+        loadStats();
+
+        // Refresh every 30 seconds
+        setInterval(loadStats, 30000);
+    </script>
+</body>
+</html>
