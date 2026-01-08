@@ -323,7 +323,7 @@ NETWORK TOPOLOGY:
             query: str,
             category: Optional[str] = None,
             user_id: Optional[str] = None,
-            limit: int = 10,
+            limit: int = 5,
             offset: int = 0,
             semantic: bool = True,
             scope: Optional[str] = None,
@@ -372,7 +372,7 @@ NETWORK TOPOLOGY:
             user_id: Optional[str] = None,
             category: Optional[str] = None,
             hours: int = 24,
-            limit: int = 20,
+            limit: int = 5,
             offset: int = 0
         ) -> str:
             """Get recent memories within a time window"""
