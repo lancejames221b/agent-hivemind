@@ -1,13 +1,11 @@
 {
   "mcpServers": {
     "haivemind": {
-      "command": "npx",
-      "args": ["@modelcontextprotocol/server-http", "http://localhost:8900/sse"],
+      "command": "/home/lj/dev/haivemind/haivemind-mcp-server/venv/bin/python",
+      "args": ["/home/lj/dev/haivemind/haivemind-mcp-server/src/memory_server.py"],
       "env": {
-        "HTTP_TIMEOUT": "60000",
-        "RETRY_DELAY": "1000",
-        "MAX_RETRIES": "5",
-        "KEEP_ALIVE": "true"
+        "PYTHONPATH": "/home/lj/dev/haivemind/haivemind-mcp-server/src",
+        "HAIVEMIND_JWT_SECRET": "cfccc737f768f7f8de4d5436da6535da5ca3f5f26df715978f4bd2f51932c68e"
       }
     }
   }

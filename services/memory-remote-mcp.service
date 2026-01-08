@@ -9,6 +9,7 @@ User=lj
 Group=lj
 WorkingDirectory=/home/lj/haivemind-mcp-server
 Environment=PYTHONPATH=/home/lj/haivemind-mcp-server/src
+Environment=HAIVEMIND_JWT_SECRET=cfccc737f768f7f8de4d5436da6535da5ca3f5f26df715978f4bd2f51932c68e
 ExecStart=/home/lj/haivemind-mcp-server/venv/bin/python /home/lj/haivemind-mcp-server/src/remote_mcp_server.py --host 0.0.0.0 --port 8900
 Restart=always
 RestartSec=10
