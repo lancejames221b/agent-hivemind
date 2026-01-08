@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100());
+            color: white;
+            padding: 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header h1 {
+            font-size: 2rem;
+        }
+
+        nav {
+            background: white;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+
+        nav ul {
+            max-width: 1400px;
+            margin: 0 auto;
+            list-style: none;
+            display: flex;
+            gap: 2rem;
+            padding: 1rem 2rem;
+        }
+
+        nav a {
+            text-decoration: none;
+            color: #666;
+            font-weight: 500;
+        }
+
+        nav a:hover, nav a.active {
+            color: #667eea;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .actions {
+            margin-bottom: 2rem;
+        }
+
+        .btn {
+            background: #667eea;
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1rem;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn:hover {
+            background: #5568d3;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .vault-card {
+            background: white;
+            border-radius: 10px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            border-left: 4px solid #667eea;
+        }
+
+        .vault-card h3 {
+            margin-bottom: 0.75rem;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .vault-card h3::before {
+            content: "🔒";
+            font-size: 1.2rem;
+        }
+
+        .vault-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            color: #999;
+            margin-bottom: 1rem;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .badge-personal {
+            background: #f3e5f5;
+            color: #7b1fa2;
+        }
+
+        .badge-team {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .badge-project {
+            background: #fff3e0;
+            color: #f57c00;
+        }
+
+        .badge-shared {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .encryption-badge {
+            background: #e8f5e9;
+            color: #2e7d32;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 2rem;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 500px;
+        }
+
+        .modal-content h2 {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 1rem;
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 1rem;
+            justify-content: flex-end;
+        }
+
+        .btn-secondary {
+            background: #999;
+        }
+
+        .btn-secondary:hover {
+            background: #777;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-content">
+            <h1>Vaults Management</h1>
+            <p>Securely store and manage secrets with encryption</p>
+        </div>
+    </div>
+
+    <nav>
+        <ul>
+            <li><a href="/">Dashboard</a></li>
+            <li><a href="/teams">Teams</a></li>
+            <li><a href="/vaults" class="active">Vaults</a></li>
+        </ul>
+    </nav>
+
+    <div class="container">
+        <div class="actions">
+            <button class="btn" onclick="openCreateModal()">Create New Vault</button>
+        </div>
+
+        <div class="grid">
+            {% for vault in vaults %}
+            <div class="vault-card">
+                <h3>{{ vault.name }}</h3>
+                <p style="margin-bottom: 1rem;">
+                    <span class="badge badge-{{ vault.vault_type }}">{{ vault.vault_type }}</span>
+                    <span class="encryption-badge">🔐 Encrypted</span>
+                </p>
+                <div class="vault-meta">
+                    <span>{{ vault.secret_count }} secrets</span>
+                    <span>Access: {{ vault.access_level }}</span>
+                </div>
+                <a href="/vaults/{{ vault.vault_id }}" class="btn">Open Vault</a>
+            </div>
+            {% endfor %}
+        </div>
+
+        {% if not vaults %}
+        <div style="text-align: center; padding: 3rem; color: #999;">
+            <p>No vaults yet. Create your first vault to securely store secrets!</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <div id="createModal" class="modal">
+        <div class="modal-content">
+            <h2>Create New Vault</h2>
+            <form action="/vaults/create" method="POST">
+                <div class="form-group">
+                    <label for="name">Vault Name</label>
+                    <input type="text" id="name" name="name" required>
+                </div>
+                <div class="form-group">
+                    <label for="vault_type">Vault Type</label>
+                    <select id="vault_type" name="vault_type" required>
+                        <option value="personal">Personal (Private)</option>
+                        <option value="team">Team (Shared with team)</option>
+                        <option value="project">Project (Project-scoped)</option>
+                        <option value="shared">Shared (Cross-team)</option>
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeCreateModal()">Cancel</button>
+                    <button type="submit" class="btn">Create Vault</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function openCreateModal() {
+            document.getElementById('createModal').classList.add('active');
+        }
+
+        function closeCreateModal() {
+            document.getElementById('createModal').classList.remove('active');
+        }
+
+        window.onclick = function(event) {
+            const modal = document.getElementById('createModal');
+            if (event.target === modal) {
+                closeCreateModal();
+            }
+        }
+    </script>
+</body>
+</html>
