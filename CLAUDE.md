@@ -14,6 +14,29 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **DevOps Memory Categories**: Specialized storage for infrastructure, incidents, deployments, monitoring, runbooks, and security
 - **Real-Time Collaboration**: Agents broadcast discoveries, query each other's knowledge, and coordinate autonomous responses
 - **Distributed Storage**: ChromaDB for vector storage, Redis for caching, with conflict resolution via vector clocks
+- **Token-Optimized Format (v2)**: Auto-teaches optimal compression on first memory access - 60-80% token reduction
+
+### Token-Optimized Format System (v2)
+
+The memory system automatically teaches Claude the optimal format on **first memory access** each session:
+
+**Format Guide (injected automatically):**
+```
+Symbols: → (flow) | (or) ? (opt) ! (req) :: (type)
+Tables > prose: | key | val |
+Refs: [ID]: define → use [ID]
+Compact: auth(key) → search(q) → JSON
+```
+
+**How it works:**
+1. First `search_memories`, `retrieve_memory`, or `get_recent_memories` call includes `_haivemind_meta.format_guide`
+2. All stored memories are tagged with `format_version: v2`
+3. Legacy verbose memories are flagged with `legacy_content_detected: true`
+4. Use `get_format_guide` tool for detailed format reference
+
+**New Tools:**
+- `get_format_guide`: Get format guide on demand (use `detailed: true` for full guide)
+- `get_memory_access_stats`: View session access statistics
 
 ## Architecture
 
