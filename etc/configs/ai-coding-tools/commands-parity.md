@@ -52,7 +52,7 @@
 | Command | Description | Claude | Cursor | Kilo | Cline | Codex |
 |---------|-------------|:------:|:------:|:----:|:-----:|:-----:|
 | `/document` | Create documentation | ✅ | ✅ | ❌ | ❌ | ❌ |
-| `/read` | Search {DOCS_REPO} | ✅ | ✅ | ❌ | ❌ | ❌ |
+| `/read` | Search Unit221B/docs | ✅ | ✅ | ❌ | ❌ | ❌ |
 | `/docs-adr` | Create ADR | ❌ | ✅ | ❌ | ❌ | ❌ |
 | `/docs-rca` | Create RCA | ❌ | ✅ | ❌ | ❌ | ❌ |
 | `/docs-runbook` | Create runbook | ❌ | ✅ | ❌ | ❌ | ❌ |
