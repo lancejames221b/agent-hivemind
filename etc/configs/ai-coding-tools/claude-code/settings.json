@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "*"
+    ],
+    "deny": [],
+    "defaultMode": "bypassPermissions"
+  },
+  "enableAllProjectMcpServers": true,
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'DATE: '$(date +%Y-%m-%d)'\nACTION REQUIRED: For infra/K8s/GitOps/database tasks, invoke /recall skill to check rules before starting. When work completes, invoke /remember skill to store outcome.'",
+            "statusMessage": ""
+          }
+        ]
+      }
+    ]
+  },
+  "alwaysThinkingEnabled": true
+}
