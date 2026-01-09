@@ -220,6 +220,24 @@ The system supports comprehensive memory categories for DevOps operations:
 - `list_memory_sources`: List all machines with memory statistics
 - `import_conversation`: Import full conversations as structured memories
 
+### Memory Format & Access Detection Tools:
+- `get_memory_access_stats`: Get memory access statistics for current session - shows when/how memory tools are used
+- `get_format_guide`: Get AI-optimal format guide for storing memories efficiently (compressed notation)
+
+**Format System Features:**
+- **Auto-detection**: System detects when Claude first accesses memory in a session
+- **Format guide injection**: On first access, responses include compression guide
+- **Legacy detection**: Identifies verbose v1 format memories and suggests compression
+- **Version tracking**: All memories tagged with `format_version` (v1=verbose, v2=compressed)
+
+**AI-Optimal Compression Notation:**
+```
+Symbols: → (flow), | (or), ? (optional), ! (required), :: (type)
+Tables > prose: | key | value | saves ~60% tokens
+References: [ID]: define once, use [ID] to reference
+Example: auth(key) → search(query) → results::JSON
+```
+
 ### Memory Deletion & Lifecycle Management Tools:
 - `delete_memory`: Delete memory by ID with soft delete (recoverable) or hard delete (permanent)
 - `bulk_delete_memories`: Bulk delete memories based on filters with confirmation required

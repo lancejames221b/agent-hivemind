@@ -85,6 +85,21 @@ except ImportError as e:
     CONFIDENCE_AVAILABLE = False
     logger.warning(f"Confidence system not available: {e}")
 
+# Import Memory Format System for AI-optimal communication
+try:
+    from memory_format_system import (
+        get_format_enhancer,
+        get_access_tracker,
+        add_format_version_to_metadata,
+        FORMAT_VERSION,
+        MemoryFormatEnhancer
+    )
+    FORMAT_SYSTEM_AVAILABLE = True
+except ImportError as e:
+    FORMAT_SYSTEM_AVAILABLE = False
+    FORMAT_VERSION = "v1"
+    logger.warning(f"Memory format system not available: {e}")
+
 # Logger already setup above
 
 class MemoryStorage:
@@ -575,7 +590,10 @@ class MemoryStorage:
             "created_at": datetime.now().isoformat(),
             "context": context or "",
             "tags": ",".join(tags or []),
-            
+
+            # Format version tracking for AI-optimal storage
+            "format_version": FORMAT_VERSION,
+
             # System context
             "machine_id": system_context["machine_id"],
             "hostname": system_context["hostname"],
@@ -586,13 +604,13 @@ class MemoryStorage:
             "local_ip": system_context["local_ip"],
             "tailscale_ip": system_context["tailscale_ip"],
             "ssh_connection": system_context.get("ssh_connection") or "",
-            
+
             # Project context
             "project_path": project_context.get("project_path", ""),
             "project_name": project_context.get("project_name", ""),
             "git_root": project_context.get("git_root") or "",
             "git_branch": project_context.get("git_branch") or "",
-            
+
             # Sharing and security
             "scope": sharing_info["scope"],
             "allowed_machines": ",".join(sharing_info["allowed_machines"]),
@@ -3092,6 +3110,16 @@ class MemoryMCPServer:
                 self.confidence_tools = None
                 self.confidence_system = None
 
+        # Initialize Memory Format System for AI-optimal communication
+        self.format_enhancer = None
+        if FORMAT_SYSTEM_AVAILABLE:
+            try:
+                self.format_enhancer = get_format_enhancer(self.storage.redis_client)
+                logger.info("📝 Memory Format System initialized - AI-optimal compression and access tracking active")
+            except Exception as e:
+                logger.error(f"Failed to initialize Memory Format System: {e}")
+                self.format_enhancer = None
+
         # Register tools
         self._register_tools()
     
@@ -3249,6 +3277,26 @@ class MemoryMCPServer:
                         "properties": {
                             "category": {"type": "string", "description": "Filter by category", "enum": ["project", "conversation", "agent", "global", "infrastructure", "incidents", "deployments", "monitoring", "runbooks", "security"]}
                         },
+                        "required": []
+                    }
+                ),
+                Tool(
+                    name="get_memory_access_stats",
+                    description="Get memory access statistics for current session - shows when and how memory tools are being used",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "session_id": {"type": "string", "description": "Specific session ID to query (optional, defaults to current)"}
+                        },
+                        "required": []
+                    }
+                ),
+                Tool(
+                    name="get_format_guide",
+                    description="Get the AI-optimal format guide for storing and retrieving memories efficiently. Call this to learn the compressed notation that saves tokens.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {},
                         "required": []
                     }
                 ),
@@ -3804,13 +3852,22 @@ class MemoryMCPServer:
         @self.server.call_tool()
         async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             try:
+                # Memory tools with format enhancement for AI-optimal communication
                 if name == "store_memory":
                     memory_id = await self.storage.store_memory(**arguments)
+                    # Enhanced response with format metadata
+                    if self.format_enhancer:
+                        response = self.format_enhancer.enhance_store_response(memory_id, arguments)
+                        return [TextContent(type="text", text=json.dumps(response, indent=2))]
                     return [TextContent(type="text", text=f"Memory stored with ID: {memory_id}")]
-                
+
                 elif name == "retrieve_memory":
                     memory = await self.storage.retrieve_memory(arguments["memory_id"])
                     if memory:
+                        # Enhanced response with format metadata
+                        if self.format_enhancer:
+                            response = self.format_enhancer.enhance_response('retrieve_memory', memory, arguments)
+                            return [TextContent(type="text", text=json.dumps(response, indent=2))]
                         return [TextContent(type="text", text=json.dumps(memory, indent=2))]
                     else:
                         return [TextContent(type="text", text="Memory not found")]
@@ -3821,15 +3878,50 @@ class MemoryMCPServer:
 
                 elif name == "search_memories":
                     memories = await self.storage.search_memories(**arguments)
+                    # Enhanced response with format metadata (detects legacy content)
+                    if self.format_enhancer:
+                        response = self.format_enhancer.enhance_response('search_memories', memories, arguments)
+                        return [TextContent(type="text", text=json.dumps(response, indent=2))]
                     return [TextContent(type="text", text=json.dumps(memories, indent=2))]
-                
+
                 elif name == "get_recent_memories":
                     memories = await self.storage.get_recent_memories(**arguments)
+                    # Enhanced response with format metadata
+                    if self.format_enhancer:
+                        response = self.format_enhancer.enhance_response('get_recent_memories', memories, arguments)
+                        return [TextContent(type="text", text=json.dumps(response, indent=2))]
                     return [TextContent(type="text", text=json.dumps(memories, indent=2))]
                 
                 elif name == "get_memory_stats":
                     stats = self.storage.get_collection_info()
                     return [TextContent(type="text", text=json.dumps(stats, indent=2))]
+
+                elif name == "get_memory_access_stats":
+                    # Return memory access statistics for detecting when Claude uses memory tools
+                    if self.format_enhancer:
+                        stats = self.format_enhancer.tracker.get_access_stats(
+                            arguments.get('session_id')
+                        )
+                        return [TextContent(type="text", text=json.dumps(stats, indent=2))]
+                    return [TextContent(type="text", text=json.dumps({"error": "Format system not initialized"}, indent=2))]
+
+                elif name == "get_format_guide":
+                    # Return the full format guide for AI-optimal memory storage
+                    if FORMAT_SYSTEM_AVAILABLE:
+                        from memory_format_system import FORMAT_GUIDE_COMPACT, FORMAT_VERSION
+                        guide = {
+                            "format_version": FORMAT_VERSION,
+                            "guide": FORMAT_GUIDE_COMPACT,
+                            "tips": {
+                                "tables_over_prose": "| key | value | saves ~60% tokens",
+                                "symbols": "→ (flow), | (or), ? (optional), ! (required), :: (type)",
+                                "references": "[ID]: define once, use [ID] to reference",
+                                "compression": "auth(key) → search(query) → results::JSON",
+                                "structures": "YAML/JSON > sentences for config/data"
+                            }
+                        }
+                        return [TextContent(type="text", text=json.dumps(guide, indent=2))]
+                    return [TextContent(type="text", text=json.dumps({"format_version": "v1", "guide": "Format system not available"}, indent=2))]
                 
                 elif name == "import_conversation":
                     result = await self.storage.import_conversation(**arguments)
