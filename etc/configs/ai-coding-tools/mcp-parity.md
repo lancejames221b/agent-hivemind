@@ -1,7 +1,6 @@
 # MCP Server Parity Matrix
 
 **Generated**: 2026-01-09
-**Updated**: 2026-01-09 (Phase 2, 4 complete)
 **Purpose**: Track MCP server configuration status across all AI coding tools
 
 ## Summary
@@ -11,8 +10,8 @@
 | **Claude Code** | 9 | 0 | Reference implementation |
 | **Cursor** | 10 | 0 | Has Figma (unique) |
 | **Kilo Code** | 2 | 0 | Project-level only |
-| **Cline** | 9 | 0 | Fully configured ✅ |
-| **Codex** | 9 | 0 | Wrapper scripts working ✅ |
+| **Cline** | 0 | 0 | Empty config |
+| **Codex** | 4 | 4 | URL-based server bug |
 
 ---
 
@@ -20,15 +19,15 @@
 
 | MCP Server | Claude Code | Cursor | Kilo Code | Cline | Codex |
 |------------|:-----------:|:------:|:---------:|:-----:|:-----:|
-| **haivemind** | ✅ SSE | ✅ SSE | ❌ | ✅ SSE | ✅ Wrapper |
-| **slack** | ✅ SSE | ✅ SSE | ❌ | ✅ SSE | ✅ Wrapper |
-| **trello** | ✅ SSE | ✅ SSE | ❌ | ✅ SSE | ✅ Wrapper |
-| **notion** | ✅ SSE | ✅ SSE | ❌ | ✅ SSE | ✅ Wrapper |
-| **atlassian** | ✅ npx | ✅ npx | ❌ | ✅ npx | ✅ npx |
-| **vibe_kanban** | ✅ npx | ✅ npx | ❌ | ✅ npx | ✅ npx |
-| **playwright** | ✅ npx | ✅ npx | ✅ npx | ✅ npx | ✅ npx |
-| **puppeteer** | ✅ npx | ✅ npx | ✅ npx | ✅ npx | ✅ npx |
-| **google-workspace** | ✅ uvx | ✅ uvx | ❌ | ✅ uvx | ✅ uvx |
+| **haivemind** | ✅ SSE | ✅ SSE | ❌ | ❌ | ⚠️ Disabled |
+| **slack** | ✅ SSE | ✅ SSE | ❌ | ❌ | ⚠️ Disabled |
+| **trello** | ✅ SSE | ✅ SSE | ❌ | ❌ | ⚠️ Disabled |
+| **notion** | ✅ SSE | ✅ SSE | ❌ | ❌ | ⚠️ Disabled |
+| **atlassian** | ✅ npx | ✅ npx | ❌ | ❌ | ✅ npx |
+| **vibe_kanban** | ✅ npx | ✅ npx | ❌ | ❌ | ✅ npx |
+| **playwright** | ✅ npx | ✅ npx | ✅ npx | ❌ | ✅ npx |
+| **puppeteer** | ✅ npx | ✅ npx | ✅ npx | ❌ | ✅ npx |
+| **google-workspace** | ✅ uvx | ✅ uvx | ❌ | ❌ | ❌ |
 | **Figma** | ❌ | ✅ URL | ❌ | ❌ | ❌ |
 
 ### Legend
@@ -42,7 +41,7 @@
 
 ### haivemind (Distributed Memory)
 - **Purpose**: Shared AI memory system for cross-tool context
-- **Endpoint**: `{HAIVEMIND_URL}/sse`
+- **Endpoint**: `http://{HAIVEMIND_URL}/sse`
 - **Priority**: P0 (Critical for workflow parity)
 
 | Tool | Config Method | Status |
@@ -50,12 +49,12 @@
 | Claude Code | `mcp-client-sse` wrapper | ✅ Working |
 | Cursor | Native SSE support | ✅ Working |
 | Kilo Code | Not configured | ❌ Gap |
-| Cline | `mcp-client-sse` wrapper | ✅ Working |
-| Codex | Wrapper script | ✅ Working |
+| Cline | Not configured | ❌ Gap |
+| Codex | Disabled (CLI bug) | ⚠️ Needs wrapper |
 
 ### slack (Team Communication)
 - **Purpose**: Read/post Slack messages
-- **Endpoint**: `{SLACK_MCP_URL}/sse`
+- **Endpoint**: `http://{SLACK_MCP_URL}/sse`
 - **Priority**: P0
 
 | Tool | Config Method | Status |
@@ -63,12 +62,12 @@
 | Claude Code | `mcp-client-sse` wrapper | ✅ Working |
 | Cursor | Native SSE support | ✅ Working |
 | Kilo Code | Not configured | ❌ Gap |
-| Cline | `mcp-client-sse` wrapper | ✅ Working |
-| Codex | Wrapper script | ✅ Working |
+| Cline | Not configured | ❌ Gap |
+| Codex | Disabled (CLI bug) | ⚠️ Needs wrapper |
 
 ### trello (Task Management)
 - **Purpose**: Trello board operations
-- **Endpoint**: `{TRELLO_URL}/sse`
+- **Endpoint**: `http://{TRELLO_URL}/sse`
 - **Priority**: P1
 
 | Tool | Config Method | Status |
@@ -76,8 +75,8 @@
 | Claude Code | `mcp-client-sse` wrapper | ✅ Working |
 | Cursor | Native SSE support | ✅ Working |
 | Kilo Code | Not configured | ❌ Gap |
-| Cline | `mcp-client-sse` wrapper | ✅ Working |
-| Codex | Wrapper script | ✅ Working |
+| Cline | Not configured | ❌ Gap |
+| Codex | Disabled (CLI bug) | ⚠️ Needs wrapper |
 
 ### atlassian (Jira/Confluence)
 - **Purpose**: Jira tickets, Confluence docs
@@ -89,7 +88,7 @@
 | Claude Code | `npx mcp-remote` | ✅ Working |
 | Cursor | `npx mcp-remote` | ✅ Working |
 | Kilo Code | Not configured | ❌ Gap |
-| Cline | `npx mcp-remote` | ✅ Working |
+| Cline | Not configured | ❌ Gap |
 | Codex | `npx mcp-remote` | ✅ Working |
 
 ### notion (Documentation)
@@ -102,8 +101,8 @@
 | Claude Code | `mcp-client-sse` wrapper | ✅ Working |
 | Cursor | Native SSE support | ✅ Working |
 | Kilo Code | Not configured | ❌ Gap |
-| Cline | `mcp-client-sse` wrapper | ✅ Working |
-| Codex | Wrapper script | ✅ Working |
+| Cline | Not configured | ❌ Gap |
+| Codex | Disabled (CLI bug) | ⚠️ Needs wrapper |
 
 ### vibe_kanban (Project Management)
 - **Purpose**: Vibe Kanban task management
@@ -115,7 +114,7 @@
 | Claude Code | npx command | ✅ Working |
 | Cursor | npx command | ✅ Working |
 | Kilo Code | Not configured | ❌ Gap |
-| Cline | npx command | ✅ Working |
+| Cline | Not configured | ❌ Gap |
 | Codex | npx command | ✅ Working |
 
 ### google-workspace (Google Apps)
@@ -128,8 +127,8 @@
 | Claude Code | uvx command | ✅ Working |
 | Cursor | uvx command | ✅ Working |
 | Kilo Code | Not configured | ❌ Gap |
-| Cline | uvx command | ✅ Working |
-| Codex | uvx command | ✅ Working |
+| Cline | Not configured | ❌ Gap |
+| Codex | Not configured | ❌ Gap |
 
 ### playwright / puppeteer (Browser Automation)
 - **Purpose**: Web testing, screenshots, automation
@@ -140,32 +139,47 @@
 | Claude Code | ✅ | ✅ |
 | Cursor | ✅ | ✅ |
 | Kilo Code | ✅ | ✅ |
-| Cline | ✅ | ✅ |
+| Cline | ❌ | ❌ |
 | Codex | ✅ | ✅ |
 
 ---
 
-## Codex Wrapper Scripts
+## Known Issues
 
-Codex CLI requires `command` field for SSE servers. Wrapper scripts created at `{HOME}/.codex/wrappers/`:
+### Codex CLI URL-Based Server Bug
+**Issue**: Codex CLI 0.21.0 requires `command` field even for URL-based SSE servers
+**Affected Servers**: haivemind, slack, trello, notion
+**Workaround**: Create wrapper scripts that call `mcp-client-sse`
 
-```bash
-# haivemind-wrapper.sh
-#!/bin/bash
-exec mcp-client-sse "{HAIVEMIND_URL}/sse"
+```toml
+# Currently disabled in ~/.codex/config.toml:
+# [mcp_servers.haivemind]
+# url = "http://{HAIVEMIND_URL}/mcp"
+
+# Workaround (wrapper script):
+[mcp_servers.haivemind]
+command = "{HOME}/.codex/wrappers/haivemind-wrapper.sh"
 ```
 
-Similar wrappers for: `slack-wrapper.sh`, `trello-wrapper.sh`, `notion-wrapper.sh`
+### Cline Empty Configuration
+**Issue**: `~/.cline/data/settings/cline_mcp_settings.json` contains no servers
+**Impact**: Cline cannot access any external services
+**Fix**: Bootstrap with full server list (Phase 2)
 
 ---
 
-## Remaining Gaps
+## Remediation Priority
 
-### Kilo Code (P1)
-Missing 7 MCP servers:
-- haivemind, slack, trello, notion, atlassian, vibe_kanban, google-workspace
+### P0 - Critical (Required for workflow parity)
+1. **Cline**: Add all 9 MCP servers
+2. **Codex**: Create wrapper scripts for 4 URL-based servers
 
-**Reason**: Lower priority - tool less frequently used
+### P1 - Important
+1. **Kilo Code**: Add 7 missing MCP servers (all except playwright/puppeteer)
+
+### P2 - Nice to Have
+1. **Claude Code**: Consider adding Figma if needed
+2. **Codex**: Add google-workspace
 
 ---
 
