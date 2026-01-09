@@ -1,0 +1,25 @@
+hAIveMind Cheat Sheet (Load on demand: /examples cheatsheet)
+═══════════════════════════════════════════════════════════
+
+MEMORY:    store_memory | retrieve_memory | search_memories | update_memory | delete_memory
+PROJECTS:  create_project | list_projects | switch_project_context | project_health_check
+AGENTS:    register_agent | get_agent_roster | delegate_task | query_agent_knowledge | broadcast_discovery
+TASKS:     create_kanban_task | assign_kanban_task | update_kanban_task | list_kanban_tasks
+TEAMS:     get_mode | set_mode | create_team | list_teams | add_team_member
+VAULTS:    create_vault | store_in_vault | retrieve_from_vault | vault_audit_log
+CONFIG:    create_config_snapshot | detect_config_drift | compare_config_snapshots
+INFRA:     track_infrastructure_state | record_incident | generate_runbook | sync_ssh_config
+LOGS:      analyze_log_patterns | detect_log_anomalies | generate_debug_report
+DR:        initiate_failover | monitor_system_health | run_chaos_experiment
+
+CATEGORIES: infrastructure|incidents|deployments|monitoring|runbooks|security|project|agent
+SEVERITIES: critical|warning|info
+PRIORITIES: critical|high|medium|low
+MODES:      solo (private) | team (shared) | vault (secrets)
+PORTS:      8899=sync | 8900=mcp
+
+QUICK PATTERNS:
+  Incident:  record_incident → hv-broadcast → delegate_task → remember
+  Search:    search_memories query="..." category="..." limit=10
+  Store:     store_memory content="..." category="..." tags=["a","b"]
+  Delegate:  delegate_task task_description="..." required_capabilities=["..."]
