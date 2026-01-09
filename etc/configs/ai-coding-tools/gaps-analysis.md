@@ -34,13 +34,13 @@
 - `remember/SKILL.md` - Store information in hAIveMind
 - `diagnose/SKILL.md` - Investigation-only mode
 - `pr/SKILL.md` - Pull request workflow
-- `jira/SKILL.md` - EWN Jira ticket management
+- `jira/SKILL.md` - Jira ticket management
 
 **Cline Rules Created** (`~/.clinerules/`):
 - `haivemind-memory.md` - Memory search and storage
 - `diagnostic-mode.md` - Investigation-only mode
 - `pr-workflow.md` - Pull request workflow
-- `jira-workflow.md` - EWN Jira management
+- `jira-workflow.md` - Jira management
 
 ---
 
@@ -92,7 +92,7 @@ Cline uses `.clinerules` files instead of slash commands:
 | `remember` | Store information in hAIveMind |
 | `diagnose` | Investigation-only mode |
 | `pr` | Pull request workflow |
-| `jira` | EWN Jira management |
+| `jira` | Jira management |
 
 ---
 
@@ -126,7 +126,7 @@ Cline uses `.clinerules` files instead of slash commands:
 
 **Commands (34/39)**
 - Near parity with Claude Code
-- Missing some eWitness-specific operational commands
+- Missing some project-specific operational commands
 - Low priority gap
 
 ---
@@ -136,7 +136,7 @@ Cline uses `.clinerules` files instead of slash commands:
 ### P1 - Kilo Code MCP Expansion
 Expand project-level MCP config to include all 9 servers.
 
-**File**: `~/dev/ewitness-stack/.kilocode/mcp-servers.json`
+**File**: `{PROJECT_ROOT}/.kilocode/mcp-servers.json`
 
 **Template** (with placeholder tokens):
 ```json
