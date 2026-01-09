@@ -1,0 +1,78 @@
+{
+  "mcpServers": {
+    "haivemind": {
+      "command": "mcp-client-sse",
+      "args": [
+        "http://{HAIVEMIND_URL}/sse"
+      ],
+      "env": {
+        "HTTP_TIMEOUT": "30000"
+      }
+    },
+    "slack": {
+      "command": "mcp-client-sse",
+      "args": [
+        "http://{SLACK_MCP_URL}/sse"
+      ],
+      "env": {
+        "HTTP_TIMEOUT": "30000"
+      }
+    },
+    "trello": {
+      "command": "mcp-client-sse",
+      "args": [
+        "http://{TRELLO_URL}/sse"
+      ],
+      "env": {
+        "HTTP_TIMEOUT": "30000"
+      }
+    },
+    "notion": {
+      "command": "mcp-client-sse",
+      "args": [
+        "https://mcp.notion.com/sse"
+      ],
+      "env": {
+        "HTTP_TIMEOUT": "30000"
+      }
+    },
+    "atlassian": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "https://mcp.atlassian.com/v1/sse"
+      ],
+      "env": {
+        "HTTP_TIMEOUT": "30000"
+      }
+    },
+    "vibe_kanban": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "vibe-kanban@latest",
+        "--mcp"
+      ]
+    },
+    "google-workspace": {
+      "command": "{HOME}/.local/bin/uvx",
+      "args": [
+        "workspace-mcp",
+        "--tool-tier",
+        "complete"
+      ]
+    },
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "@executeautomation/playwright-mcp-server"
+      ]
+    },
+    "puppeteer": {
+      "command": "npx",
+      "args": [
+        "puppeteer-mcp-server"
+      ]
+    }
+  }
+}
