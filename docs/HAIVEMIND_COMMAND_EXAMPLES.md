@@ -659,6 +659,81 @@ Based on context and patterns, hAIveMind may suggest:
 
 ---
 
+## Token-Optimized Format System (v2)
+
+### Overview
+
+The hAIveMind memory system uses a token-optimized format (v2) that reduces storage costs by 60-80% while maintaining semantic clarity. The format is automatically taught on your first memory access each session.
+
+### Format Conventions
+
+```
+Symbols: → (flow) | (or) ? (opt) ! (req) :: (type)
+Tables > prose: | key | val |
+Refs: [ID]: define → use [ID]
+Compact: auth(key) → search(q) → JSON
+```
+
+### New Format Tools
+
+- `get_format_guide` - Get format guide (use `detailed=true` for full reference)
+- `get_memory_access_stats` - View session access statistics
+
+### Format v2 Examples
+
+**Before (verbose prose):**
+```bash
+remember "When deploying Elasticsearch, you should first make sure that the heap size is set correctly. The heap size should be set to half of the available RAM, but not more than 32GB. You also need to ensure that the cluster name is configured properly and that the discovery type is set correctly for your environment."
+```
+
+**After (v2 format):**
+```bash
+remember "ES Deploy:
+| Setting | Value | Notes |
+| heap | RAM/2 | max 32GB |
+| cluster.name | ES_CLUSTER |
+| discovery.type | multi-node | single-node for dev |
+Config: export ES_HEAP_SIZE=$((RAM/2))
+Flow: configure → validate → start → verify"
+```
+
+### Auto-Teaching Behavior
+
+1. **First memory access** each session includes `_haivemind_meta.format_guide`
+2. All stored memories tagged with `format_version: v2`
+3. Legacy verbose memories flagged with `legacy_content_detected: true`
+4. Use `get_format_guide detailed=true` for complete format reference
+
+### Using v2 Format in Workflows
+
+```bash
+# Store infrastructure knowledge with v2 format
+remember "DB Backup Procedure:
+| Step | Action | Duration |
+| 1 | stop writes | 5min |
+| 2 | snapshot | 15min |
+| 3 | verify | 5min |
+| 4 | resume | 1min |
+Prereqs: disk space > 2x DB size
+Rollback: restore from previous snapshot" runbooks --tags="database,backup,procedure"
+
+# Check format guide if needed
+get_format_guide detailed=true
+
+# View session access statistics
+get_memory_access_stats
+```
+
+### Migration from Legacy Format
+
+When you encounter legacy verbose memories:
+1. System flags them with `legacy_content_detected: true`
+2. Read as normal - they still work perfectly
+3. When updating, compress to v2 format for token savings
+4. Use `get_format_guide` as reference when compressing
+
+---
+
 ## Best Practices Summary
 
 ### Command Sequencing
@@ -666,6 +741,7 @@ Based on context and patterns, hAIveMind may suggest:
 2. **Query Before Action**: Use `hv-query` to check existing knowledge
 3. **Status Before Delegation**: Use `hv-status` to verify agent availability
 4. **Sync Before Critical Work**: Use `hv-sync` to ensure consistency
+5. **Use v2 Format**: Tables > prose, symbols for flow, refs for repetition
 
 ### Workflow Patterns
 1. **Incident Response**: remember → hv-broadcast → hv-delegate → monitor → resolve → document

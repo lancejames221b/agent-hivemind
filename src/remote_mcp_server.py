@@ -158,7 +158,10 @@ class RemoteMemoryMCPServer:
         
         # Register enhanced ticket management tools
         self._register_enhanced_ticket_tools()
-        
+
+        # Register personal command sync tools for cross-tool/cross-machine sync
+        self._register_personal_command_sync_tools()
+
         # Add admin interface routes
         self._add_admin_routes()
         
@@ -15952,6 +15955,252 @@ Status change has been recorded in both Vibe Kanban and hAIveMind memory for ful
                 return f"❌ Error getting metrics: {str(e)}"
         
         logger.info("🎫 Enhanced ticket management tools registered - comprehensive ticket system enabled")
+
+    def _register_personal_command_sync_tools(self):
+        """Register personal command synchronization tools for cross-tool/cross-machine sync"""
+
+        @self.mcp.tool()
+        async def detect_ai_tools() -> str:
+            """
+            Detect all AI coding assistant tools and their command/skill directories.
+            Returns information about Claude Code, Cursor, Kilo, Cline, Codex paths.
+            """
+            try:
+                tool_paths = await self.command_installer.detect_all_tool_paths()
+
+                output = ["🔍 AI Tool Detection Results\n"]
+                for tool_name, info in tool_paths.items():
+                    status = "✅" if info["commands_exists"] else "❌"
+                    output.append(f"{status} **{tool_name.capitalize()}**")
+                    output.append(f"   Commands: {info['commands_path']} ({info['command_count']} files)")
+                    if info["skills_path"]:
+                        skill_status = "✅" if info["skills_exists"] else "❌"
+                        output.append(f"   Skills: {info['skills_path']} ({info['skill_count']} files)")
+                    output.append("")
+
+                return "\n".join(output)
+            except Exception as e:
+                logger.error(f"Error detecting AI tools: {e}")
+                return f"❌ Error detecting AI tools: {str(e)}"
+
+        @self.mcp.tool()
+        async def sync_personal_commands_to_haivemind(
+            tool: str = "claude",
+            commands_filter: Optional[List[str]] = None,
+            scope: str = "project-shared",
+            tags: Optional[List[str]] = None
+        ) -> str:
+            """
+            Sync personal commands from local tool directory to hAIveMind memory.
+            This allows commands to be shared across machines and with team members.
+
+            Args:
+                tool: Source tool (claude/cursor/kilo/cline/codex)
+                commands_filter: Only sync these specific commands (optional)
+                scope: Memory sharing scope (project-shared/user-global/team-global)
+                tags: Additional tags for the synced commands
+
+            Returns:
+                Summary of synced commands
+            """
+            try:
+                result = await self.command_installer.sync_personal_commands_to_haivemind(
+                    tool=tool,
+                    commands_filter=commands_filter,
+                    scope=scope,
+                    tags=tags
+                )
+
+                output = [f"📤 Personal Commands Synced to hAIveMind\n"]
+                output.append(f"**Source Tool**: {result['tool']}")
+                output.append(f"**Total Found**: {result['total']}")
+                output.append(f"**Synced**: {len(result['synced'])}")
+                output.append(f"**Skipped**: {len(result['skipped'])}")
+                output.append(f"**Errors**: {len(result['errors'])}")
+                output.append("")
+
+                if result['synced']:
+                    output.append("**Synced Commands**:")
+                    for cmd in result['synced'][:10]:
+                        output.append(f"  ✅ {cmd['name']} ({cmd['action']})")
+                    if len(result['synced']) > 10:
+                        output.append(f"  ... and {len(result['synced']) - 10} more")
+
+                if result['errors']:
+                    output.append("\n**Errors**:")
+                    for err in result['errors'][:5]:
+                        output.append(f"  ❌ {err['name']}: {err['error']}")
+
+                return "\n".join(output)
+            except Exception as e:
+                logger.error(f"Error syncing personal commands: {e}")
+                return f"❌ Error syncing personal commands: {str(e)}"
+
+        @self.mcp.tool()
+        async def sync_haivemind_commands_to_local(
+            tool: str = "claude",
+            commands_filter: Optional[List[str]] = None,
+            include_personal: bool = True,
+            include_hv: bool = True,
+            force: bool = False
+        ) -> str:
+            """
+            Sync commands from hAIveMind memory to local tool directory.
+            Pull commands from the collective to your local machine.
+
+            Args:
+                tool: Target tool (claude/cursor/kilo/cline/codex)
+                commands_filter: Only sync these specific commands (optional)
+                include_personal: Include personal commands from hAIveMind
+                include_hv: Include hv-* hAIveMind commands
+                force: Overwrite existing commands even if unchanged
+
+            Returns:
+                Summary of installed commands
+            """
+            try:
+                result = await self.command_installer.sync_haivemind_commands_to_local(
+                    tool=tool,
+                    commands_filter=commands_filter,
+                    include_personal=include_personal,
+                    include_hv=include_hv,
+                    force=force
+                )
+
+                output = [f"📥 Commands Synced from hAIveMind\n"]
+                output.append(f"**Target Tool**: {result['tool']}")
+                output.append(f"**Target Path**: {result['target_path']}")
+                output.append(f"**Installed**: {len(result['installed'])}")
+                output.append(f"**Skipped**: {len(result['skipped'])} (already up to date)")
+                output.append("")
+
+                if result['installed']:
+                    output.append("**Installed Commands**:")
+                    for cmd in result['installed'][:10]:
+                        output.append(f"  ✅ {cmd}")
+                    if len(result['installed']) > 10:
+                        output.append(f"  ... and {len(result['installed']) - 10} more")
+
+                return "\n".join(output)
+            except Exception as e:
+                logger.error(f"Error syncing commands to local: {e}")
+                return f"❌ Error syncing commands to local: {str(e)}"
+
+        @self.mcp.tool()
+        async def sync_commands_cross_tool(
+            source_tool: str = "claude",
+            target_tools: Optional[List[str]] = None,
+            commands_filter: Optional[List[str]] = None,
+            force: bool = False
+        ) -> str:
+            """
+            Sync commands directly from one AI tool to others.
+            Copy commands from Claude to Cursor, Kilo, Cline, etc.
+
+            Args:
+                source_tool: Source tool to copy from (claude/cursor/kilo/cline/codex)
+                target_tools: Target tools to copy to (defaults to all others)
+                commands_filter: Only sync these specific commands (optional)
+                force: Overwrite existing commands even if unchanged
+
+            Returns:
+                Summary of cross-tool sync results
+            """
+            try:
+                result = await self.command_installer.sync_commands_cross_tool(
+                    source_tool=source_tool,
+                    target_tools=target_tools,
+                    commands_filter=commands_filter,
+                    force=force
+                )
+
+                output = [f"🔄 Cross-Tool Command Sync\n"]
+                output.append(f"**Source**: {result['source_tool']}")
+                output.append("")
+
+                for tool, tool_result in result['results'].items():
+                    if 'error' in tool_result:
+                        output.append(f"❌ **{tool}**: {tool_result['error']}")
+                    else:
+                        installed_count = len(tool_result['installed'])
+                        output.append(f"✅ **{tool}**: {installed_count}/{tool_result['total']} commands installed")
+                        output.append(f"   Path: {tool_result['path']}")
+
+                return "\n".join(output)
+            except Exception as e:
+                logger.error(f"Error in cross-tool sync: {e}")
+                return f"❌ Error in cross-tool sync: {str(e)}"
+
+        @self.mcp.tool()
+        async def list_synced_commands(scope: str = "all") -> str:
+            """
+            List all commands synced in hAIveMind memory.
+            Shows both personal commands and hv-* hAIveMind commands.
+
+            Args:
+                scope: Filter scope (all/personal/hv)
+
+            Returns:
+                List of synced commands with metadata
+            """
+            try:
+                result = await self.command_installer.list_synced_commands(scope=scope)
+
+                output = [f"📋 Synced Commands in hAIveMind\n"]
+                output.append(f"**Total**: {result['total']} commands")
+                output.append("")
+
+                if result['hv_commands']:
+                    output.append(f"**hAIveMind Commands** ({len(result['hv_commands'])}):")
+                    for cmd in sorted(result['hv_commands']):
+                        output.append(f"  🤖 {cmd}")
+                    output.append("")
+
+                if result['personal_commands']:
+                    output.append(f"**Personal Commands** ({len(result['personal_commands'])}):")
+                    for cmd in result['personal_commands'][:20]:
+                        from datetime import datetime
+                        sync_time = datetime.fromtimestamp(cmd['sync_time']).strftime('%Y-%m-%d') if cmd['sync_time'] else 'Unknown'
+                        output.append(f"  👤 {cmd['name']} (from {cmd['source_tool']}, synced {sync_time})")
+                    if len(result['personal_commands']) > 20:
+                        output.append(f"  ... and {len(result['personal_commands']) - 20} more")
+
+                return "\n".join(output)
+            except Exception as e:
+                logger.error(f"Error listing synced commands: {e}")
+                return f"❌ Error listing synced commands: {str(e)}"
+
+        @self.mcp.tool()
+        async def get_personal_commands(tool: str = "claude") -> str:
+            """
+            Get list of personal commands from a specific tool's directory.
+
+            Args:
+                tool: Tool to get commands from (claude/cursor/kilo/cline/codex)
+
+            Returns:
+                List of personal commands with content previews
+            """
+            try:
+                commands = await self.command_installer.get_personal_commands(tool)
+
+                output = [f"📁 Personal Commands ({tool})\n"]
+                output.append(f"**Total**: {len(commands)} commands")
+                output.append("")
+
+                for name, content in sorted(commands.items()):
+                    # Get first line as description
+                    first_line = content.split('\n')[0][:60] if content else "No content"
+                    if first_line.startswith('#'):
+                        first_line = first_line.lstrip('# ')
+                    output.append(f"  📄 **{name}**: {first_line}...")
+
+                return "\n".join(output)
+            except Exception as e:
+                logger.error(f"Error getting personal commands: {e}")
+                return f"❌ Error getting personal commands: {str(e)}"
+
+        logger.info("🔄 Personal command sync tools registered - cross-tool/cross-machine sync enabled")
 
 def main():
     """Main entry point"""

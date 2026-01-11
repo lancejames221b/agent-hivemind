@@ -17,29 +17,334 @@ logger = logging.getLogger(__name__)
 
 class CommandInstaller:
     """Manages installation and sync of hAIveMind commands across agents"""
-    
+
+    # Cross-tool path mappings for different AI coding assistants
+    TOOL_PATHS = {
+        "claude": ".claude/commands",
+        "cursor": ".cursor/commands",
+        "kilo": ".kilo/commands",
+        "cline": ".cline/commands",
+        "codex": ".codex/commands",
+    }
+
+    # Skill directory paths
+    SKILL_PATHS = {
+        "claude": ".claude/skills",
+        "cursor": ".cursor/skills",
+        "kilo": ".kilo/skills",
+        "cline": ".cline/skills",
+        "codex": ".codex/skills",
+    }
+
     def __init__(self, storage, config: Dict[str, Any]):
         self.storage = storage
         self.config = config
         self.commands_dir = Path(__file__).parent.parent / "commands"
-        self.version = "1.0.0"
-        
+        self.version = "2.0.0"  # Upgraded for cross-tool sync
+
     async def detect_claude_paths(self) -> Dict[str, str]:
         """Detect available Claude command installation paths"""
         paths = {}
-        
+
         # Project-level commands
         project_path = Path(".claude/commands")
         if project_path.exists() or Path(".claude").exists():
             paths["project"] = str(project_path.absolute())
-        
+
         # Personal commands
         home = Path.home()
         personal_path = home / ".claude" / "commands"
         if personal_path.exists() or (home / ".claude").exists():
             paths["personal"] = str(personal_path)
-        
+
         return paths
+
+    async def detect_all_tool_paths(self) -> Dict[str, Dict[str, str]]:
+        """Detect command/skill paths for all supported AI tools"""
+        home = Path.home()
+        detected = {}
+
+        for tool_name, rel_path in self.TOOL_PATHS.items():
+            tool_path = home / rel_path
+            skill_rel_path = self.SKILL_PATHS.get(tool_name, "")
+            skill_path = home / skill_rel_path if skill_rel_path else None
+
+            tool_info = {
+                "commands_path": str(tool_path),
+                "commands_exists": tool_path.exists(),
+                "skills_path": str(skill_path) if skill_path else None,
+                "skills_exists": skill_path.exists() if skill_path else False,
+                "command_count": len(list(tool_path.glob("*.md"))) if tool_path.exists() else 0,
+                "skill_count": len(list(skill_path.glob("*.md"))) if skill_path and skill_path.exists() else 0,
+            }
+            detected[tool_name] = tool_info
+
+        return detected
+
+    async def get_personal_commands(self, tool: str = "claude") -> Dict[str, str]:
+        """Load personal commands from a specific tool's directory"""
+        home = Path.home()
+        rel_path = self.TOOL_PATHS.get(tool, ".claude/commands")
+        commands_path = home / rel_path
+
+        commands = {}
+        if not commands_path.exists():
+            logger.warning(f"Personal commands path not found: {commands_path}")
+            return commands
+
+        for cmd_file in commands_path.glob("*.md"):
+            cmd_name = cmd_file.stem
+            try:
+                with open(cmd_file, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                commands[cmd_name] = content
+                logger.debug(f"Loaded personal command: {cmd_name}")
+            except Exception as e:
+                logger.error(f"Error loading personal command {cmd_file}: {e}")
+
+        return commands
+
+    async def sync_personal_commands_to_haivemind(
+        self,
+        tool: str = "claude",
+        commands_filter: List[str] = None,
+        scope: str = "project-shared",
+        tags: List[str] = None
+    ) -> Dict[str, Any]:
+        """Sync personal commands from local tool directory to hAIveMind memory"""
+        result = {
+            "tool": tool,
+            "synced": [],
+            "skipped": [],
+            "errors": [],
+            "total": 0
+        }
+
+        personal_commands = await self.get_personal_commands(tool)
+        result["total"] = len(personal_commands)
+
+        for cmd_name, content in personal_commands.items():
+            # Apply filter if specified
+            if commands_filter and cmd_name not in commands_filter:
+                result["skipped"].append({"name": cmd_name, "reason": "not in filter"})
+                continue
+
+            # Skip hv-* commands (they come from haivemind repo, not personal)
+            if cmd_name.startswith("hv-"):
+                result["skipped"].append({"name": cmd_name, "reason": "hAIveMind command"})
+                continue
+
+            try:
+                # Check if command already exists in memory
+                existing = await self.storage.search_memories(
+                    query=f"command_name:{cmd_name} command_type:personal",
+                    category="agent",
+                    limit=1
+                )
+
+                # Create metadata
+                cmd_tags = ["personal-command", f"tool:{tool}", cmd_name]
+                if tags:
+                    cmd_tags.extend(tags)
+
+                metadata = {
+                    "command_name": cmd_name,
+                    "command_type": "personal",
+                    "source_tool": tool,
+                    "sync_time": time.time(),
+                    "machine_id": self.storage.machine_id,
+                    "version": self.version,
+                    "content_hash": hash(content) % (10**10)
+                }
+
+                if existing and len(existing) > 0:
+                    # Update existing
+                    memory_id = existing[0].get("id")
+                    if memory_id:
+                        await self.storage.update_memory(
+                            memory_id=memory_id,
+                            content=content,
+                            metadata=metadata,
+                            tags=cmd_tags
+                        )
+                        result["synced"].append({"name": cmd_name, "action": "updated"})
+                    else:
+                        # Store new if no ID
+                        await self.storage.store_memory(
+                            content=content,
+                            category="agent",
+                            context=f"Personal command: {cmd_name}",
+                            metadata=metadata,
+                            tags=cmd_tags,
+                            scope=scope
+                        )
+                        result["synced"].append({"name": cmd_name, "action": "created"})
+                else:
+                    # Store new command
+                    await self.storage.store_memory(
+                        content=content,
+                        category="agent",
+                        context=f"Personal command: {cmd_name}",
+                        metadata=metadata,
+                        tags=cmd_tags,
+                        scope=scope
+                    )
+                    result["synced"].append({"name": cmd_name, "action": "created"})
+
+            except Exception as e:
+                result["errors"].append({"name": cmd_name, "error": str(e)})
+                logger.error(f"Error syncing command {cmd_name}: {e}")
+
+        return result
+
+    async def sync_haivemind_commands_to_local(
+        self,
+        tool: str = "claude",
+        commands_filter: List[str] = None,
+        include_personal: bool = True,
+        include_hv: bool = True,
+        force: bool = False
+    ) -> Dict[str, Any]:
+        """Sync commands from hAIveMind memory to local tool directory"""
+        result = {
+            "tool": tool,
+            "installed": [],
+            "skipped": [],
+            "errors": [],
+            "target_path": ""
+        }
+
+        home = Path.home()
+        rel_path = self.TOOL_PATHS.get(tool, ".claude/commands")
+        target_path = home / rel_path
+        target_path.mkdir(parents=True, exist_ok=True)
+        result["target_path"] = str(target_path)
+
+        commands_to_install = {}
+
+        # Get hv-* commands from haivemind repo
+        if include_hv:
+            hv_templates = await self.get_command_templates()
+            for name, content in hv_templates.items():
+                if commands_filter and name not in commands_filter:
+                    continue
+                commands_to_install[name] = content
+
+        # Get personal commands from hAIveMind memory
+        if include_personal:
+            personal_memories = await self.storage.search_memories(
+                query="command_type:personal",
+                category="agent",
+                limit=100
+            )
+
+            for memory in personal_memories:
+                cmd_name = memory.get("metadata", {}).get("command_name", "")
+                if not cmd_name:
+                    continue
+                if commands_filter and cmd_name not in commands_filter:
+                    continue
+                commands_to_install[cmd_name] = memory.get("content", "")
+
+        # Install commands
+        installed = await self.install_commands_to_path(
+            str(target_path),
+            commands_to_install,
+            force=force
+        )
+
+        result["installed"] = installed
+        result["skipped"] = [
+            name for name in commands_to_install.keys()
+            if name not in installed
+        ]
+
+        return result
+
+    async def sync_commands_cross_tool(
+        self,
+        source_tool: str = "claude",
+        target_tools: List[str] = None,
+        commands_filter: List[str] = None,
+        force: bool = False
+    ) -> Dict[str, Any]:
+        """Sync commands from one tool to other tools"""
+        if target_tools is None:
+            # Default: sync to all other tools
+            target_tools = [t for t in self.TOOL_PATHS.keys() if t != source_tool]
+
+        result = {
+            "source_tool": source_tool,
+            "results": {}
+        }
+
+        # Get commands from source
+        source_commands = await self.get_personal_commands(source_tool)
+        if commands_filter:
+            source_commands = {
+                k: v for k, v in source_commands.items()
+                if k in commands_filter
+            }
+
+        home = Path.home()
+
+        for target_tool in target_tools:
+            rel_path = self.TOOL_PATHS.get(target_tool)
+            if not rel_path:
+                result["results"][target_tool] = {"error": "Unknown tool"}
+                continue
+
+            target_path = home / rel_path
+            target_path.mkdir(parents=True, exist_ok=True)
+
+            installed = await self.install_commands_to_path(
+                str(target_path),
+                source_commands,
+                force=force
+            )
+
+            result["results"][target_tool] = {
+                "path": str(target_path),
+                "installed": installed,
+                "total": len(source_commands)
+            }
+
+        return result
+
+    async def list_synced_commands(self, scope: str = "all") -> Dict[str, Any]:
+        """List all commands synced in hAIveMind memory"""
+        result = {
+            "personal_commands": [],
+            "hv_commands": [],
+            "total": 0
+        }
+
+        # Get personal commands from memory
+        personal_memories = await self.storage.search_memories(
+            query="command_type:personal",
+            category="agent",
+            limit=100
+        )
+
+        for memory in personal_memories:
+            cmd_name = memory.get("metadata", {}).get("command_name", "")
+            source_tool = memory.get("metadata", {}).get("source_tool", "unknown")
+            sync_time = memory.get("metadata", {}).get("sync_time", 0)
+
+            result["personal_commands"].append({
+                "name": cmd_name,
+                "source_tool": source_tool,
+                "sync_time": sync_time,
+                "memory_id": memory.get("id", "")
+            })
+
+        # Get hv-* commands from repo
+        hv_templates = await self.get_command_templates()
+        result["hv_commands"] = list(hv_templates.keys())
+
+        result["total"] = len(result["personal_commands"]) + len(result["hv_commands"])
+
+        return result
 
     async def get_command_templates(self) -> Dict[str, str]:
         """Load all command templates from filesystem"""
