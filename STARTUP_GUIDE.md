@@ -39,13 +39,17 @@ get_machine_context
 get_agent_roster
 ```
 
-### 4. Available hAIveMind Tools (25 total)
+### 4. Available hAIveMind Tools (27 total)
 
 **Core Memory:**
 - `store_memory` - Save knowledge to collective memory
-- `search_memories` - Semantic search across all stored knowledge  
+- `search_memories` - Semantic search across all stored knowledge
 - `retrieve_memory` - Get specific memory by ID
 - `get_recent_memories` - Recent memories within time window
+
+**Token-Optimized Format System (v2):**
+- `get_format_guide` - Get format guide (use `detailed=true` for full reference)
+- `get_memory_access_stats` - View session access statistics
 
 **Agent Coordination:**
 - `register_agent` - Join the hive with your role and capabilities
@@ -63,6 +67,22 @@ get_agent_roster
 **Broadcasting:**
 - `broadcast_discovery` - Alert the hive about discoveries
 - `sync_external_knowledge` - Pull from Confluence/Jira
+
+### 4a. Token-Optimized Format (v2) - Auto-Teaching
+
+On your **first memory access** each session, hAIveMind automatically teaches optimal format:
+
+```
+Symbols: → (flow) | (or) ? (opt) ! (req) :: (type)
+Tables > prose: | key | val |
+Refs: [ID]: define → use [ID]
+```
+
+**Benefits:**
+- 60-80% token reduction vs verbose prose
+- All new memories tagged with `format_version: v2`
+- Legacy verbose memories flagged for potential compression
+- Use `get_format_guide detailed=true` for full reference
 
 ### 5. Your Role: hive_mind
 
@@ -92,7 +112,7 @@ Your memories are organized into:
 - `security` - Vulnerabilities, patches
 - `global` - General DevOps knowledge
 
-### 8. Example Workflow
+### 8. Example Workflow (Using v2 Format)
 
 ```bash
 # Start any task by checking collective knowledge
@@ -100,12 +120,26 @@ search_memories query="elasticsearch optimization"
 
 # Work on your task...
 
-# Document what you learn
-store_memory content="Elasticsearch heap optimization: increase ES_HEAP_SIZE to 4g for large aggregations" category="runbooks" tags=["elasticsearch", "performance", "heap"]
+# Document what you learn using v2 format (tables > prose, symbols)
+store_memory content="ES Heap Optimization:
+| Scenario | Heap Size | Reason |
+| default | 2g | Standard ops |
+| large aggs | 4g | Heavy aggregations |
+| bulk index | 8g | Mass data import |
+Config: ES_HEAP_SIZE → 4g (for large aggregations)" category="runbooks" tags=["elasticsearch", "performance", "heap"]
 
 # Share important discoveries
-broadcast_discovery message="Documented elasticsearch heap optimization solution" category="infrastructure"
+broadcast_discovery message="Documented ES heap optimization - see runbooks" category="infrastructure"
+
+# Check format guide if needed
+get_format_guide detailed=true
 ```
+
+**v2 Format Tips:**
+- Use `→` for flow/returns
+- Use tables for structured data
+- Define refs `[CTX]: context` then use `[CTX]`
+- Aim for 60-80% fewer tokens than prose
 
 ### 9. External Knowledge Integration (Optional)
 

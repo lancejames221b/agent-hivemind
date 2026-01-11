@@ -76,6 +76,27 @@ Once configured, Claude Code will have access to:
 - **`get_memory_stats`** - View memory collection statistics
 - **`import_conversation`** - Import full conversations from clipboard/text and store as structured memories
 - **`import_conversation_file`** - Import conversations from files (supports various export formats)
+- **`get_format_guide`** - Get token-optimized format guide (compact or detailed)
+- **`get_memory_access_stats`** - View session access statistics
+
+## Token-Optimized Format System (v2)
+
+The memory system automatically teaches optimal format on first memory access each session:
+
+**Format Conventions:**
+```
+Symbols: → (flow) | (or) ? (opt) ! (req) :: (type)
+Tables > prose: | key | val |
+Refs: [ID]: define → use [ID]
+Compact: auth(key) → search(q) → JSON
+```
+
+**How it works:**
+1. First memory access includes `_haivemind_meta.format_guide` with conventions
+2. All new memories are tagged with `format_version: v2`
+3. Legacy verbose memories are flagged for potential compression
+4. Use `get_format_guide detailed=true` for full format reference
+5. Target: 60-80% token reduction vs verbose prose
 
 ## Memory Categories
 

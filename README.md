@@ -155,6 +155,7 @@ AI Agent → MCP Client → HTTP/SSE (Port 8900) → FastMCP Server → Tools
 - **Machine Context**: Comprehensive tracking of which agents store what knowledge
 - **Sharing Control**: Fine-grained control over memory sharing and synchronization
 - **Project Tracking**: Automatic project context detection and scoping
+- **Token-Optimized Format (v2)**: Auto-teaches optimal compression on first memory access - 60-80% token reduction
 
 **Active Tools:**
 - `store_memory` - Store memories with machine tracking and sharing control
@@ -162,6 +163,8 @@ AI Agent → MCP Client → HTTP/SSE (Port 8900) → FastMCP Server → Tools
 - `search_memories` - Full-text and semantic search with filters
 - `get_recent_memories` - Time-based memory retrieval
 - `get_memory_stats` - Statistics about stored memories
+- `get_format_guide` - Get format guide for token-optimized memory storage
+- `get_memory_access_stats` - View session access statistics
 
 ### 🤖 Agent Coordination
 
@@ -333,9 +336,9 @@ Ultra-lightweight interface optimized for AI browser automation:
 
 ## 📊 MCP Tools Reference
 
-### Active Tools (6 Total)
+### Active Tools (8 Total)
 
-hAIveMind currently exposes 6 core MCP tools via FastMCP HTTP/SSE server:
+hAIveMind currently exposes 8 core MCP tools via FastMCP HTTP/SSE server:
 
 | Tool | Category | Description |
 |------|----------|-------------|
@@ -343,6 +346,8 @@ hAIveMind currently exposes 6 core MCP tools via FastMCP HTTP/SSE server:
 | `retrieve_memory` | Memory | Get specific memory by ID |
 | `search_memories` | Memory | Full-text and semantic search across memories |
 | `get_recent_memories` | Memory | Retrieve memories within time window |
+| `get_format_guide` | Format System | Get token-optimized format guide (compact or detailed) |
+| `get_memory_access_stats` | Format System | View session access statistics |
 | `broadcast_discovery` | Agent Coordination | Share findings with all network agents |
 | `get_broadcasts` | Agent Coordination | Retrieve recent broadcast messages |
 
@@ -353,6 +358,14 @@ hAIveMind currently exposes 6 core MCP tools via FastMCP HTTP/SSE server:
 - Full-text and semantic search
 - Category-based organization
 - Machine context tracking
+
+**Token-Optimized Format System (2 tools)**
+- Auto-teaches optimal compression format on first memory access
+- Symbols: `→` (flow) `|` (or) `?` (opt) `!` (req) `::` (type)
+- Tables > prose for structured data
+- Reference pattern: `[ID]: define → use [ID]`
+- Target: 60-80% token reduction vs verbose prose
+- New memories tagged with `format_version: v2`
 
 **Agent Coordination (2 tools)**
 - Network-wide broadcasts
@@ -441,16 +454,23 @@ Define machine groups in `config.json` for specialized capabilities:
 
 ## 🚀 Usage Examples
 
-### Example 1: Store and Search Memories
+### Example 1: Store and Search Memories (Token-Optimized v2)
 
 ```python
-# Store infrastructure knowledge
+# Store infrastructure knowledge using v2 format conventions
+# Format: Tables > prose, use symbols → | ? ! ::
 store_memory(
-    content="Elasticsearch cluster requires 32GB RAM per node",
+    content="""ES Requirements:
+| Node | RAM | Heap | Disk |
+| data | 32GB | 16GB | 1TB |
+| master | 8GB | 4GB | 100GB |
+Config: cluster.name → ES_CLUSTER_NAME
+        discovery.type → multi-node""",
     category="infrastructure",
     tags=["elasticsearch", "memory", "requirements"],
     importance=8
 )
+# Note: Memory will be tagged with format_version: v2 automatically
 
 # Search across collective memory
 results = search_memories(
@@ -458,6 +478,12 @@ results = search_memories(
     category="infrastructure",
     limit=10
 )
+
+# Get format guide for optimal memory storage
+get_format_guide(detailed=True)  # Returns full format reference
+
+# Check session access statistics
+get_memory_access_stats()  # Returns session usage stats
 ```
 
 ### Example 2: Agent Coordination
@@ -822,13 +848,14 @@ Built with:
 ## 📊 Statistics
 
 - **Lines of Code**: 94 Python source files
-- **MCP Tools**: 6 active tools (Memory + Agent Coordination)
+- **MCP Tools**: 8 active tools (Memory + Format System + Agent Coordination)
 - **Test Coverage**: Comprehensive test suites
 - **Documentation**: 20+ detailed guides
 - **Machine Groups**: 7 specialized groups
 - **Network Machines**: 25+ production machines
 - **Memory Categories**: 14 specialized categories
 - **Storage**: ChromaDB (vectors) + Redis (cache) + SQLite (metadata)
+- **Token Optimization**: v2 format system - 60-80% token reduction
 
 ---
 

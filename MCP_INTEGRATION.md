@@ -87,6 +87,20 @@ cursor-agent mcp call-tool haivemind store_memory '{"content": "Test memory", "c
 - `list_memory_sources` - List all machines with memory statistics
 - `import_conversation` - Import full conversations as structured memories
 
+### Token-Optimized Format System (v2)
+- `get_format_guide` - Get format guide (compact or detailed) for token-optimized storage
+- `get_memory_access_stats` - View session access statistics
+
+**Auto-Teaching**: On first memory access each session, the format guide is automatically injected:
+```
+Symbols: → (flow) | (or) ? (opt) ! (req) :: (type)
+Tables > prose: | key | val |
+Refs: [ID]: define → use [ID]
+Target: 60-80% token reduction
+```
+
+All new memories are tagged with `format_version: v2`. Legacy verbose memories are flagged for potential compression.
+
 ### Memory Lifecycle Management
 - `delete_memory` - Delete memory with soft/hard delete options
 - `bulk_delete_memories` - Bulk delete with confirmation
