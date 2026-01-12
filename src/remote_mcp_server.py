@@ -168,6 +168,9 @@ class RemoteMemoryMCPServer:
         # Add vault sync routes for cross-machine HTTP sync
         self._add_vault_sync_routes()
 
+        # Register vault sync MCP tools for SSE clients
+        self._register_vault_sync_tools()
+
         # Initialize dashboard functionality
         self._init_dashboard_functionality()
         
@@ -10792,6 +10795,242 @@ function load(id) {
                 return JSONResponse({"success": True, "path": str(dest_path)})
             except Exception as e:
                 return JSONResponse({"error": str(e)}, status_code=500)
+
+    async def list_vault_contents(self, category: str = "all") -> str:
+        """List all skills, configs, and docs in the hAIveMind vault.
+
+        Args:
+            category: Filter by 'skills', 'configs', 'docs', or 'all' (default)
+
+        Returns:
+            JSON list of files in each category with metadata
+        """
+        try:
+            vault_path = Path.home() / ".haivemind" / "vault"
+            categories = ["skills", "configs", "docs"] if category == "all" else [category]
+
+            if category != "all" and category not in ["skills", "configs", "docs"]:
+                return json.dumps({"error": f"Invalid category '{category}'. Use: skills, configs, docs, or all"})
+
+            result = {}
+            for cat in categories:
+                dir_path = vault_path / cat
+                if dir_path.exists():
+                    files = []
+                    for f in dir_path.glob("*"):
+                        if f.is_file():
+                            stat = f.stat()
+                            files.append({
+                                "name": f.name,
+                                "size": stat.st_size,
+                                "modified": datetime.fromtimestamp(stat.st_mtime).isoformat()
+                            })
+                    result[cat] = sorted(files, key=lambda x: x["name"])
+                else:
+                    result[cat] = []
+
+            # Add summary
+            total = sum(len(result.get(c, [])) for c in categories)
+            result["_summary"] = {
+                "total_files": total,
+                "vault_path": str(vault_path),
+                "categories": {c: len(result.get(c, [])) for c in categories}
+            }
+
+            return json.dumps(result, indent=2)
+        except Exception as e:
+            logger.error(f"Error listing vault contents: {e}")
+            return json.dumps({"error": str(e)})
+
+    async def pull_vault_file(self, filename: str, category: str = "skills") -> str:
+        """Download a file from the hAIveMind vault.
+
+        Args:
+            filename: Name of the file to download (e.g., 'commit.md')
+            category: Category folder - 'skills', 'configs', or 'docs' (default: skills)
+
+        Returns:
+            The file content as a string
+        """
+        try:
+            vault_path = Path.home() / ".haivemind" / "vault"
+            if category not in ["skills", "configs", "docs"]:
+                return f"Error: Invalid category '{category}'. Use: skills, configs, or docs"
+
+            file_path = vault_path / category / filename
+
+            # Path traversal protection
+            base_dir = (vault_path / category).resolve()
+            resolved_path = file_path.resolve()
+            if not str(resolved_path).startswith(str(base_dir)):
+                return "Error: Invalid path (path traversal detected)"
+
+            if not file_path.exists():
+                return f"Error: File '{filename}' not found in {category}/"
+
+            content = file_path.read_text()
+            return f"# {filename}\n\n{content}"
+        except Exception as e:
+            logger.error(f"Error pulling vault file: {e}")
+            return f"Error: {str(e)}"
+
+    async def push_vault_file(self, filename: str, content: str, category: str = "skills") -> str:
+        """Upload a file to the hAIveMind vault.
+
+        Args:
+            filename: Name for the file (e.g., 'my-skill.md')
+            content: The file content to store
+            category: Category folder - 'skills', 'configs', or 'docs' (default: skills)
+
+        Returns:
+            Success message with file path
+        """
+        try:
+            vault_path = Path.home() / ".haivemind" / "vault"
+            if category not in ["skills", "configs", "docs"]:
+                return f"Error: Invalid category '{category}'. Use: skills, configs, or docs"
+
+            dest_dir = vault_path / category
+            dest_dir.mkdir(parents=True, exist_ok=True)
+
+            file_path = dest_dir / filename
+
+            # Path traversal protection
+            base_dir = dest_dir.resolve()
+            resolved_path = file_path.resolve()
+            if not str(resolved_path).startswith(str(base_dir)):
+                return "Error: Invalid path (path traversal detected)"
+
+            file_path.write_text(content)
+
+            # Update manifest
+            manifest_path = vault_path / "manifest.json"
+            manifest = {}
+            if manifest_path.exists():
+                try:
+                    manifest = json.loads(manifest_path.read_text())
+                except:
+                    manifest = {"version": "1.0", "files": {}}
+
+            if "files" not in manifest:
+                manifest["files"] = {}
+
+            manifest["files"][f"{category}/{filename}"] = {
+                "synced": datetime.now().isoformat(),
+                "source": self.storage.machine_id if hasattr(self, 'storage') else "mcp-client"
+            }
+            manifest["updated"] = datetime.now().isoformat()
+            manifest_path.write_text(json.dumps(manifest, indent=2))
+
+            return f"✅ Successfully saved {category}/{filename} ({len(content)} bytes)"
+        except Exception as e:
+            logger.error(f"Error pushing vault file: {e}")
+            return f"Error: {str(e)}"
+
+    async def delete_vault_file(self, filename: str, category: str = "skills") -> str:
+        """Delete a file from the hAIveMind vault.
+
+        Args:
+            filename: Name of the file to delete
+            category: Category folder - 'skills', 'configs', or 'docs' (default: skills)
+
+        Returns:
+            Success or error message
+        """
+        try:
+            vault_path = Path.home() / ".haivemind" / "vault"
+            if category not in ["skills", "configs", "docs"]:
+                return f"Error: Invalid category '{category}'. Use: skills, configs, or docs"
+
+            file_path = vault_path / category / filename
+
+            # Path traversal protection
+            base_dir = (vault_path / category).resolve()
+            resolved_path = file_path.resolve()
+            if not str(resolved_path).startswith(str(base_dir)):
+                return "Error: Invalid path (path traversal detected)"
+
+            if not file_path.exists():
+                return f"Error: File '{filename}' not found in {category}/"
+
+            file_path.unlink()
+
+            # Update manifest
+            manifest_path = vault_path / "manifest.json"
+            if manifest_path.exists():
+                try:
+                    manifest = json.loads(manifest_path.read_text())
+                    key = f"{category}/{filename}"
+                    if "files" in manifest and key in manifest["files"]:
+                        del manifest["files"][key]
+                        manifest["updated"] = datetime.now().isoformat()
+                        manifest_path.write_text(json.dumps(manifest, indent=2))
+                except:
+                    pass
+
+            return f"✅ Deleted {category}/{filename}"
+        except Exception as e:
+            logger.error(f"Error deleting vault file: {e}")
+            return f"Error: {str(e)}"
+
+    async def sync_vault_from_server(self, server: str = "lance-dev:8900", category: str = "all") -> str:
+        """Pull vault contents from a remote hAIveMind server.
+
+        Args:
+            server: Server hostname:port (default: lance-dev:8900)
+            category: Filter by 'skills', 'configs', 'docs', or 'all' (default)
+
+        Returns:
+            Sync summary
+        """
+        try:
+            import httpx
+            import zipfile
+            import io
+            vault_path = Path.home() / ".haivemind" / "vault"
+
+            base_url = f"http://{server}"
+            if server.startswith("http"):
+                base_url = server
+
+            output = [f"🔄 Syncing vault from {server}...\n"]
+
+            async with httpx.AsyncClient() as client:
+                # 1. Get remote manifest
+                resp = await client.get(f"{base_url}/vault/manifest")
+                if resp.status_code != 200:
+                    return f"Error: Could not connect to server {server} (HTTP {resp.status_code})"
+                remote_manifest = resp.json()
+
+                # 2. Download zip
+                resp = await client.get(f"{base_url}/vault/download.zip")
+                if resp.status_code != 200:
+                    return f"Error: Could not download vault zip from {server}"
+                zip_data = io.BytesIO(resp.content)
+
+                # 3. Extract to local vault
+                with zipfile.ZipFile(zip_data) as zf:
+                    members = zf.namelist()
+                    if category != "all":
+                        members = [m for m in members if m.startswith(f"{category}/") or m == "manifest.json"]
+                    zf.extractall(vault_path, members=members)
+
+            output.append(f"✅ Successfully synced vault contents")
+            output.append(f"📁 Local vault: {vault_path}")
+            output.append(f"📄 Files: {len(remote_manifest.get('files', {}))}")
+            return "\n".join(output)
+        except Exception as e:
+            logger.error(f"Error syncing vault from server: {e}")
+            return f"Error: {str(e)}"
+
+    def _register_vault_sync_tools(self):
+        """Register vault sync tools with FastMCP"""
+        self.mcp.add_tool(self.list_vault_contents)
+        self.mcp.add_tool(self.pull_vault_file)
+        self.mcp.add_tool(self.push_vault_file)
+        self.mcp.add_tool(self.delete_vault_file)
+        self.mcp.add_tool(self.sync_vault_from_server)
+        logger.info("📦 Vault sync MCP tools registered (list_vault_contents, pull_vault_file, push_vault_file, delete_vault_file, sync_vault_from_server)")
 
     def _init_vault_api(self):
         """Initialize Vault Dashboard API endpoints"""

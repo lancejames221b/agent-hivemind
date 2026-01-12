@@ -5,6 +5,15 @@ All notable changes to hAIveMind MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.1] - 2026-01-12
+
+### Fixed
+
+- **Fixed missing Vault Sync Tools registration**:
+  - Restored `list_vault_contents`, `pull_vault_file`, `push_vault_file`, `delete_vault_file`, and `sync_vault_from_server` MCP tools.
+  - Fixed registration pattern in `RemoteMemoryMCPServer` to ensure tools are properly discovered by FastMCP.
+  - Re-enabled vault sync HTTP routes.
+
 ## [2.1.0] - 2026-01-12
 
 ### HTTP Vault Sync for Cross-Machine Synchronization

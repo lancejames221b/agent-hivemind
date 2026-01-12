@@ -3045,6 +3045,9 @@ class MemoryMCPServer:
                 logger.error(f"Failed to initialize Interactive help system: {e}")
                 self.interactive_help_tools = None
         
+        # Initialize Rules tools (legacy - referenced but never implemented)
+        self.rules_tools = None
+
         # Initialize Advanced Rules System if available
         self.advanced_rules_tools = None
         if ADVANCED_RULES_AVAILABLE:
