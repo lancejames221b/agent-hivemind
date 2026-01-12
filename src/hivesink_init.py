@@ -186,6 +186,36 @@ class FileInfo:
 
 
 @dataclass
+class ReleaseInfo:
+    """Information about a release."""
+    version: str
+    release_date: str
+    files: Dict[str, Dict[str, Any]]  # filename -> {version, hash, changelog}
+    changelog: str = ""
+    min_compatible_version: str = "1.0.0"
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> 'ReleaseInfo':
+        return cls(**data)
+
+
+@dataclass
+class UpdateInfo:
+    """Information about available updates."""
+    has_updates: bool
+    current_version: str
+    latest_version: str
+    updates_available: List[Dict[str, Any]]  # [{file, current_ver, new_ver, changelog}]
+    release_date: str = ""
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass
 class VaultManifest:
     """Manifest tracking vault contents."""
     version: str = "1.0"
@@ -454,6 +484,318 @@ class HiveSinkInit:
             "config_names": [f.name for f in local_files.get(ContentType.CONFIGS, [])],
         }
 
+    # =====================================================================
+    # Version and Release Management
+    # =====================================================================
+
+    def _extract_version(self, file_path: Path) -> Optional[str]:
+        """
+        Extract version from file frontmatter (for .md files) or content.
+
+        Looks for:
+        - YAML frontmatter: version: X.Y.Z
+        - JSON files: "version": "X.Y.Z"
+        """
+        if not file_path.exists():
+            return None
+
+        try:
+            content = file_path.read_text()
+
+            # For markdown files, check YAML frontmatter
+            if file_path.suffix == '.md':
+                if content.startswith('---'):
+                    end = content.find('---', 3)
+                    if end != -1:
+                        frontmatter = content[3:end]
+                        for line in frontmatter.split('\n'):
+                            if line.strip().startswith('version:'):
+                                return line.split(':', 1)[1].strip().strip('"\'')
+
+            # For JSON files
+            elif file_path.suffix == '.json':
+                try:
+                    data = json.loads(content)
+                    if isinstance(data, dict) and 'version' in data:
+                        return str(data['version'])
+                except json.JSONDecodeError:
+                    pass
+
+            return None
+        except Exception:
+            return None
+
+    def _get_release_path(self, scope: SyncScope, team_name: Optional[str] = None) -> Path:
+        """Get path to release.json for the vault."""
+        vault_path = self.get_vault_path(scope, team_name)
+        return vault_path / "release.json"
+
+    def _load_release_info(self, scope: SyncScope, team_name: Optional[str] = None) -> Optional[ReleaseInfo]:
+        """Load release information from vault."""
+        release_path = self._get_release_path(scope, team_name)
+        if not release_path.exists():
+            return None
+
+        try:
+            with open(release_path) as f:
+                data = json.load(f)
+                return ReleaseInfo.from_dict(data)
+        except (json.JSONDecodeError, KeyError, TypeError):
+            return None
+
+    def _save_release_info(self, release: ReleaseInfo, scope: SyncScope, team_name: Optional[str] = None) -> None:
+        """Save release information to vault."""
+        release_path = self._get_release_path(scope, team_name)
+        release_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(release_path, 'w') as f:
+            json.dump(release.to_dict(), f, indent=2)
+
+    def create_release(
+        self,
+        version: str,
+        scope: SyncScope,
+        changelog: str = "",
+        team_name: Optional[str] = None,
+    ) -> ReleaseInfo:
+        """
+        Create a new release from current vault contents.
+
+        Args:
+            version: Semantic version string (e.g., "1.2.0")
+            scope: Vault scope
+            changelog: Release notes/changelog
+            team_name: Team name if scope is TEAM
+
+        Returns:
+            ReleaseInfo with all file versions and hashes
+        """
+        vault_path = self.get_vault_path(scope, team_name)
+
+        if not vault_path.exists():
+            raise ValueError(f"Vault not found at {vault_path}")
+
+        # Gather file info
+        files = {}
+        vault_files = self._find_vault_files(
+            vault_path,
+            [ContentType.SKILLS, ContentType.DOCS, ContentType.CONFIGS]
+        )
+
+        for ctype, file_list in vault_files.items():
+            for file_path in file_list:
+                file_version = self._extract_version(file_path) or "1.0.0"
+                files[file_path.name] = {
+                    "version": file_version,
+                    "hash": self._compute_hash(file_path),
+                    "type": ctype.value,
+                    "size": file_path.stat().st_size,
+                }
+
+        release = ReleaseInfo(
+            version=version,
+            release_date=datetime.now().isoformat(),
+            files=files,
+            changelog=changelog,
+        )
+
+        self._save_release_info(release, scope, team_name)
+        return release
+
+    def check_for_updates(
+        self,
+        scope: SyncScope,
+        team_name: Optional[str] = None,
+    ) -> UpdateInfo:
+        """
+        Check for available updates by comparing local files with vault release.
+
+        Returns:
+            UpdateInfo with list of available updates
+        """
+        release = self._load_release_info(scope, team_name)
+
+        if not release:
+            return UpdateInfo(
+                has_updates=False,
+                current_version="unknown",
+                latest_version="unknown",
+                updates_available=[],
+                release_date="",
+            )
+
+        updates = []
+        local_files = self._find_local_files(
+            [ContentType.SKILLS, ContentType.DOCS, ContentType.CONFIGS]
+        )
+
+        # Check each local file against release
+        for ctype, file_list in local_files.items():
+            for local_file in file_list:
+                filename = local_file.name
+                if filename == ".mcp.json":
+                    filename = "mcp.json"
+
+                if filename in release.files:
+                    local_version = self._extract_version(local_file) or "0.0.0"
+                    release_version = release.files[filename].get("version", "1.0.0")
+                    local_hash = self._compute_hash(local_file)
+                    release_hash = release.files[filename].get("hash", "")
+
+                    # Check if update available (different hash or version)
+                    if local_hash != release_hash:
+                        updates.append({
+                            "file": filename,
+                            "type": ctype.value,
+                            "current_version": local_version,
+                            "new_version": release_version,
+                            "has_new_version": self._compare_versions(local_version, release_version) < 0,
+                        })
+
+        # Check for new files in release not present locally
+        local_filenames = set()
+        for file_list in local_files.values():
+            for f in file_list:
+                name = f.name
+                if name == ".mcp.json":
+                    name = "mcp.json"
+                local_filenames.add(name)
+
+        for filename, info in release.files.items():
+            if filename not in local_filenames:
+                updates.append({
+                    "file": filename,
+                    "type": info.get("type", "unknown"),
+                    "current_version": "not installed",
+                    "new_version": info.get("version", "1.0.0"),
+                    "has_new_version": True,
+                    "is_new": True,
+                })
+
+        # Get local manifest version
+        manifest = self._load_manifest(self.get_vault_path(scope, team_name))
+        current_version = manifest.version if manifest else "unknown"
+
+        return UpdateInfo(
+            has_updates=len(updates) > 0,
+            current_version=current_version,
+            latest_version=release.version,
+            updates_available=updates,
+            release_date=release.release_date,
+        )
+
+    def _compare_versions(self, v1: str, v2: str) -> int:
+        """
+        Compare two semantic versions.
+
+        Returns:
+            -1 if v1 < v2, 0 if equal, 1 if v1 > v2
+        """
+        def parse_version(v: str) -> List[int]:
+            try:
+                parts = v.replace('-', '.').split('.')
+                return [int(p) for p in parts[:3]]
+            except (ValueError, AttributeError):
+                return [0, 0, 0]
+
+        p1 = parse_version(v1)
+        p2 = parse_version(v2)
+
+        for a, b in zip(p1, p2):
+            if a < b:
+                return -1
+            if a > b:
+                return 1
+        return 0
+
+    def upgrade(
+        self,
+        scope: SyncScope,
+        team_name: Optional[str] = None,
+        files: Optional[List[str]] = None,
+        dry_run: bool = False,
+    ) -> SyncResult:
+        """
+        Upgrade local files from vault release.
+
+        Args:
+            scope: Vault scope
+            team_name: Team name if scope is TEAM
+            files: Optional list of specific files to upgrade (None = all)
+            dry_run: If True, don't make changes
+
+        Returns:
+            SyncResult with upgrade details
+        """
+        update_info = self.check_for_updates(scope, team_name)
+
+        if not update_info.has_updates:
+            return SyncResult(
+                success=True,
+                direction="upgrade",
+                scope=scope.value,
+                dry_run=dry_run,
+            )
+
+        # Filter to specific files if requested
+        updates_to_apply = update_info.updates_available
+        if files:
+            updates_to_apply = [u for u in updates_to_apply if u["file"] in files]
+
+        # Perform sync for updated files
+        file_decisions = {u["file"]: "sync" for u in updates_to_apply}
+
+        # Get content types for the files
+        content_types = set()
+        for update in updates_to_apply:
+            try:
+                content_types.add(ContentType(update["type"]))
+            except ValueError:
+                pass
+
+        if not content_types:
+            content_types = [ContentType.SKILLS, ContentType.DOCS, ContentType.CONFIGS]
+
+        return self.sync(
+            direction=SyncDirection.DOWN,
+            scope=scope,
+            content_types=list(content_types),
+            team_name=team_name,
+            dry_run=dry_run,
+            file_decisions=file_decisions,
+        )
+
+    def format_update_check(self, update_info: UpdateInfo) -> str:
+        """Format update check results for display."""
+        if not update_info.has_updates:
+            return f"✓ All files up to date (release {update_info.latest_version})"
+
+        lines = [
+            f"🔄 Updates available! (release {update_info.latest_version}, {update_info.release_date[:10]})",
+            "",
+        ]
+
+        # Group by type
+        by_type: Dict[str, List[Dict]] = {}
+        for update in update_info.updates_available:
+            t = update.get("type", "other")
+            if t not in by_type:
+                by_type[t] = []
+            by_type[t].append(update)
+
+        for type_name, updates in by_type.items():
+            lines.append(f"{type_name.upper()}:")
+            for u in updates:
+                if u.get("is_new"):
+                    lines.append(f"  + {u['file']} (NEW v{u['new_version']})")
+                elif u.get("has_new_version"):
+                    lines.append(f"  ↑ {u['file']} ({u['current_version']} → {u['new_version']})")
+                else:
+                    lines.append(f"  ~ {u['file']} (modified)")
+            lines.append("")
+
+        lines.append(f"Run 'hivesink-init down --all' or '/hivesink upgrade' to update.")
+        return "\n".join(lines)
+
     def preview_sync(
         self,
         direction: SyncDirection,
@@ -717,64 +1059,187 @@ class HiveSinkInit:
         return result
 
 
+def check_updates_on_startup(
+    scope: str = "personal",
+    team_name: Optional[str] = None,
+    quiet: bool = False,
+) -> Optional[UpdateInfo]:
+    """
+    Check for updates on startup - designed to be called by memory_server.py.
+
+    Args:
+        scope: Vault scope (personal/team/global)
+        team_name: Team name if scope is team
+        quiet: If True, only return info, don't print
+
+    Returns:
+        UpdateInfo if updates available, None otherwise
+    """
+    try:
+        hivesink = HiveSinkInit()
+        sync_scope = SyncScope(scope)
+        update_info = hivesink.check_for_updates(sync_scope, team_name)
+
+        if update_info.has_updates and not quiet:
+            print("\n" + "=" * 50)
+            print("🔄 hAIveMind Updates Available!")
+            print("=" * 50)
+            print(hivesink.format_update_check(update_info))
+            print("=" * 50 + "\n")
+
+        return update_info if update_info.has_updates else None
+    except Exception as e:
+        if not quiet:
+            print(f"⚠️  Could not check for updates: {e}")
+        return None
+
+
 def main():
     """CLI entry point for testing."""
     import argparse
 
-    parser = argparse.ArgumentParser(description="HiveSink Init - Vault Sync")
-    parser.add_argument("direction", choices=["down", "up"], help="Sync direction")
-    parser.add_argument("--scope", choices=["personal", "team", "global"], default="personal")
-    parser.add_argument("--team", help="Team name (required for team scope)")
-    parser.add_argument("--all", action="store_true", help="Sync all content types")
-    parser.add_argument("--skills", action="store_true", help="Sync skills only")
-    parser.add_argument("--docs", action="store_true", help="Sync docs only")
-    parser.add_argument("--configs", action="store_true", help="Sync configs only")
-    parser.add_argument("--dry-run", action="store_true", help="Preview without changes")
-    parser.add_argument("--list", action="store_true", help="List available content")
+    parser = argparse.ArgumentParser(description="HiveSink Init - Vault Sync and Release Management")
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
-    args = parser.parse_args()
+    # Common arguments
+    common_parser = argparse.ArgumentParser(add_help=False)
+    common_parser.add_argument("--scope", choices=["personal", "team", "global"], default="personal")
+    common_parser.add_argument("--team", help="Team name (required for team scope)")
+
+    # Sync command (down/up)
+    sync_parser = subparsers.add_parser("sync", parents=[common_parser], help="Sync files with vault")
+    sync_parser.add_argument("direction", choices=["down", "up"], help="Sync direction")
+    sync_parser.add_argument("--all", action="store_true", help="Sync all content types")
+    sync_parser.add_argument("--skills", action="store_true", help="Sync skills only")
+    sync_parser.add_argument("--docs", action="store_true", help="Sync docs only")
+    sync_parser.add_argument("--configs", action="store_true", help="Sync configs only")
+    sync_parser.add_argument("--dry-run", action="store_true", help="Preview without changes")
+
+    # Check command
+    check_parser = subparsers.add_parser("check", parents=[common_parser], help="Check for available updates")
+
+    # Upgrade command
+    upgrade_parser = subparsers.add_parser("upgrade", parents=[common_parser], help="Upgrade to latest release")
+    upgrade_parser.add_argument("--files", nargs="+", help="Specific files to upgrade")
+    upgrade_parser.add_argument("--dry-run", action="store_true", help="Preview without changes")
+
+    # Release command
+    release_parser = subparsers.add_parser("release", parents=[common_parser], help="Create a new release")
+    release_parser.add_argument("version", help="Version string (e.g., 1.2.0)")
+    release_parser.add_argument("--changelog", "-m", default="", help="Release changelog/notes")
+
+    # List command
+    list_parser = subparsers.add_parser("list", parents=[common_parser], help="List vault and local contents")
+
+    # Legacy support: if first arg is down/up, treat as sync command
+    import sys
+
+    # Check if first arg is down/up (legacy mode) before parsing
+    if len(sys.argv) > 1 and sys.argv[1] in ["down", "up"]:
+        # Re-parse with legacy mode
+        legacy_parser = argparse.ArgumentParser(description="HiveSink Init - Vault Sync")
+        legacy_parser.add_argument("direction", choices=["down", "up"], help="Sync direction")
+        legacy_parser.add_argument("--scope", choices=["personal", "team", "global"], default="personal")
+        legacy_parser.add_argument("--team", help="Team name (required for team scope)")
+        legacy_parser.add_argument("--all", action="store_true", help="Sync all content types")
+        legacy_parser.add_argument("--skills", action="store_true", help="Sync skills only")
+        legacy_parser.add_argument("--docs", action="store_true", help="Sync docs only")
+        legacy_parser.add_argument("--configs", action="store_true", help="Sync configs only")
+        legacy_parser.add_argument("--dry-run", action="store_true", help="Preview without changes")
+        legacy_parser.add_argument("--list", action="store_true", help="List available content")
+        args = legacy_parser.parse_args()
+        args.command = "sync"
+    else:
+        args = parser.parse_args()
+
+        # Handle no command
+        if args.command is None:
+            parser.print_help()
+            return
 
     hivesink = HiveSinkInit()
+    scope = SyncScope(args.scope)
 
-    if args.list:
-        scope = SyncScope(args.scope)
+    if args.command == "list":
         print("Vault contents:")
         print(json.dumps(hivesink.list_available(scope, args.team), indent=2))
         print("\nLocal contents:")
         print(json.dumps(hivesink.list_local(), indent=2))
-        return
 
-    # Determine content types
-    if args.all or not (args.skills or args.docs or args.configs):
-        content_types = [ContentType.SKILLS, ContentType.DOCS, ContentType.CONFIGS]
-    else:
-        content_types = []
-        if args.skills:
-            content_types.append(ContentType.SKILLS)
-        if args.docs:
-            content_types.append(ContentType.DOCS)
-        if args.configs:
-            content_types.append(ContentType.CONFIGS)
+    elif args.command == "check":
+        update_info = hivesink.check_for_updates(scope, args.team)
+        print(hivesink.format_update_check(update_info))
 
-    direction = SyncDirection(args.direction)
-    scope = SyncScope(args.scope)
+    elif args.command == "upgrade":
+        update_info = hivesink.check_for_updates(scope, args.team)
+        if not update_info.has_updates:
+            print("✓ All files up to date!")
+            return
 
-    if args.dry_run:
-        # Use managed output to handle large diffs
-        output = hivesink.preview_sync_managed(direction, scope, content_types, args.team)
-        print("Preview:")
-        print(output.content)
-        if output.truncated:
-            print(f"\n📁 Full output saved to: {output.output_file}")
-            print(f"   Size: {output.original_size:,} chars (~{output.token_estimate:,} tokens)")
-    else:
-        result = hivesink.sync(direction, scope, content_types, args.team)
-        print("Result:")
-        print(f"  Synced: {result.synced}")
-        print(f"  New: {result.new}")
-        print(f"  Skipped: {result.skipped}")
-        if result.errors:
-            print(f"  Errors: {result.errors}")
+        print(hivesink.format_update_check(update_info))
+        print()
+
+        if args.dry_run:
+            print("Dry run - no changes made.")
+        else:
+            result = hivesink.upgrade(scope, args.team, args.files, args.dry_run)
+            print("\nUpgrade Result:")
+            print(f"  Updated: {result.synced}")
+            print(f"  New: {result.new}")
+            print(f"  Skipped: {result.skipped}")
+            if result.errors:
+                print(f"  Errors: {result.errors}")
+
+    elif args.command == "release":
+        try:
+            release = hivesink.create_release(args.version, scope, args.changelog, args.team)
+            print(f"✓ Release {release.version} created!")
+            print(f"  Files: {len(release.files)}")
+            print(f"  Date: {release.release_date[:10]}")
+            if release.changelog:
+                print(f"  Changelog: {release.changelog}")
+        except ValueError as e:
+            print(f"❌ Error: {e}")
+
+    elif args.command == "sync":
+        # Handle --list flag for legacy mode
+        if hasattr(args, 'list') and args.list:
+            print("Vault contents:")
+            print(json.dumps(hivesink.list_available(scope, args.team), indent=2))
+            print("\nLocal contents:")
+            print(json.dumps(hivesink.list_local(), indent=2))
+            return
+
+        # Determine content types
+        if args.all or not (args.skills or args.docs or args.configs):
+            content_types = [ContentType.SKILLS, ContentType.DOCS, ContentType.CONFIGS]
+        else:
+            content_types = []
+            if args.skills:
+                content_types.append(ContentType.SKILLS)
+            if args.docs:
+                content_types.append(ContentType.DOCS)
+            if args.configs:
+                content_types.append(ContentType.CONFIGS)
+
+        direction = SyncDirection(args.direction)
+
+        if args.dry_run:
+            # Use managed output to handle large diffs
+            output = hivesink.preview_sync_managed(direction, scope, content_types, args.team)
+            print("Preview:")
+            print(output.content)
+            if output.truncated:
+                print(f"\n📁 Full output saved to: {output.output_file}")
+                print(f"   Size: {output.original_size:,} chars (~{output.token_estimate:,} tokens)")
+        else:
+            result = hivesink.sync(direction, scope, content_types, args.team)
+            print("Result:")
+            print(f"  Synced: {result.synced}")
+            print(f"  New: {result.new}")
+            print(f"  Skipped: {result.skipped}")
+            if result.errors:
+                print(f"  Errors: {result.errors}")
 
 
 if __name__ == "__main__":
