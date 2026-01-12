@@ -14,7 +14,7 @@ import difflib
 import tempfile
 from pathlib import Path
 from datetime import datetime
-from typing import Optional, List, Dict, Any, Literal, Tuple, Union
+from typing import Optional, List, Dict, Any, Union, Callable
 from dataclasses import dataclass, field, asdict
 from enum import Enum
 
@@ -62,7 +62,7 @@ class OutputManager:
     def process_output(
         content: Union[str, dict],
         prefix: str = "hivesink",
-        summary_generator: Optional[callable] = None,
+        summary_generator: Optional[Callable[[str], str]] = None,
     ) -> OutputResult:
         """
         Process output, saving to file if too large.
@@ -93,10 +93,16 @@ class OutputManager:
                 token_estimate=token_estimate,
             )
 
-        # Save to temp file
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        temp_file = Path(tempfile.gettempdir()) / f"{prefix}_{timestamp}.txt"
-        temp_file.write_text(text)
+        # Save to temp file with secure permissions (owner read/write only)
+        fd, temp_path = tempfile.mkstemp(prefix=f"{prefix}_", suffix=".txt", text=True)
+        try:
+            os.chmod(temp_path, 0o600)  # rw------- (owner only)
+            with os.fdopen(fd, 'w') as f:
+                f.write(text)
+        except Exception:
+            os.close(fd)
+            raise
+        temp_file = Path(temp_path)
 
         # Generate summary
         if summary_generator:
@@ -319,7 +325,13 @@ class HiveSinkInit:
             json.dump(manifest.to_dict(), f, indent=2)
 
     def _compute_hash(self, file_path: Path) -> str:
-        """Compute MD5 hash of file contents."""
+        """Compute MD5 hash of file contents for comparison purposes.
+
+        Note: MD5 is used here for fast content comparison to detect file changes,
+        not for cryptographic security. For this use case, collision resistance
+        is not a concern as we're comparing known files, not verifying integrity
+        against malicious tampering.
+        """
         if not file_path.exists():
             return ""
         with open(file_path, 'rb') as f:
@@ -338,8 +350,21 @@ class HiveSinkInit:
             size=stat.st_size,
         )
 
-    def _get_diff(self, file1: Path, file2: Path) -> str:
-        """Get unified diff between two files."""
+    def _get_diff(self, file1: Path, file2: Path, max_size: int = 10_000_000) -> str:
+        """Get unified diff between two files.
+
+        Args:
+            file1: First file path
+            file2: Second file path
+            max_size: Maximum file size in bytes to diff (default 10MB)
+        """
+        # Check file sizes before loading into memory
+        size1 = file1.stat().st_size if file1.exists() else 0
+        size2 = file2.stat().st_size if file2.exists() else 0
+
+        if size1 > max_size or size2 > max_size:
+            return f"[Files too large to diff: {size1:,} and {size2:,} bytes (max: {max_size:,})]"
+
         if not file1.exists():
             content1 = []
             label1 = "(does not exist)"
@@ -437,7 +462,56 @@ class HiveSinkInit:
         if filename == ".mcp.json":
             filename = "mcp.json"
 
-        return vault_path / vault_subdir / filename
+        # Security: Validate path doesn't escape vault directory
+        dest = (vault_path / vault_subdir / filename).resolve()
+        vault_resolved = vault_path.resolve()
+        if not str(dest).startswith(str(vault_resolved) + "/") and dest != vault_resolved:
+            raise ValueError(f"Path traversal detected: {filename} would escape vault directory")
+
+        return dest
+
+    def _sync_item(
+        self,
+        direction: SyncDirection,
+        item: Dict[str, Any],
+        vault_path: Path,
+        content_types: List[ContentType],
+        dry_run: bool,
+    ) -> bool:
+        """
+        Sync a single item (file) in the given direction.
+
+        Args:
+            direction: DOWN (pull from vault) or UP (push to vault)
+            item: Dict with 'file', 'type', 'dest' keys from preview
+            vault_path: Path to the vault
+            content_types: List of content types being synced
+            dry_run: If True, don't make changes
+
+        Returns:
+            True if sync was performed (or would be in dry_run), False otherwise
+        """
+        filename = item["file"]
+
+        if direction == SyncDirection.DOWN:
+            ctype = ContentType(item["type"])
+            vault_file = vault_path / self.FILE_MAPPINGS[ctype][0][1] / filename
+            local_dest = Path(item["dest"])
+
+            if not dry_run:
+                self.sync_file(vault_file, local_dest)
+            return True
+        else:
+            # UP direction - find the local file
+            for ctype in content_types:
+                local_files = self._find_local_files([ctype])
+                for f in local_files.get(ctype, []):
+                    if f.name == filename:
+                        vault_dest = Path(item["dest"])
+                        if not dry_run:
+                            self.sync_file(f, vault_dest)
+                        return True
+            return False
 
     def list_available(self, scope: SyncScope, team_name: Optional[str] = None) -> Dict[str, Any]:
         """List what's available in the vault."""
@@ -992,24 +1066,7 @@ class HiveSinkInit:
                 result.skipped.append(filename)
                 continue
 
-            if direction == SyncDirection.DOWN:
-                ctype = ContentType(item["type"])
-                vault_file = vault_path / self.FILE_MAPPINGS[ctype][0][1] / filename
-                local_dest = Path(item["dest"])
-
-                if not dry_run:
-                    self.sync_file(vault_file, local_dest)
-            else:
-                # Find the local file
-                for ctype in content_types:
-                    local_files = self._find_local_files([ctype])
-                    for f in local_files.get(ctype, []):
-                        if f.name == filename:
-                            vault_dest = Path(item["dest"])
-                            if not dry_run:
-                                self.sync_file(f, vault_dest)
-                            break
-
+            self._sync_item(direction, item, vault_path, content_types, dry_run)
             result.new.append(filename)
 
         # Process changed files (check decisions)
@@ -1021,24 +1078,7 @@ class HiveSinkInit:
                 result.skipped.append(filename)
                 continue
 
-            if direction == SyncDirection.DOWN:
-                ctype = ContentType(item["type"])
-                vault_file = vault_path / self.FILE_MAPPINGS[ctype][0][1] / filename
-                local_dest = Path(item["dest"])
-
-                if not dry_run:
-                    self.sync_file(vault_file, local_dest)
-            else:
-                # Find the local file
-                for ctype in content_types:
-                    local_files = self._find_local_files([ctype])
-                    for f in local_files.get(ctype, []):
-                        if f.name == filename:
-                            vault_dest = Path(item["dest"])
-                            if not dry_run:
-                                self.sync_file(f, vault_dest)
-                            break
-
+            self._sync_item(direction, item, vault_path, content_types, dry_run)
             result.synced.append(filename)
 
         # Unchanged files
@@ -1115,8 +1155,8 @@ def main():
     sync_parser.add_argument("--configs", action="store_true", help="Sync configs only")
     sync_parser.add_argument("--dry-run", action="store_true", help="Preview without changes")
 
-    # Check command
-    check_parser = subparsers.add_parser("check", parents=[common_parser], help="Check for available updates")
+    # Check command (no additional args needed)
+    subparsers.add_parser("check", parents=[common_parser], help="Check for available updates")
 
     # Upgrade command
     upgrade_parser = subparsers.add_parser("upgrade", parents=[common_parser], help="Upgrade to latest release")
@@ -1128,8 +1168,8 @@ def main():
     release_parser.add_argument("version", help="Version string (e.g., 1.2.0)")
     release_parser.add_argument("--changelog", "-m", default="", help="Release changelog/notes")
 
-    # List command
-    list_parser = subparsers.add_parser("list", parents=[common_parser], help="List vault and local contents")
+    # List command (no additional args needed)
+    subparsers.add_parser("list", parents=[common_parser], help="List vault and local contents")
 
     # Legacy support: if first arg is down/up, treat as sync command
     import sys
