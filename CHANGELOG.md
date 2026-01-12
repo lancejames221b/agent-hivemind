@@ -5,6 +5,42 @@ All notable changes to hAIveMind MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-01-12
+
+### HTTP Vault Sync for Cross-Machine Synchronization
+
+This release adds HTTP-based vault synchronization endpoints, enabling cross-machine command and config sync via Tailscale without requiring SSH key setup.
+
+### Added
+
+#### HTTP Vault Sync Endpoints - PR #10
+- **New REST API endpoints** for vault synchronization over HTTP:
+  - `GET /vault/list` - List all vault files (skills, configs, docs)
+  - `GET /vault/manifest` - Get vault manifest with sync timestamps
+  - `GET /vault/download.zip` - Download entire vault as ZIP archive
+  - `GET /vault/skills/{filename}` - Download individual skill file
+  - `GET /vault/configs/{filename}` - Download individual config file
+  - `GET /vault/docs/{filename}` - Download individual doc file
+  - `POST /vault/upload/{subdir}/{filename}` - Upload files to vault
+- **Path traversal protection** on all file endpoints
+- **Automatic manifest updates** on uploads with source machine tracking
+- **Updated hivesink commands**:
+  - `/hivesink-pull` - Now uses curl to download from HTTP endpoints
+  - `/hivesink-push` - Now uses curl to upload to HTTP endpoints
+  - Both support `--dry-run`, `--skills`, `--docs`, `--configs`, `--all` options
+
+### Changed
+- Vault sync no longer requires SSH key setup on client machines
+- All sync operations work through Tailscale HTTP (firewall-friendly)
+- Single ZIP download available for bulk sync operations
+
+### Technical Details
+- Endpoints integrated into existing FastMCP remote server (port 8900)
+- Uses Starlette's `FileResponse` and `StreamingResponse` for efficient transfers
+- ZIP creation uses Python's zipfile with `ZIP_DEFLATED` compression
+
+---
+
 ## [2.0.0] - 2025-01-09
 
 ### Major Release - Production Ready
