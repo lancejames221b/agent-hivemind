@@ -11,11 +11,151 @@ import json
 import shutil
 import hashlib
 import difflib
+import tempfile
 from pathlib import Path
 from datetime import datetime
-from typing import Optional, List, Dict, Any, Literal
+from typing import Optional, List, Dict, Any, Literal, Tuple, Union
 from dataclasses import dataclass, field, asdict
 from enum import Enum
+
+
+# Token threshold - approximately 4 chars per token
+# 8000 tokens ~= 32KB, but we'll be conservative at 6000 tokens ~= 24KB
+MAX_OUTPUT_TOKENS = 6000
+CHARS_PER_TOKEN = 4
+MAX_OUTPUT_CHARS = MAX_OUTPUT_TOKENS * CHARS_PER_TOKEN
+
+
+@dataclass
+class OutputResult:
+    """Result that may be truncated with full output in a file."""
+    content: str
+    truncated: bool = False
+    output_file: Optional[str] = None
+    original_size: int = 0
+    token_estimate: int = 0
+
+    def to_dict(self) -> dict:
+        return {
+            "content": self.content,
+            "truncated": self.truncated,
+            "output_file": self.output_file,
+            "original_size": self.original_size,
+            "token_estimate": self.token_estimate,
+        }
+
+
+class OutputManager:
+    """
+    Manages output size to prevent token overflow.
+
+    If output exceeds MAX_OUTPUT_CHARS, saves full content to /tmp
+    and returns a truncated version with file path.
+    """
+
+    @staticmethod
+    def estimate_tokens(text: str) -> int:
+        """Rough estimate of tokens (4 chars per token)."""
+        return len(text) // CHARS_PER_TOKEN
+
+    @staticmethod
+    def process_output(
+        content: Union[str, dict],
+        prefix: str = "hivesink",
+        summary_generator: Optional[callable] = None,
+    ) -> OutputResult:
+        """
+        Process output, saving to file if too large.
+
+        Args:
+            content: The content to output (string or dict to JSON)
+            prefix: Prefix for temp file name
+            summary_generator: Optional function to generate summary from content
+
+        Returns:
+            OutputResult with content (possibly truncated) and file path if saved
+        """
+        # Convert dict to JSON string
+        if isinstance(content, dict):
+            text = json.dumps(content, indent=2)
+        else:
+            text = str(content)
+
+        original_size = len(text)
+        token_estimate = OutputManager.estimate_tokens(text)
+
+        # If within limits, return as-is
+        if original_size <= MAX_OUTPUT_CHARS:
+            return OutputResult(
+                content=text,
+                truncated=False,
+                original_size=original_size,
+                token_estimate=token_estimate,
+            )
+
+        # Save to temp file
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        temp_file = Path(tempfile.gettempdir()) / f"{prefix}_{timestamp}.txt"
+        temp_file.write_text(text)
+
+        # Generate summary
+        if summary_generator:
+            summary = summary_generator(content if isinstance(content, dict) else text)
+        else:
+            summary = OutputManager._default_summary(text, original_size, token_estimate)
+
+        return OutputResult(
+            content=summary,
+            truncated=True,
+            output_file=str(temp_file),
+            original_size=original_size,
+            token_estimate=token_estimate,
+        )
+
+    @staticmethod
+    def _default_summary(text: str, size: int, tokens: int) -> str:
+        """Generate default summary for truncated output."""
+        # Show first 1000 chars as preview
+        preview = text[:1000]
+        if len(text) > 1000:
+            preview += "\n...\n"
+
+        return f"""Output too large for context ({tokens:,} tokens, {size:,} chars).
+
+Preview:
+{preview}
+
+Full output saved to file (see output_file path)."""
+
+    @staticmethod
+    def format_sync_summary(preview: dict) -> str:
+        """Generate a summary for sync preview results."""
+        new_count = len(preview.get("new", []))
+        changed_count = len(preview.get("changed", []))
+        unchanged_count = len(preview.get("unchanged", []))
+
+        summary_lines = [
+            f"Sync Preview Summary:",
+            f"  New files:       {new_count}",
+            f"  Changed files:   {changed_count}",
+            f"  Unchanged files: {unchanged_count}",
+            "",
+        ]
+
+        # List files without full diffs
+        if preview.get("new"):
+            summary_lines.append("New files:")
+            for item in preview["new"]:
+                summary_lines.append(f"  + {item['file']} ({item['type']})")
+
+        if preview.get("changed"):
+            summary_lines.append("\nChanged files (diffs in output file):")
+            for item in preview["changed"]:
+                summary_lines.append(f"  ~ {item['file']} ({item['type']})")
+
+        summary_lines.append("\nFull output with diffs saved to file (see output_file path).")
+
+        return "\n".join(summary_lines)
 
 
 class SyncDirection(Enum):
@@ -391,6 +531,43 @@ class HiveSinkInit:
 
             return result
 
+    def preview_sync_managed(
+        self,
+        direction: SyncDirection,
+        scope: SyncScope,
+        content_types: List[ContentType],
+        team_name: Optional[str] = None,
+    ) -> OutputResult:
+        """
+        Preview sync with automatic output management.
+
+        If output is too large, saves to temp file and returns summary.
+        """
+        preview = self.preview_sync(direction, scope, content_types, team_name)
+
+        if "error" in preview:
+            return OutputResult(content=json.dumps(preview, indent=2))
+
+        # Use OutputManager to handle large outputs
+        return OutputManager.process_output(
+            preview,
+            prefix="hivesink_preview",
+            summary_generator=lambda p: OutputManager.format_sync_summary(p) if isinstance(p, dict) else None,
+        )
+
+    def get_diff_managed(self, file1: Path, file2: Path) -> OutputResult:
+        """
+        Get diff with automatic output management.
+
+        If diff is too large, saves to temp file.
+        """
+        diff = self._get_diff(file1, file2)
+
+        return OutputManager.process_output(
+            diff,
+            prefix=f"hivesink_diff_{file1.name}",
+        )
+
     def sync_file(
         self,
         source: Path,
@@ -583,9 +760,13 @@ def main():
     scope = SyncScope(args.scope)
 
     if args.dry_run:
-        preview = hivesink.preview_sync(direction, scope, content_types, args.team)
+        # Use managed output to handle large diffs
+        output = hivesink.preview_sync_managed(direction, scope, content_types, args.team)
         print("Preview:")
-        print(json.dumps(preview, indent=2))
+        print(output.content)
+        if output.truncated:
+            print(f"\n📁 Full output saved to: {output.output_file}")
+            print(f"   Size: {output.original_size:,} chars (~{output.token_estimate:,} tokens)")
     else:
         result = hivesink.sync(direction, scope, content_types, args.team)
         print("Result:")

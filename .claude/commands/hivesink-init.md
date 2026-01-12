@@ -206,6 +206,40 @@ Vault: ~/.haivemind/vault/ (personal)
 | configs | `config/*.json` | `vault/configs/*.json` |
 | configs | `sync-protocol.json` | `vault/configs/sync-protocol.json` |
 
+## Large Output Handling
+
+When sync preview or diffs exceed ~6000 tokens (~24KB), output is automatically:
+1. **Saved to temp file** - Full content at `/tmp/hivesink_*.txt`
+2. **Summary displayed** - Compact overview shown in context
+3. **File path provided** - Use `Read` tool to view full output
+
+Example:
+```
+Sync Preview Summary:
+  New files:       5
+  Changed files:   12
+  Unchanged files: 25
+
+Changed files (diffs in output file):
+  ~ hv-sync.md (skills)
+  ~ CLAUDE.md (docs)
+  ...
+
+Full output with diffs saved to file (see output_file path).
+
+📁 Full output saved to: /tmp/hivesink_preview_20250124_103045.txt
+   Size: 45,000 chars (~11,250 tokens)
+```
+
+To view full output:
+```bash
+# Read the temp file
+cat /tmp/hivesink_preview_20250124_103045.txt
+
+# Or use Read tool
+Read /tmp/hivesink_preview_20250124_103045.txt
+```
+
 ## Error Handling
 
 ### Vault Not Initialized
