@@ -164,7 +164,10 @@ class RemoteMemoryMCPServer:
 
         # Add admin interface routes
         self._add_admin_routes()
-        
+
+        # Add vault sync routes for cross-machine HTTP sync
+        self._add_vault_sync_routes()
+
         # Initialize dashboard functionality
         self._init_dashboard_functionality()
         
@@ -10650,7 +10653,146 @@ function load(id) {
         
         # Initialize Config Backup & Agent Kanban API
         self._init_config_backup_api()
-    
+
+    def _add_vault_sync_routes(self):
+        """Add HTTP endpoints for cross-machine vault sync via Tailscale.
+
+        These endpoints allow clients to download vault contents (skills, configs, docs)
+        via HTTP instead of requiring rsync/SSH key setup on each machine.
+        """
+        import zipfile
+        import io
+        import os
+        from starlette.responses import StreamingResponse, FileResponse, JSONResponse
+        from datetime import datetime
+        import json
+
+        vault_path = Path.home() / ".haivemind" / "vault"
+
+        @self.mcp.custom_route("/vault/manifest", methods=["GET"])
+        async def get_vault_manifest(request):
+            """Get vault manifest for sync status checking."""
+            manifest_file = vault_path / "manifest.json"
+            if manifest_file.exists():
+                return FileResponse(str(manifest_file), media_type="application/json")
+            return JSONResponse({"error": "Manifest not found"}, status_code=404)
+
+        @self.mcp.custom_route("/vault/download.zip", methods=["GET"])
+        async def download_vault_zip(request):
+            """Download entire vault as zip (skills + configs + docs)."""
+            buffer = io.BytesIO()
+            with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+                for subdir in ["skills", "configs", "docs"]:
+                    dir_path = vault_path / subdir
+                    if dir_path.exists():
+                        for f in dir_path.glob("*"):
+                            if f.is_file():
+                                zf.write(f, f"{subdir}/{f.name}")
+                # Include manifest at root
+                manifest = vault_path / "manifest.json"
+                if manifest.exists():
+                    zf.write(manifest, "manifest.json")
+            buffer.seek(0)
+            return StreamingResponse(
+                buffer,
+                media_type="application/zip",
+                headers={"Content-Disposition": "attachment; filename=haivemind-vault.zip"}
+            )
+
+        @self.mcp.custom_route("/vault/skills/{filename:path}", methods=["GET"])
+        async def get_vault_skill(request):
+            """Download a single skill file."""
+            filename = request.path_params.get("filename", "")
+            base_dir = (vault_path / "skills").resolve()
+            file_path = (base_dir / filename).resolve()
+            # Path traversal protection
+            if not str(file_path).startswith(str(base_dir) + os.sep) and file_path != base_dir:
+                return JSONResponse({"error": "Invalid path"}, status_code=400)
+            if file_path.is_file():
+                return FileResponse(str(file_path))
+            return JSONResponse({"error": "File not found"}, status_code=404)
+
+        @self.mcp.custom_route("/vault/configs/{filename:path}", methods=["GET"])
+        async def get_vault_config(request):
+            """Download a single config file."""
+            filename = request.path_params.get("filename", "")
+            base_dir = (vault_path / "configs").resolve()
+            file_path = (base_dir / filename).resolve()
+            # Path traversal protection
+            if not str(file_path).startswith(str(base_dir) + os.sep) and file_path != base_dir:
+                return JSONResponse({"error": "Invalid path"}, status_code=400)
+            if file_path.is_file():
+                return FileResponse(str(file_path))
+            return JSONResponse({"error": "File not found"}, status_code=404)
+
+        @self.mcp.custom_route("/vault/docs/{filename:path}", methods=["GET"])
+        async def get_vault_doc(request):
+            """Download a single doc file."""
+            filename = request.path_params.get("filename", "")
+            base_dir = (vault_path / "docs").resolve()
+            file_path = (base_dir / filename).resolve()
+            # Path traversal protection
+            if not str(file_path).startswith(str(base_dir) + os.sep) and file_path != base_dir:
+                return JSONResponse({"error": "Invalid path"}, status_code=400)
+            if file_path.is_file():
+                return FileResponse(str(file_path))
+            return JSONResponse({"error": "File not found"}, status_code=404)
+
+        @self.mcp.custom_route("/vault/list", methods=["GET"])
+        async def list_vault_files(request):
+            """List all vault files."""
+            files = {"skills": [], "configs": [], "docs": []}
+            for subdir in files.keys():
+                dir_path = vault_path / subdir
+                if dir_path.exists():
+                    files[subdir] = [f.name for f in dir_path.glob("*") if f.is_file()]
+            return JSONResponse(files)
+
+        @self.mcp.custom_route("/vault/upload/{subdir}/{filename:path}", methods=["POST"])
+        async def upload_to_vault(request):
+            """Upload a file to vault (for hivesink-push)."""
+            subdir = request.path_params.get("subdir", "")
+            filename = request.path_params.get("filename", "")
+
+            if subdir not in ["skills", "configs", "docs"]:
+                return JSONResponse({"error": "Invalid subdir. Must be skills, configs, or docs"}, status_code=400)
+
+            base_dir = (vault_path / subdir).resolve()
+            dest_path = (base_dir / filename).resolve()
+
+            # Path traversal protection
+            if not str(dest_path).startswith(str(base_dir) + os.sep) and dest_path != base_dir:
+                return JSONResponse({"error": "Invalid path"}, status_code=400)
+
+            try:
+                body = await request.body()
+                dest_path.parent.mkdir(parents=True, exist_ok=True)
+                dest_path.write_bytes(body)
+
+                # Update manifest
+                manifest_path = vault_path / "manifest.json"
+                manifest = {}
+                if manifest_path.exists():
+                    try:
+                        manifest = json.loads(manifest_path.read_text())
+                    except:
+                        manifest = {"version": "1.0", "files": {}}
+
+                if "files" not in manifest:
+                    manifest["files"] = {}
+
+                manifest["files"][filename] = {
+                    "synced": datetime.now().isoformat(),
+                    "source": request.headers.get("X-Source-Machine", "unknown")
+                }
+                manifest["updated"] = datetime.now().isoformat()
+
+                manifest_path.write_text(json.dumps(manifest, indent=2))
+
+                return JSONResponse({"success": True, "path": str(dest_path)})
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+
     def _init_vault_api(self):
         """Initialize Vault Dashboard API endpoints"""
         try:
