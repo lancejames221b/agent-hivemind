@@ -10685,7 +10685,7 @@ function load(id) {
             """Download entire vault as zip (skills + configs + docs)."""
             buffer = io.BytesIO()
             with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
-                for subdir in ["skills", "configs", "docs"]:
+                for subdir in ["skills", "configs", "docs", "agents"]:
                     dir_path = vault_path / subdir
                     if dir_path.exists():
                         for f in dir_path.glob("*"):
@@ -10741,10 +10741,23 @@ function load(id) {
                 return FileResponse(str(file_path))
             return JSONResponse({"error": "File not found"}, status_code=404)
 
+        @self.mcp.custom_route("/vault/agents/{filename:path}", methods=["GET"])
+        async def get_vault_agent(request):
+            """Download a single agent file."""
+            filename = request.path_params.get("filename", "")
+            base_dir = (vault_path / "agents").resolve()
+            file_path = (base_dir / filename).resolve()
+            # Path traversal protection
+            if not str(file_path).startswith(str(base_dir) + os.sep) and file_path != base_dir:
+                return JSONResponse({"error": "Invalid path"}, status_code=400)
+            if file_path.is_file():
+                return FileResponse(str(file_path))
+            return JSONResponse({"error": "File not found"}, status_code=404)
+
         @self.mcp.custom_route("/vault/list", methods=["GET"])
         async def list_vault_files(request):
             """List all vault files."""
-            files = {"skills": [], "configs": [], "docs": []}
+            files = {"skills": [], "configs": [], "docs": [], "agents": []}
             for subdir in files.keys():
                 dir_path = vault_path / subdir
                 if dir_path.exists():
@@ -10757,8 +10770,8 @@ function load(id) {
             subdir = request.path_params.get("subdir", "")
             filename = request.path_params.get("filename", "")
 
-            if subdir not in ["skills", "configs", "docs"]:
-                return JSONResponse({"error": "Invalid subdir. Must be skills, configs, or docs"}, status_code=400)
+            if subdir not in ["skills", "configs", "docs", "agents"]:
+                return JSONResponse({"error": "Invalid subdir. Must be skills, configs, docs, or agents"}, status_code=400)
 
             base_dir = (vault_path / subdir).resolve()
             dest_path = (base_dir / filename).resolve()
@@ -10797,20 +10810,20 @@ function load(id) {
                 return JSONResponse({"error": str(e)}, status_code=500)
 
     async def list_vault_contents(self, category: str = "all") -> str:
-        """List all skills, configs, and docs in the hAIveMind vault.
+        """List all skills, configs, docs, and agents in the hAIveMind vault.
 
         Args:
-            category: Filter by 'skills', 'configs', 'docs', or 'all' (default)
+            category: Filter by 'skills', 'configs', 'docs', 'agents', or 'all' (default)
 
         Returns:
             JSON list of files in each category with metadata
         """
         try:
             vault_path = Path.home() / ".haivemind" / "vault"
-            categories = ["skills", "configs", "docs"] if category == "all" else [category]
+            categories = ["skills", "configs", "docs", "agents"] if category == "all" else [category]
 
-            if category != "all" and category not in ["skills", "configs", "docs"]:
-                return json.dumps({"error": f"Invalid category '{category}'. Use: skills, configs, docs, or all"})
+            if category != "all" and category not in ["skills", "configs", "docs", "agents"]:
+                return json.dumps({"error": f"Invalid category '{category}'. Use: skills, configs, docs, agents, or all"})
 
             result = {}
             for cat in categories:
@@ -10847,15 +10860,15 @@ function load(id) {
 
         Args:
             filename: Name of the file to download (e.g., 'commit.md')
-            category: Category folder - 'skills', 'configs', or 'docs' (default: skills)
+            category: Category folder - 'skills', 'configs', 'docs', or 'agents' (default: skills)
 
         Returns:
             The file content as a string
         """
         try:
             vault_path = Path.home() / ".haivemind" / "vault"
-            if category not in ["skills", "configs", "docs"]:
-                return f"Error: Invalid category '{category}'. Use: skills, configs, or docs"
+            if category not in ["skills", "configs", "docs", "agents"]:
+                return f"Error: Invalid category '{category}'. Use: skills, configs, docs, or agents"
 
             file_path = vault_path / category / filename
 
@@ -10880,15 +10893,15 @@ function load(id) {
         Args:
             filename: Name for the file (e.g., 'my-skill.md')
             content: The file content to store
-            category: Category folder - 'skills', 'configs', or 'docs' (default: skills)
+            category: Category folder - 'skills', 'configs', 'docs', or 'agents' (default: skills)
 
         Returns:
             Success message with file path
         """
         try:
             vault_path = Path.home() / ".haivemind" / "vault"
-            if category not in ["skills", "configs", "docs"]:
-                return f"Error: Invalid category '{category}'. Use: skills, configs, or docs"
+            if category not in ["skills", "configs", "docs", "agents"]:
+                return f"Error: Invalid category '{category}'. Use: skills, configs, docs, or agents"
 
             dest_dir = vault_path / category
             dest_dir.mkdir(parents=True, exist_ok=True)
@@ -10932,15 +10945,15 @@ function load(id) {
 
         Args:
             filename: Name of the file to delete
-            category: Category folder - 'skills', 'configs', or 'docs' (default: skills)
+            category: Category folder - 'skills', 'configs', 'docs', or 'agents' (default: skills)
 
         Returns:
             Success or error message
         """
         try:
             vault_path = Path.home() / ".haivemind" / "vault"
-            if category not in ["skills", "configs", "docs"]:
-                return f"Error: Invalid category '{category}'. Use: skills, configs, or docs"
+            if category not in ["skills", "configs", "docs", "agents"]:
+                return f"Error: Invalid category '{category}'. Use: skills, configs, docs, or agents"
 
             file_path = vault_path / category / filename
 
@@ -11023,6 +11036,21 @@ function load(id) {
             logger.error(f"Error syncing vault from server: {e}")
             return f"Error: {str(e)}"
 
+    async def detect_mcp_service(self, target: str) -> str:
+        """
+        Auto-detect the type and connection info for an MCP service.
+        Useful for determining how to connect to a service (SSE, stdio, bridged).
+        """
+        try:
+            mcp_type, info = await self.bridge_manager.detect_mcp_type(target)
+            return json.dumps({
+                "target": target,
+                "type": mcp_type,
+                "connection_info": info
+            }, indent=2)
+        except Exception as e:
+            return json.dumps({"error": str(e)})
+
     def _register_vault_sync_tools(self):
         """Register vault sync tools with FastMCP"""
         self.mcp.add_tool(self.list_vault_contents)
@@ -11030,7 +11058,8 @@ function load(id) {
         self.mcp.add_tool(self.push_vault_file)
         self.mcp.add_tool(self.delete_vault_file)
         self.mcp.add_tool(self.sync_vault_from_server)
-        logger.info("📦 Vault sync MCP tools registered (list_vault_contents, pull_vault_file, push_vault_file, delete_vault_file, sync_vault_from_server)")
+        self.mcp.add_tool(self.detect_mcp_service)
+        logger.info("📦 Vault sync MCP tools registered (including detect_mcp_service)")
 
     def _init_vault_api(self):
         """Initialize Vault Dashboard API endpoints"""
@@ -13180,6 +13209,161 @@ function load(id) {
         
         logger.info("🔧 Session management endpoints registered")
     
+    async def _setup_mcp_bridges(self):
+        """Setup and register predefined MCP bridges for remote access"""
+        try:
+            bridge_config_path = Path(__file__).parent.parent / "config" / "bridge_config.json"
+            if bridge_config_path.exists():
+                with open(bridge_config_path) as f:
+                    bridge_config = json.load(f)
+                
+                predefined = bridge_config.get('predefined_bridges', {})
+                for bridge_id, config in predefined.items():
+                    if config.get('auto_start', True):
+                        try:
+                            # Ensure ID is consistent
+                            config['id'] = bridge_id
+                            await self.bridge_manager.register_bridge(config)
+                            logger.info(f"🚀 Auto-registering MCP bridge: {config.get('name', bridge_id)}")
+                        except Exception as bridge_err:
+                            logger.error(f"❌ Failed to register bridge {bridge_id}: {bridge_err}")
+        except Exception as e:
+            logger.error(f"Error setting up MCP bridges: {e}")
+
+    def _register_bridge_routes(self):
+        """Add SSE proxy routes for bridged servers"""
+        
+        @self.mcp.custom_route("/mcp-bridge/{bridge_id}/sse", methods=["GET"])
+        async def bridge_sse(request):
+            """SSE endpoint for bridged stdio MCP server"""
+            from starlette.responses import StreamingResponse, JSONResponse
+            import uuid
+            
+            bridge_id = request.path_params.get("bridge_id")
+            bridge = await self.bridge_manager.get_bridge(bridge_id)
+            if not bridge:
+                return JSONResponse({"error": "Bridge not found"}, status_code=404)
+
+            session_id = request.query_params.get("session_id", uuid.uuid4().hex)
+            session = await bridge.create_session(session_id)
+
+            async def event_generator():
+                # Send initial endpoint event
+                yield f"event: endpoint\ndata: /mcp-bridge/{bridge_id}/messages/?session_id={session_id}\n\n"
+                
+                try:
+                    while session.active:
+                        # Wait for messages from stdio process
+                        line = await session.queue.get()
+                        yield f"data: {line}\n\n"
+                except asyncio.CancelledError:
+                    pass
+                finally:
+                    await bridge.close_session(session_id)
+
+            return StreamingResponse(
+                event_generator(),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                    "X-Accel-Buffering": "no"
+                }
+            )
+
+        @self.mcp.custom_route("/mcp-bridge/{bridge_id}/messages/", methods=["POST"])
+        async def bridge_messages(request):
+            """Message endpoint for bridged stdio MCP server"""
+            bridge_id = request.path_params.get("bridge_id")
+            session_id = request.query_params.get("session_id")
+            
+            if not session_id:
+                return JSONResponse({"error": "session_id required"}, status_code=400)
+            
+            bridge = await self.bridge_manager.get_bridge(bridge_id)
+            if not bridge:
+                return JSONResponse({"error": "Bridge not found"}, status_code=404)
+            
+            session = await bridge.get_session(session_id)
+            if not session:
+                return JSONResponse({"error": "Session not found"}, status_code=404)
+            
+            try:
+                message = await request.json()
+                await session.send_message(message)
+                return JSONResponse({"status": "accepted"}, status_code=202)
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+
+        logger.info("🌉 MCP bridge SSE proxy routes registered")
+
+    def _add_health_all_route(self):
+        """Add unified health check endpoint for all MCP services"""
+        
+        @self.mcp.custom_route("/admin/api/mcp/health-all", methods=["GET"])
+        async def health_all(request):
+            """Unified health check for local and remote MCP services"""
+            # No auth for now to allow monitoring tools, or check if user is admin
+            
+            results = {
+                "timestamp": datetime.now().isoformat(),
+                "overall_status": "healthy",
+                "services": {}
+            }
+            
+            # 1. Local haivemind tools
+            try:
+                tools = await self.mcp.list_tools()
+                results["services"]["haivemind"] = {
+                    "status": "healthy",
+                    "type": "local",
+                    "tools_count": len(tools),
+                    "version": "2.1.3"
+                }
+            except Exception as e:
+                results["services"]["haivemind"] = {"status": "error", "error": str(e)}
+                results["overall_status"] = "degraded"
+
+            # 2. Bridged servers
+            try:
+                bridge_health = await self.bridge_manager.health_check()
+                results["services"]["bridges"] = bridge_health
+                if bridge_health.get("error_bridges", 0) > 0:
+                    results["overall_status"] = "degraded"
+            except Exception as e:
+                results["services"]["bridges"] = {"status": "error", "error": str(e)}
+
+            # 3. Remote SSE servers from registry
+            for server_id, info in self.server_registry.items():
+                if server_id == "memory-server": continue # skip self
+                
+                try:
+                    import httpx
+                    start = time.time()
+                    async with httpx.AsyncClient() as client:
+                        # Try to get health if available, or just check endpoint
+                        health_url = info['endpoint'].replace('/sse', '/health')
+                        resp = await client.get(health_url, timeout=2.0)
+                        latency = (time.time() - start) * 1000
+                        
+                        results["services"][info['name']] = {
+                            "status": "healthy" if resp.status_code == 200 else "unhealthy",
+                            "type": "remote_sse",
+                            "endpoint": info['endpoint'],
+                            "latency_ms": round(latency, 2),
+                            "http_code": resp.status_code
+                        }
+                except Exception as e:
+                    results["services"][info['name']] = {
+                        "status": "offline",
+                        "type": "remote_sse",
+                        "endpoint": info['endpoint'],
+                        "error": str(e)
+                    }
+                    results["overall_status"] = "degraded"
+
+            return JSONResponse(results)
+
     def _init_dashboard_functionality(self):
         """Initialize enhanced dashboard functionality from dashboard_server"""
         try:
@@ -15620,14 +15804,20 @@ main "$@" """,
                 logger.info(f"🔒 SSL/TLS enabled - secure hive communications active")
                 logger.info(f"📜 Certificate: {ssl_config.get('cert_file')}")
             
-            # Add health endpoint
+            # Add unified health-all endpoint
+            self._add_health_all_route()
+
+            # Add bridge routes
+            self._register_bridge_routes()
+
+            # Override the health endpoint to show correct version
             @self.mcp.custom_route("/health", methods=["GET"])
             async def health(request):
                 from starlette.responses import JSONResponse
                 return JSONResponse({
                     "status": "healthy",
                     "server": "remote-memory-mcp",
-                    "version": "2.1.2",
+                    "version": "2.1.3",
                     "machine_id": self.storage.machine_id,
                     "endpoints": {
                         "sse": f"{protocol}://{self.host}:{self.port}/sse",
@@ -15639,21 +15829,33 @@ main "$@" """,
             # Suppress MCP framework warnings about early requests  
             logging.getLogger("root").setLevel(logging.ERROR)
             
-            # Verify SSL files exist if SSL is enabled
-            if ssl_enabled:
-                cert_file = ssl_config.get('cert_file')
-                key_file = ssl_config.get('key_file')
-                
-                from pathlib import Path
-                if not Path(cert_file).exists():
-                    raise FileNotFoundError(f"SSL certificate not found: {cert_file}")
-                if not Path(key_file).exists():
-                    raise FileNotFoundError(f"SSL private key not found: {key_file}")
-                
-                logger.info(f"🔐 Starting server with SSL - cert: {cert_file}, key: {key_file}")
+            import anyio
+            import uvicorn
             
-            # Run the server (SSL must be configured during FastMCP initialization)
-            self.mcp.run(transport="sse")
+            async def start_all():
+                # 1. Start bridges
+                await self._setup_mcp_bridges()
+                
+                # 2. Get the SSE app (this will include the custom routes registered above)
+                app = self.mcp.sse_app()
+                
+                # 3. Register startup message
+                @app.on_event("startup")
+                async def on_startup():
+                    logger.info("🚀 hAIveMind SSE server started and ready for connections")
+
+                # 4. Run server
+                config = uvicorn.Config(
+                    app, 
+                    host=self.host, 
+                    port=self.port,
+                    log_level="info",
+                    loop="asyncio"
+                )
+                server = uvicorn.Server(config)
+                await server.serve()
+
+            anyio.run(start_all)
             
         except Exception as e:
             logger.error(f"💥 Network portal activation failed: {e} - remote hive access unavailable")
