@@ -15627,7 +15627,7 @@ main "$@" """,
                 return JSONResponse({
                     "status": "healthy",
                     "server": "remote-memory-mcp",
-                    "version": "1.0.0",
+                    "version": "2.1.2",
                     "machine_id": self.storage.machine_id,
                     "endpoints": {
                         "sse": f"{protocol}://{self.host}:{self.port}/sse",
