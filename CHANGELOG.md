@@ -5,6 +5,15 @@ All notable changes to hAIveMind MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.2] - 2026-01-13
+
+### Fixed
+
+- **Enabled all MCP tools in remote server**:
+  - Uncommented 113 previously disabled tools in `remote_mcp_server.py`.
+  - Remote server now has full feature parity with local server (120+ active tools).
+  - Includes tools for backup, service discovery, config management, monitoring, deployment, and more.
+
 ## [2.1.1] - 2026-01-12
 
 ### Fixed

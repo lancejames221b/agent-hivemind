@@ -17,7 +17,7 @@ with open("requirements.txt", "r", encoding="utf-8") as fh:
 
 setup(
     name="claudeops-haivemind",
-    version="2.1.1",
+    version="2.1.2",
     author="Lance James",
     author_email="lancejames@unit221b.com",
     description="Distributed AI agent coordination with persistent collective memory across infrastructure networks",
