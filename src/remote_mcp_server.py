@@ -336,7 +336,31 @@ NETWORK TOPOLOGY:
             except Exception as e:
                 logger.error(f"Error retrieving memory: {e}")
                 return f"Error retrieving memory: {str(e)}"
-        
+
+        @self.mcp.tool()
+        async def update_memory_confidentiality(
+            memory_id: str,
+            confidentiality_level: str,
+            reason: str = None
+        ) -> str:
+            """Upgrade a memory's confidentiality level (can only make MORE restrictive).
+
+            Levels: normal < internal < confidential < pii
+            - internal: No external sync
+            - confidential: Local only, no sync/broadcast
+            - pii: Local only, audit logged, blocked from all distribution
+            """
+            try:
+                result = await self.storage.update_memory_confidentiality(
+                    memory_id=memory_id,
+                    confidentiality_level=confidentiality_level,
+                    reason=reason
+                )
+                return json.dumps(result, indent=2)
+            except Exception as e:
+                logger.error(f"Error updating confidentiality: {e}")
+                return f"Error: {str(e)}"
+
         @self.mcp.tool()
         async def search_memories(
             query: str,
