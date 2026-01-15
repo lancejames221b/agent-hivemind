@@ -97,6 +97,31 @@ except ImportError as e:
 
 # Logger already setup above
 
+# Confidentiality levels for PII/sensitive data protection
+# These prevent distribution to external systems, sync, and broadcasts
+CONFIDENTIALITY_LEVELS = ["normal", "internal", "confidential", "pii"]
+CONFIDENTIALITY_LEVEL_ORDER = {level: idx for idx, level in enumerate(CONFIDENTIALITY_LEVELS)}
+
+def _serialize_metadata(metadata: Dict[str, Any]) -> Dict[str, Any]:
+    """Serialize complex types in metadata for ChromaDB compatibility.
+
+    ChromaDB requires metadata values to be scalar types (str, int, float, bool, None).
+    This function converts lists, dicts, and other complex types to JSON strings.
+    """
+    serialized = {}
+    for key, value in metadata.items():
+        if isinstance(value, (list, dict)):
+            serialized[key] = json.dumps(value)
+        elif value is None:
+            serialized[key] = ""
+        elif isinstance(value, bool):
+            serialized[key] = str(value).lower()
+        elif isinstance(value, (str, int, float)):
+            serialized[key] = value
+        else:
+            serialized[key] = str(value)
+    return serialized
+
 class MemoryStorage:
     """ClaudeOps hAIveMind - ChromaDB vector storage with Redis caching for multi-agent DevOps collaboration"""
     
@@ -355,17 +380,35 @@ class MemoryStorage:
         }
         return self.config.get('memory', {}).get('sharing_rules', default_rules)
     
-    def _determine_sharing_scope(self, scope: Optional[str], category: str, 
+    def _determine_sharing_scope(self, scope: Optional[str], category: str,
                                 share_with: Optional[List[str]] = None,
                                 exclude_from: Optional[List[str]] = None,
-                                sensitive: bool = False) -> Dict[str, Any]:
-        """Determine the effective sharing scope and rules for a memory"""
+                                sensitive: bool = False,
+                                confidentiality_level: str = "normal") -> Dict[str, Any]:
+        """Determine the effective sharing scope and rules for a memory
+
+        Confidentiality levels override scope:
+        - normal: Full sync, broadcast, search visibility
+        - internal: No sync to external machines, limited broadcast
+        - confidential: Local machine only, no sync, no broadcast
+        - pii: Local only, audit logged, no sync/broadcast, blocked from public posting
+        """
         sharing_rules = self._get_sharing_rules()
         machine_groups = self._get_machine_groups()
-        
-        # Force private scope for sensitive data
-        if sensitive:
+
+        # Confidentiality level overrides scope
+        if confidentiality_level in ["confidential", "pii"]:
             scope = "private"
+            sensitive = True  # Ensure backwards compatibility
+        elif confidentiality_level == "internal":
+            # Internal allows local machine group but blocks external sync
+            if scope not in ["private", "machine-local"]:
+                scope = "project-local"
+
+        # Legacy: Force private scope for sensitive data
+        if sensitive and confidentiality_level == "normal":
+            scope = "private"
+            confidentiality_level = "internal"  # Migrate legacy sensitive to internal
         
         # Use default scope if none specified
         if scope is None:
@@ -407,13 +450,17 @@ class MemoryStorage:
         
         # Apply exclusions
         allowed_machines = allowed_machines - excluded_machines
-        
+
+        # Confidential/PII never sync
+        sync_enabled = len(allowed_machines) > 1 and confidentiality_level not in ["confidential", "pii"]
+
         return {
             'scope': scope,
             'allowed_machines': list(allowed_machines),
             'excluded_machines': list(excluded_machines),
             'sensitive': sensitive,
-            'sync_enabled': len(allowed_machines) > 1
+            'confidentiality_level': confidentiality_level,
+            'sync_enabled': sync_enabled
         }
     
     def _init_chromadb(self):
@@ -545,8 +592,8 @@ class MemoryStorage:
         
         return content
     
-    async def store_memory(self, 
-                          content: str, 
+    async def store_memory(self,
+                          content: str,
                           category: str = "global",
                           context: Optional[str] = None,
                           metadata: Optional[Dict[str, Any]] = None,
@@ -555,24 +602,39 @@ class MemoryStorage:
                           scope: Optional[str] = None,
                           share_with: Optional[List[str]] = None,
                           exclude_from: Optional[List[str]] = None,
-                          sensitive: bool = False) -> str:
-        """Store a memory with comprehensive system tracking and sharing control"""
+                          sensitive: bool = False,
+                          confidentiality_level: str = "normal") -> str:
+        """Store a memory with comprehensive system tracking and sharing control
+
+        Args:
+            confidentiality_level: Controls data distribution (default: "normal")
+                - normal: Full sync, broadcast, search visibility
+                - internal: No sync to external machines, limited broadcast
+                - confidential: Local machine only, no sync, no broadcast
+                - pii: Local only, audit logged, blocked from all external distribution
+        """
         memory_id = str(uuid.uuid4())
-        
+
+        # Validate confidentiality level
+        if confidentiality_level not in CONFIDENTIALITY_LEVELS:
+            logger.warning(f"Invalid confidentiality_level '{confidentiality_level}', defaulting to 'normal'")
+            confidentiality_level = "normal"
+
         # Apply authorship directives
         content = self._apply_authorship_directives(content)
-        
+
         # Get system and project context
         system_context = self._get_system_context()
         project_context = self._get_project_context()
-        
+
         # Determine sharing scope and rules
         sharing_info = self._determine_sharing_scope(
-            scope=scope, 
+            scope=scope,
             category=category,
             share_with=share_with,
             exclude_from=exclude_from,
-            sensitive=sensitive
+            sensitive=sensitive,
+            confidentiality_level=confidentiality_level
         )
         
         # Validate category
@@ -613,7 +675,8 @@ class MemoryStorage:
             "scope": sharing_info["scope"],
             "allowed_machines": ",".join(sharing_info["allowed_machines"]),
             "excluded_machines": ",".join(sharing_info["excluded_machines"]),
-            "sensitive": str(sensitive).lower(),
+            "sensitive": str(sharing_info["sensitive"]).lower(),
+            "confidentiality_level": sharing_info["confidentiality_level"],
             "sync_enabled": str(sharing_info["sync_enabled"]).lower(),
 
             # Format system metadata (for token optimization)
@@ -631,7 +694,7 @@ class MemoryStorage:
                     None,
                     lambda: collection.add(
                         documents=[content],
-                        metadatas=[memory_metadata],
+                        metadatas=[_serialize_metadata(memory_metadata)],
                         ids=[memory_id]
                     )
                 ),
@@ -724,7 +787,7 @@ class MemoryStorage:
         
         return None
     
-    async def search_memories(self, 
+    async def search_memories(self,
                              query: str,
                              category: Optional[str] = None,
                              user_id: Optional[str] = None,
@@ -733,8 +796,15 @@ class MemoryStorage:
                              scope: Optional[str] = None,
                              include_global: bool = True,
                              from_machines: Optional[List[str]] = None,
-                             exclude_machines: Optional[List[str]] = None) -> List[Dict[str, Any]]:
-        """Search memories with comprehensive filtering including machine, project, and sharing scope"""
+                             exclude_machines: Optional[List[str]] = None,
+                             exclude_confidential: bool = False,
+                             max_confidentiality_level: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Search memories with comprehensive filtering including machine, project, and sharing scope
+
+        Args:
+            exclude_confidential: If True, exclude confidential and pii level memories (for remote/public contexts)
+            max_confidentiality_level: Maximum confidentiality level to include (normal, internal, confidential, pii)
+        """
         memories = []
         
         # Get current context
@@ -803,7 +873,23 @@ class MemoryStorage:
                         allowed_machines = metadata.get('allowed_machines', '').split(',')
                         if allowed_machines and allowed_machines != [''] and current_machine not in allowed_machines:
                             continue
-                        
+
+                        # Filter by confidentiality level
+                        memory_conf_level = metadata.get('confidentiality_level', 'normal')
+                        if memory_conf_level not in CONFIDENTIALITY_LEVELS:
+                            memory_conf_level = 'normal'
+
+                        # Exclude confidential/pii if requested (for remote/public contexts)
+                        if exclude_confidential and memory_conf_level in ['confidential', 'pii']:
+                            continue
+
+                        # Filter by max confidentiality level if specified
+                        if max_confidentiality_level:
+                            max_level_order = CONFIDENTIALITY_LEVEL_ORDER.get(max_confidentiality_level, 3)
+                            memory_level_order = CONFIDENTIALITY_LEVEL_ORDER.get(memory_conf_level, 0)
+                            if memory_level_order > max_level_order:
+                                continue
+
                         memory_data = {
                             'id': ids[i],
                             'content': doc,
@@ -826,12 +912,19 @@ class MemoryStorage:
         memories.sort(key=lambda x: x.get('score', 0), reverse=True)
         return memories[:limit]
     
-    async def get_recent_memories(self, 
+    async def get_recent_memories(self,
                                  user_id: Optional[str] = None,
                                  category: Optional[str] = None,
                                  hours: int = 24,
-                                 limit: int = 20) -> List[Dict[str, Any]]:
-        """Get recent memories within specified time window"""
+                                 limit: int = 20,
+                                 exclude_confidential: bool = False,
+                                 max_confidentiality_level: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Get recent memories within specified time window
+
+        Args:
+            exclude_confidential: If True, exclude confidential and pii level memories
+            max_confidentiality_level: Maximum confidentiality level to include
+        """
         since = datetime.now() - timedelta(hours=hours)
         since_iso = since.isoformat()
         
@@ -867,14 +960,31 @@ class MemoryStorage:
                 
                 if results['documents']:
                     for i, doc in enumerate(results['documents']):
-                        created_at = results['metadatas'][i].get('created_at', '')
+                        metadata = results['metadatas'][i]
+                        created_at = metadata.get('created_at', '')
                         if created_at and created_at >= since_iso:
+                            # Filter by confidentiality level
+                            memory_conf_level = metadata.get('confidentiality_level', 'normal')
+                            if memory_conf_level not in CONFIDENTIALITY_LEVELS:
+                                memory_conf_level = 'normal'
+
+                            # Exclude confidential/pii if requested
+                            if exclude_confidential and memory_conf_level in ['confidential', 'pii']:
+                                continue
+
+                            # Filter by max confidentiality level if specified
+                            if max_confidentiality_level:
+                                max_level_order = CONFIDENTIALITY_LEVEL_ORDER.get(max_confidentiality_level, 3)
+                                memory_level_order = CONFIDENTIALITY_LEVEL_ORDER.get(memory_conf_level, 0)
+                                if memory_level_order > max_level_order:
+                                    continue
+
                             memory_data = {
                                 'id': results['ids'][i],
                                 'content': doc,
                                 'category': cat_name,
-                                'context': results['metadatas'][i].get('context', ''),
-                                'metadata': results['metadatas'][i],
+                                'context': metadata.get('context', ''),
+                                'metadata': metadata,
                                 'created_at': created_at
                             }
                             memories.append(memory_data)
@@ -1387,13 +1497,26 @@ class MemoryStorage:
             logger.error(f"💥 Task delegation failed: {e} - hive coordination disrupted")
             return {"error": str(e)}
     
-    async def broadcast_discovery(self, message: str, category: str, severity: str = "info", 
-                                 target_roles: List[str] = None) -> Dict[str, Any]:
-        """Broadcast important discovery to ClaudeOps agents"""
+    async def broadcast_discovery(self, message: str, category: str, severity: str = "info",
+                                 target_roles: List[str] = None,
+                                 confidentiality_level: str = "normal") -> Dict[str, Any]:
+        """Broadcast important discovery to ClaudeOps agents
+
+        Args:
+            confidentiality_level: Data protection level. If 'confidential' or 'pii',
+                                   the message will be stored locally but NOT broadcast.
+        """
         try:
             if not self.redis_client:
                 return {"error": "Redis not available"}
-            
+
+            # Validate confidentiality level
+            if confidentiality_level not in CONFIDENTIALITY_LEVELS:
+                confidentiality_level = "normal"
+
+            # Check if broadcast is allowed for this confidentiality level
+            is_broadcast_blocked = confidentiality_level in ['confidential', 'pii']
+
             broadcast_data = {
                 'message_id': str(uuid.uuid4()),
                 'from_agent': self.agent_id,
@@ -1403,12 +1526,13 @@ class MemoryStorage:
                 'target_roles': ','.join(target_roles) if target_roles else 'all',
                 'timestamp': str(time.time())
             }
-            
+
             # Store in memory as infrastructure discovery with enhanced metadata
+            # Note: confidential/pii messages are stored locally but not broadcast
             await self.store_memory(
                 content=f"ClaudeOps Discovery: {message}",
                 category="infrastructure",
-                context=f"Broadcast from {self.agent_id}",
+                context=f"Broadcast from {self.agent_id}" + (" [LOCAL ONLY - confidential]" if is_broadcast_blocked else ""),
                 metadata={
                     'discovery_type': category,
                     'severity': severity,
@@ -1417,15 +1541,26 @@ class MemoryStorage:
                     'broadcast_timestamp': time.time(),
                     'message_id': broadcast_data['message_id'],
                     'target_roles': ','.join(target_roles) if target_roles else 'all',
-                    'creation_time': time.time()  # Ensure consistent timestamp field
+                    'creation_time': time.time(),
+                    'broadcast_blocked': str(is_broadcast_blocked).lower()
                 },
-                tags=['claudeops', 'discovery', 'broadcast', 'claudeops-broadcast', category, severity]
+                tags=['claudeops', 'discovery', 'broadcast', 'claudeops-broadcast', category, severity],
+                confidentiality_level=confidentiality_level
             )
-            
+
+            # Only publish to broadcast channel if NOT confidential/pii
+            if is_broadcast_blocked:
+                logger.info(f"Broadcast blocked due to confidentiality_level={confidentiality_level} - stored locally only")
+                return {
+                    "status": "stored_locally",
+                    "message_id": broadcast_data['message_id'],
+                    "reason": f"Broadcast blocked: confidentiality_level={confidentiality_level}"
+                }
+
             # Publish to broadcast channel
             channel = self.config.get('claudeops', {}).get('collaboration', {}).get('broadcast_channel', 'claudeops:broadcast')
             self.redis_client.publish(channel, json.dumps(broadcast_data))
-            
+
             return {"status": "success", "message_id": broadcast_data['message_id']}
             
         except Exception as e:
@@ -1696,9 +1831,9 @@ class MemoryStorage:
                 "status": "success",
                 "agent_id": agent_id,
                 "query": query,
-                "general_memories": search_results.get('memories', []),
-                "agent_specific": agent_specific.get('memories', []),
-                "total_results": len(search_results.get('memories', [])) + len(agent_specific.get('memories', []))
+                "general_memories": search_results,
+                "agent_specific": agent_specific,
+                "total_results": len(search_results) + len(agent_specific)
             }
             
         except Exception as e:
@@ -2020,7 +2155,7 @@ class MemoryStorage:
                         if result['documents'] and result['documents'][0]:
                             collection.update(
                                 ids=[memory_id],
-                                metadatas=[updated_metadata]
+                                metadatas=[_serialize_metadata(updated_metadata)]
                             )
                             break
                     except Exception as e:
@@ -2153,7 +2288,7 @@ class MemoryStorage:
                     new_collection.add(
                         ids=[memory_id],
                         documents=[updated_content],
-                        metadatas=[updated_metadata]
+                        metadatas=[_serialize_metadata(updated_metadata)]
                     )
                 except Exception as e:
                     logger.error(f"Failed to add to new collection {new_category}: {e}")
@@ -2165,7 +2300,7 @@ class MemoryStorage:
                     collection.update(
                         ids=[memory_id],
                         documents=[updated_content],
-                        metadatas=[updated_metadata]
+                        metadatas=[_serialize_metadata(updated_metadata)]
                     )
                 except Exception as e:
                     logger.error(f"Failed to update memory in collection: {e}")
@@ -2225,6 +2360,120 @@ class MemoryStorage:
 
         except Exception as e:
             logger.error(f"Memory update error: {e}")
+            return {"error": str(e), "memory_id": memory_id}
+
+    async def update_memory_confidentiality(self,
+                                            memory_id: str,
+                                            confidentiality_level: str,
+                                            reason: Optional[str] = None) -> Dict[str, Any]:
+        """Update a memory's confidentiality level (upgrade only - more restrictive)
+
+        This allows marking existing memories as more confidential/protected.
+        You can only upgrade (make more restrictive), not downgrade.
+        Order: normal < internal < confidential < pii
+
+        Args:
+            memory_id: The memory to update
+            confidentiality_level: The new level (must be higher than current)
+            reason: Optional reason for the upgrade (logged for audit)
+        """
+        try:
+            # Validate the new level
+            if confidentiality_level not in CONFIDENTIALITY_LEVELS:
+                return {
+                    "error": f"Invalid confidentiality_level '{confidentiality_level}'. Must be one of: {CONFIDENTIALITY_LEVELS}",
+                    "memory_id": memory_id
+                }
+
+            # Retrieve the existing memory
+            existing_memory = await self.retrieve_memory(memory_id)
+            if not existing_memory:
+                return {"error": "Memory not found", "memory_id": memory_id}
+
+            # Check if memory is deleted
+            metadata = existing_memory.get('metadata', {})
+            if metadata.get('deleted_at'):
+                return {"error": "Cannot update deleted memory", "memory_id": memory_id}
+
+            # Get current confidentiality level (default to 'normal' for legacy memories)
+            current_level = metadata.get('confidentiality_level', 'normal')
+            if current_level not in CONFIDENTIALITY_LEVELS:
+                current_level = 'normal'
+
+            # Check if this is an upgrade (more restrictive)
+            current_order = CONFIDENTIALITY_LEVEL_ORDER.get(current_level, 0)
+            new_order = CONFIDENTIALITY_LEVEL_ORDER.get(confidentiality_level, 0)
+
+            if new_order <= current_order:
+                return {
+                    "error": f"Cannot downgrade confidentiality. Current level '{current_level}' cannot be changed to '{confidentiality_level}'. Only upgrades allowed (more restrictive).",
+                    "memory_id": memory_id,
+                    "current_level": current_level,
+                    "requested_level": confidentiality_level
+                }
+
+            # Update metadata with new confidentiality level
+            current_time = datetime.now()
+            updated_metadata = metadata.copy()
+            updated_metadata['confidentiality_level'] = confidentiality_level
+            updated_metadata['confidentiality_updated_at'] = current_time.isoformat()
+            updated_metadata['confidentiality_updated_by'] = self.machine_id
+            if reason:
+                updated_metadata['confidentiality_upgrade_reason'] = reason
+
+            # Update sync_enabled based on new level
+            if confidentiality_level in ["confidential", "pii"]:
+                updated_metadata['sync_enabled'] = "false"
+                updated_metadata['sensitive'] = "true"
+                updated_metadata['scope'] = "private"
+
+            # Get the collection
+            category = existing_memory.get('category', 'global')
+            collection = self.collections.get(category, self.collections['global'])
+
+            # Update in ChromaDB
+            try:
+                collection.update(
+                    ids=[memory_id],
+                    metadatas=[_serialize_metadata(updated_metadata)]
+                )
+            except Exception as e:
+                logger.error(f"Failed to update confidentiality in ChromaDB: {e}")
+                return {"error": f"Failed to update: {e}", "memory_id": memory_id}
+
+            # Update Redis cache
+            if self.redis_client:
+                try:
+                    updated_memory = {
+                        "memory_id": memory_id,
+                        "content": existing_memory.get('content', ''),
+                        "metadata": updated_metadata,
+                        "category": category
+                    }
+                    self.redis_client.setex(
+                        f"memory:{memory_id}",
+                        3600,
+                        json.dumps(updated_memory)
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to update Redis cache: {e}")
+
+            # Log the confidentiality upgrade (important for audit)
+            logger.info(f"Confidentiality upgraded for memory {memory_id}: {current_level} -> {confidentiality_level}")
+
+            return {
+                "success": True,
+                "action": "update_confidentiality",
+                "memory_id": memory_id,
+                "previous_level": current_level,
+                "new_level": confidentiality_level,
+                "reason": reason,
+                "updated_at": current_time.isoformat(),
+                "updated_by": self.machine_id
+            }
+
+        except Exception as e:
+            logger.error(f"Confidentiality update error: {e}")
             return {"error": str(e), "memory_id": memory_id}
 
     async def bulk_delete_memories(self, 
@@ -2410,14 +2659,14 @@ class MemoryStorage:
                 collection.update(
                     ids=[memory_id],
                     documents=[deleted_memory['content']],
-                    metadatas=[restored_metadata]
+                    metadatas=[_serialize_metadata(restored_metadata)]
                 )
             except Exception:
                 # If update fails, try add (memory might not exist in collection)
                 collection.add(
                     ids=[memory_id],
                     documents=[deleted_memory['content']],
-                    metadatas=[restored_metadata]
+                    metadatas=[_serialize_metadata(restored_metadata)]
                 )
             
             # Remove from recycle bin and restore to active cache
@@ -2607,9 +2856,9 @@ class MemoryStorage:
             
             collection.update(
                 ids=[keep_id],
-                metadatas=[merged_metadata]
+                metadatas=[_serialize_metadata(merged_metadata)]
             )
-            
+
             # Delete the duplicate memory
             delete_result = await self.delete_memory(
                 delete_id, 
@@ -3125,7 +3374,7 @@ class MemoryMCPServer:
             tools = [
                 Tool(
                     name="store_memory",
-                    description="Store a memory with v2 format for token efficiency. Use: symbols (→|?!::), tables>prose, refs [ID]. Auto-tagged with format_version.",
+                    description="Store a memory with v2 format for token efficiency. Use: symbols (→|?!::), tables>prose, refs [ID]. Auto-tagged with format_version. Use confidentiality_level to protect PII/sensitive data from distribution.",
                     inputSchema={
                         "type": "object",
                         "properties": {
@@ -3138,7 +3387,8 @@ class MemoryMCPServer:
                             "scope": {"type": "string", "description": "Memory sharing scope", "enum": ["machine-local", "project-local", "project-shared", "user-global", "team-global", "private"], "default": "project-shared"},
                             "share_with": {"type": "array", "items": {"type": "string"}, "description": "Machine groups to share with"},
                             "exclude_from": {"type": "array", "items": {"type": "string"}, "description": "Machines to exclude from sharing"},
-                            "sensitive": {"type": "boolean", "description": "Mark as sensitive (private to this machine)", "default": False}
+                            "sensitive": {"type": "boolean", "description": "[DEPRECATED: use confidentiality_level] Mark as sensitive", "default": False},
+                            "confidentiality_level": {"type": "string", "description": "Data protection level: normal (full access), internal (no external sync), confidential (local only), pii (local + audit logged, blocked from public posting)", "enum": ["normal", "internal", "confidential", "pii"], "default": "normal"}
                         },
                         "required": ["content"]
                     }
@@ -3168,6 +3418,19 @@ class MemoryMCPServer:
                             "category": {"type": "string", "description": "Updated category (optional)", "enum": ["project", "conversation", "agent", "global", "infrastructure", "incidents", "deployments", "monitoring", "runbooks", "security"]}
                         },
                         "required": ["memory_id"]
+                    }
+                ),
+                Tool(
+                    name="update_memory_confidentiality",
+                    description="Upgrade a memory's confidentiality level (can only make MORE restrictive, not less). Use to mark existing memories as confidential or PII after the fact.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "memory_id": {"type": "string", "description": "The memory ID to upgrade"},
+                            "confidentiality_level": {"type": "string", "description": "New level (must be more restrictive than current)", "enum": ["internal", "confidential", "pii"]},
+                            "reason": {"type": "string", "description": "Optional reason for the upgrade (logged for audit)"}
+                        },
+                        "required": ["memory_id", "confidentiality_level"]
                     }
                 ),
                 Tool(
@@ -3870,6 +4133,10 @@ class MemoryMCPServer:
                     result = await self.storage.update_memory(**arguments)
                     return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
+                elif name == "update_memory_confidentiality":
+                    result = await self.storage.update_memory_confidentiality(**arguments)
+                    return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
                 elif name == "search_memories":
                     memories = await self.storage.search_memories(**arguments)
                     # Enhance with format guidance on first access
@@ -4390,7 +4657,10 @@ class MemoryMCPServer:
                             key=arguments['key'],
                             actor_id=arguments.get('actor_id', self.teams_vaults_tools.default_user_id)
                         )
-                        result = {"success": success}
+                        if success:
+                            result = {"success": True, "message": f"Secret '{arguments['key']}' deleted from vault"}
+                        else:
+                            result = {"success": False, "error": f"Secret '{arguments['key']}' not found in vault"}
                     elif name == "share_vault":
                         grant = self.teams_vaults_system.grant_vault_access(
                             vault_id=arguments['vault_id'],

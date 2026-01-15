@@ -30,6 +30,10 @@ create_rules_sync_router = None
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Confidentiality levels that should NOT be synced (local-only data)
+# These contain PII or confidential information that should not leave the local machine
+CONFIDENTIALITY_LEVELS_NO_SYNC = ['confidential', 'pii']
+
 # Pydantic models
 class MemoryCreate(BaseModel):
     content: str
@@ -238,11 +242,24 @@ class MemorySyncService:
                     
                     if results['documents']:
                         for i, doc in enumerate(results['documents']):
+                            metadata = results['metadatas'][i]
+
+                            # Filter out confidential/pii memories - these should NEVER leave local machine
+                            conf_level = metadata.get('confidentiality_level', 'normal')
+                            if conf_level in CONFIDENTIALITY_LEVELS_NO_SYNC:
+                                logger.debug(f"Skipping memory {results['ids'][i]} from sync: confidentiality_level={conf_level}")
+                                continue
+
+                            # Also check sync_enabled flag
+                            if metadata.get('sync_enabled', 'true').lower() == 'false':
+                                logger.debug(f"Skipping memory {results['ids'][i]} from sync: sync_enabled=false")
+                                continue
+
                             memory_data = {
                                 'id': results['ids'][i],
                                 'content': doc,
                                 'category': category,
-                                'metadata': results['metadatas'][i],
+                                'metadata': metadata,
                                 'embedding': results['embeddings'][i] if results.get('embeddings') else None
                             }
                             memories.append(memory_data)
@@ -294,13 +311,26 @@ class MemorySyncService:
                 )
             )
             
-            # Group memories by category
+            # Group memories by category, filtering out confidential/pii
             memories_by_category = {}
+            rejected_count = 0
             for memory in remote_memories:
+                # SECURITY: Reject confidential/pii memories from remote sources
+                # These should never have been sent, but we double-check here
+                metadata = memory.get('metadata', {})
+                conf_level = metadata.get('confidentiality_level', 'normal')
+                if conf_level in CONFIDENTIALITY_LEVELS_NO_SYNC:
+                    logger.warning(f"Rejecting remote memory {memory.get('id', 'unknown')}: confidentiality_level={conf_level} should not be synced")
+                    rejected_count += 1
+                    continue
+
                 category = memory.get('category', 'global')
                 if category not in memories_by_category:
                     memories_by_category[category] = []
                 memories_by_category[category].append(memory)
+
+            if rejected_count > 0:
+                logger.info(f"Rejected {rejected_count} confidential/pii memories from remote sync")
             
             # Process each category
             for category, memories in memories_by_category.items():

@@ -302,12 +302,22 @@ NETWORK TOPOLOGY:
         """Register all memory tools with FastMCP"""
         
         @self.mcp.tool()
-        async def store_memory(content: str, category: str = "global") -> str:
-            """Store a memory with comprehensive machine tracking and sharing control"""
+        async def store_memory(
+            content: str,
+            category: str = "global",
+            confidentiality_level: str = "normal"
+        ) -> str:
+            """Store a memory with comprehensive machine tracking and sharing control
+
+            Args:
+                confidentiality_level: Data protection level (normal, internal, confidential, pii).
+                    confidential/pii memories are stored locally only and never synced or broadcast.
+            """
             try:
                 memory_id = await self.storage.store_memory(
                     content=content,
-                    category=category
+                    category=category,
+                    confidentiality_level=confidentiality_level
                 )
                 return f"Memory stored with ID: {memory_id}"
             except Exception as e:
@@ -338,12 +348,17 @@ NETWORK TOPOLOGY:
             scope: Optional[str] = None,
             include_global: bool = True,
             from_machines: Optional[List[str]] = None,
-            exclude_machines: Optional[List[str]] = None
+            exclude_machines: Optional[List[str]] = None,
+            max_confidentiality_level: Optional[str] = "internal"
         ) -> str:
-            """Search memories with comprehensive filtering including machine, project, and sharing scope"""
+            """Search memories with comprehensive filtering including machine, project, and sharing scope
+
+            Note: Remote access excludes confidential/pii memories by default for data protection.
+            """
             try:
                 # Get more results to handle pagination
                 extended_limit = limit + offset + 50  # Get extra to ensure we have enough for pagination
+                # Remote access: exclude confidential/pii memories by default
                 memories = await self.storage.search_memories(
                     query=query,
                     category=category,
@@ -353,7 +368,9 @@ NETWORK TOPOLOGY:
                     scope=scope,
                     include_global=include_global,
                     from_machines=from_machines,
-                    exclude_machines=exclude_machines
+                    exclude_machines=exclude_machines,
+                    exclude_confidential=True,  # Always filter confidential in remote context
+                    max_confidentiality_level=max_confidentiality_level
                 )
                 
                 # Apply pagination
@@ -382,17 +399,24 @@ NETWORK TOPOLOGY:
             category: Optional[str] = None,
             hours: int = 24,
             limit: int = 5,
-            offset: int = 0
+            offset: int = 0,
+            max_confidentiality_level: Optional[str] = "internal"
         ) -> str:
-            """Get recent memories within a time window"""
+            """Get recent memories within a time window
+
+            Note: Remote access excludes confidential/pii memories by default for data protection.
+            """
             try:
                 # Get more results to handle pagination
                 extended_limit = limit + offset + 50
+                # Remote access: exclude confidential/pii memories by default
                 memories = await self.storage.get_recent_memories(
                     user_id=user_id,
                     category=category,
                     hours=hours,
-                    limit=extended_limit
+                    limit=extended_limit,
+                    exclude_confidential=True,  # Always filter confidential in remote context
+                    max_confidentiality_level=max_confidentiality_level
                 )
                 
                 # Apply pagination
