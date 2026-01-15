@@ -13366,7 +13366,7 @@ function load(id) {
                     "status": "healthy",
                     "type": "local",
                     "tools_count": len(tools),
-                    "version": "2.1.4"
+                    "version": "2.1.5"
                 }
             except Exception as e:
                 results["services"]["haivemind"] = {"status": "error", "error": str(e)}
@@ -15865,7 +15865,7 @@ main "$@" """,
                 return JSONResponse({
                     "status": "healthy",
                     "server": "remote-memory-mcp",
-                    "version": "2.1.4",
+                    "version": "2.1.5",
                     "machine_id": self.storage.machine_id,
                     "endpoints": {
                         "sse": f"{protocol}://{self.host}:{self.port}/sse",
