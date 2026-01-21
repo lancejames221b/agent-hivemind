@@ -56,6 +56,16 @@ class AgentKeyPair:
     x25519_public: bytes        # Key exchange (public)
     fingerprint: str            # SHA256 fingerprint of public keys
 
+    @property
+    def private_key_ed25519(self) -> str:
+        """Get base64-encoded Ed25519 private key"""
+        return base64.b64encode(self.ed25519_private).decode('utf-8')
+
+    @property
+    def private_key_x25519(self) -> str:
+        """Get base64-encoded X25519 private key"""
+        return base64.b64encode(self.x25519_private).decode('utf-8')
+
 
 @dataclass
 class AgentIdentity:
@@ -75,6 +85,28 @@ class AgentIdentity:
     tags: List[str] = field(default_factory=list)
     capabilities: List[str] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
+    confidentiality_max: str = "normal"
+    agent_type: str = "general"
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for JSON serialization"""
+        return {
+            "identity_id": self.identity_id,
+            "agent_id": self.agent_id,
+            "firebase_uid": self.firebase_uid,
+            "machine_id": self.machine_id,
+            "public_key_ed25519": self.public_key_ed25519,
+            "public_key_x25519": self.public_key_x25519,
+            "key_fingerprint": self.key_fingerprint,
+            "status": self.status.value if isinstance(self.status, AgentStatus) else self.status,
+            "approved_by": self.approved_by,
+            "approved_at": self.approved_at,
+            "created_at": self.created_at,
+            "tags": self.tags,
+            "capabilities": self.capabilities,
+            "confidentiality_max": self.confidentiality_max,
+            "agent_type": self.agent_type
+        }
 
 
 @dataclass
@@ -94,6 +126,25 @@ class PreAuthKey:
     reusable: bool              # Can be used multiple times
     pre_approved: bool          # Skip approval queue
     revoked: bool
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for JSON serialization"""
+        return {
+            "key_id": self.key_id,
+            "key_prefix": self.key_prefix,
+            "created_by": self.created_by,
+            "created_at": self.created_at,
+            "expires_at": self.expires_at,
+            "max_uses": self.max_uses,
+            "current_uses": self.current_uses,
+            "tags": self.tags,
+            "capabilities": self.capabilities,
+            "machine_group": self.machine_group,
+            "ephemeral": self.ephemeral,
+            "reusable": self.reusable,
+            "pre_approved": self.pre_approved,
+            "revoked": self.revoked
+        }
 
 
 class AgentIdentitySystem:
@@ -559,8 +610,13 @@ class AgentIdentitySystem:
             logger.error(f"Failed to use pre-auth key: {e}")
             return False
 
-    def list_pre_auth_keys(self, include_revoked: bool = False) -> List[PreAuthKey]:
-        """List all pre-auth keys"""
+    def list_pre_auth_keys(
+        self,
+        include_revoked: bool = False,
+        include_expired: bool = False,
+        include_used: bool = False
+    ) -> List[PreAuthKey]:
+        """List all pre-auth keys with optional filtering"""
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
@@ -570,9 +626,14 @@ class AgentIdentitySystem:
                        max_uses, current_uses, tags, capabilities, machine_group,
                        ephemeral, reusable, pre_approved, revoked
                 FROM pre_auth_keys
+                WHERE 1=1
             """
             if not include_revoked:
-                query += " WHERE revoked = FALSE"
+                query += " AND revoked = FALSE"
+            if not include_expired:
+                query += " AND (expires_at IS NULL OR expires_at > datetime('now'))"
+            if not include_used:
+                query += " AND (max_uses IS NULL OR current_uses < max_uses)"
 
             cursor.execute(query)
             rows = cursor.fetchall()
@@ -830,19 +891,55 @@ class AgentIdentitySystem:
             logger.error(f"Failed to get agent {agent_id}: {e}")
             return None
 
-    def list_agents(self, status_filter: Optional[AgentStatus] = None, limit: int = 100) -> List[AgentIdentity]:
-        """List all agents"""
+    def get_agent_by_firebase_uid(self, firebase_uid: str) -> Optional[AgentIdentity]:
+        """Get an agent by their Firebase UID"""
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
 
-            query = """
-                SELECT agent_id FROM agent_identities
-            """
+            cursor.execute(
+                "SELECT agent_id FROM agent_identities WHERE firebase_uid = ?",
+                (firebase_uid,)
+            )
+            row = cursor.fetchone()
+            conn.close()
+
+            if row:
+                return self.get_agent(row[0])
+            return None
+
+        except Exception as e:
+            logger.error(f"Failed to get agent by Firebase UID {firebase_uid}: {e}")
+            return None
+
+    def list_pending_agents(self) -> List[AgentIdentity]:
+        """List all agents pending approval"""
+        return self.list_agents(status_filter="pending")
+
+    def list_agents(
+        self,
+        status_filter: Optional[str] = None,
+        machine_filter: Optional[str] = None,
+        limit: int = 100
+    ) -> List[AgentIdentity]:
+        """List all agents with optional filtering"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+
+            query = "SELECT agent_id FROM agent_identities WHERE 1=1"
             params = []
+
             if status_filter:
-                query += " WHERE status = ?"
-                params.append(status_filter.value)
+                query += " AND status = ?"
+                # Handle both string and enum
+                status_val = status_filter.value if isinstance(status_filter, AgentStatus) else status_filter
+                params.append(status_val)
+
+            if machine_filter:
+                query += " AND machine_id LIKE ?"
+                params.append(f"%{machine_filter}%")
+
             query += f" LIMIT {limit}"
 
             cursor.execute(query, params)

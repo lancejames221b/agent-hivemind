@@ -34,6 +34,16 @@ from enhanced_ticket_system import EnhancedTicketSystem
 from agent_directives import AgentDirectiveSystem
 from comet_integration import CometDirectiveSystem
 
+# Agent Authentication System imports
+try:
+    from agent_identity import AgentIdentitySystem, AgentKeyPair
+    from access_control import AccessControlSystem, AccessRequest, Permission, ConfidentialityLevel
+    from firebase_auth import get_firebase_auth, FirebaseAgentAuth
+    AGENT_AUTH_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"Agent auth system not available: {e}")
+    AGENT_AUTH_AVAILABLE = False
+
 # Setup logging
 logging.basicConfig(
     level=logging.INFO,
@@ -152,6 +162,12 @@ class RemoteMemoryMCPServer:
 
         # Register vault sync MCP tools for SSE clients
         self._register_vault_sync_tools()
+
+        # Initialize agent authentication system
+        self._init_agent_auth_system()
+
+        # Register agent authentication MCP tools
+        self._register_agent_auth_tools()
 
         # Initialize dashboard functionality
         self._init_dashboard_functionality()
@@ -1438,6 +1454,845 @@ Use `switch_project_context {target_name}` to activate."""
     # NOTE: _register_deployment_pipeline_tools removed (unused)
 
     # NOTE: _register_config_backup_system_tools removed (unused)
+
+    def _init_agent_auth_system(self):
+        """Initialize the agent authentication and authorization system"""
+        if not AGENT_AUTH_AVAILABLE:
+            logger.warning("Agent auth system not available - skipping initialization")
+            self.agent_identity_system = None
+            self.access_control_system = None
+            self.firebase_auth = None
+            return
+
+        try:
+            # Initialize Firebase Auth
+            self.firebase_auth = get_firebase_auth()
+            if self.firebase_auth.is_available():
+                logger.info("🔥 Firebase Auth initialized successfully")
+            else:
+                logger.warning("⚠️ Firebase Auth not available (no credentials)")
+
+            # Initialize Agent Identity System
+            db_path = str(Path(__file__).parent.parent / "data" / "agent_identity.db")
+            self.agent_identity_system = AgentIdentitySystem(db_path, self.firebase_auth)
+            logger.info("🔐 Agent Identity System initialized")
+
+            # Initialize Access Control System
+            acl_db_path = str(Path(__file__).parent.parent / "data" / "access_control.db")
+            self.access_control_system = AccessControlSystem(acl_db_path, self.firebase_auth)
+            logger.info("🛡️ Access Control System initialized")
+
+        except Exception as e:
+            logger.error(f"Failed to initialize agent auth system: {e}")
+            self.agent_identity_system = None
+            self.access_control_system = None
+            self.firebase_auth = None
+
+    def _register_agent_auth_tools(self):
+        """Register agent authentication and authorization MCP tools"""
+        if not AGENT_AUTH_AVAILABLE:
+            logger.info("Agent auth tools not registered (system not available)")
+            return
+
+        # ============ Agent Identity Management Tools ============
+
+        @self.mcp.tool()
+        async def generate_agent_identity(
+            machine_id: str,
+            agent_type: str = "general",
+            pre_auth_key: Optional[str] = None,
+            requested_tags: Optional[str] = None,
+            requested_capabilities: Optional[str] = None
+        ) -> str:
+            """
+            Generate a new cryptographic agent identity with Firebase user.
+
+            Creates Ed25519 (signing) + X25519 (key exchange) key pairs,
+            registers with Firebase Auth, and optionally uses a pre-auth key
+            for automated approval.
+
+            Args:
+                machine_id: Unique machine identifier (e.g., 'elastic1', 'lance-dev')
+                agent_type: Type of agent (general, elasticsearch, orchestrator, etc.)
+                pre_auth_key: Optional pre-authorization key for auto-approval
+                requested_tags: Comma-separated tags to request (e.g., "tag:elasticsearch,tag:production")
+                requested_capabilities: Comma-separated capabilities (e.g., "search_ops,index_management")
+
+            Returns:
+                JSON with identity details, keys (SAVE THE PRIVATE KEY!), and status
+            """
+            if not self.agent_identity_system:
+                return json.dumps({"error": "Agent identity system not initialized"})
+
+            try:
+                # Parse tags and capabilities
+                tags = [t.strip() for t in requested_tags.split(",")] if requested_tags else None
+                caps = [c.strip() for c in requested_capabilities.split(",")] if requested_capabilities else None
+
+                # Register the agent
+                identity, keypair, token = self.agent_identity_system.register_agent(
+                    machine_id=machine_id,
+                    agent_type=agent_type,
+                    pre_auth_key=pre_auth_key,
+                    requested_tags=tags,
+                    requested_capabilities=caps
+                )
+
+                if identity is None:
+                    return json.dumps({"error": "Failed to register agent identity"})
+
+                result = {
+                    "success": True,
+                    "identity_id": identity.identity_id,
+                    "agent_id": identity.agent_id,
+                    "firebase_uid": identity.firebase_uid,
+                    "status": identity.status,
+                    "machine_id": identity.machine_id,
+                    "key_fingerprint": identity.key_fingerprint,
+                    "public_keys": {
+                        "ed25519": identity.public_key_ed25519,
+                        "x25519": identity.public_key_x25519
+                    },
+                    "tags": identity.tags,
+                    "capabilities": identity.capabilities
+                }
+
+                # Include private keys ONLY on initial generation (agent must save these!)
+                if keypair:
+                    result["SAVE_THESE_KEYS"] = {
+                        "private_key_ed25519": keypair.private_key_ed25519,
+                        "private_key_x25519": keypair.private_key_x25519,
+                        "warning": "Save these keys securely! They cannot be recovered."
+                    }
+
+                # Include Firebase token if generated
+                if token:
+                    result["firebase_custom_token"] = token
+                    result["token_note"] = "Exchange this for an ID token using Firebase client SDK"
+
+                return json.dumps(result, indent=2)
+
+            except Exception as e:
+                logger.error(f"Error generating agent identity: {e}")
+                return json.dumps({"error": str(e)})
+
+        @self.mcp.tool()
+        async def authenticate_agent(
+            firebase_token: str,
+            agent_id: Optional[str] = None
+        ) -> str:
+            """
+            Authenticate an agent using their Firebase ID token.
+
+            Verifies the token, extracts custom claims (tags, capabilities),
+            and returns the agent's access permissions.
+
+            Args:
+                firebase_token: Firebase ID token to verify
+                agent_id: Optional agent ID for additional validation
+
+            Returns:
+                JSON with authentication result and granted permissions
+            """
+            if not self.firebase_auth or not self.firebase_auth.is_available():
+                return json.dumps({"error": "Firebase Auth not available"})
+
+            try:
+                # Verify token
+                result = self.firebase_auth.verify_agent_token(firebase_token, check_revoked=True)
+
+                if not result.valid:
+                    return json.dumps({
+                        "authenticated": False,
+                        "error": result.error,
+                        "revoked": result.revoked
+                    })
+
+                # Get agent identity details
+                identity = None
+                if self.agent_identity_system and result.uid:
+                    identity = self.agent_identity_system.get_agent_by_firebase_uid(result.uid)
+
+                response = {
+                    "authenticated": True,
+                    "firebase_uid": result.uid,
+                    "claims": result.claims.to_dict() if result.claims else {}
+                }
+
+                if identity:
+                    response["agent"] = {
+                        "agent_id": identity.agent_id,
+                        "status": identity.status,
+                        "machine_id": identity.machine_id,
+                        "tags": identity.tags,
+                        "capabilities": identity.capabilities,
+                        "confidentiality_max": identity.confidentiality_max
+                    }
+
+                return json.dumps(response, indent=2)
+
+            except Exception as e:
+                logger.error(f"Error authenticating agent: {e}")
+                return json.dumps({"error": str(e)})
+
+        @self.mcp.tool()
+        async def check_agent_access(
+            firebase_token: str,
+            resource_type: str,
+            resource_id: str,
+            permission: str,
+            confidentiality_level: str = "normal"
+        ) -> str:
+            """
+            Check if an agent has access to a specific resource.
+
+            Uses deny-by-default ACL evaluation with Firebase claims.
+
+            Args:
+                firebase_token: Firebase ID token of the requesting agent
+                resource_type: Type of resource (vault, memory, infrastructure, etc.)
+                resource_id: Specific resource identifier
+                permission: Requested permission (READ, WRITE, ADMIN, DELETE)
+                confidentiality_level: Resource confidentiality (normal, internal, confidential, pii)
+
+            Returns:
+                JSON with access decision and matched grant details
+            """
+            if not self.access_control_system:
+                return json.dumps({"error": "Access control system not initialized"})
+
+            try:
+                # Verify Firebase token first
+                if self.firebase_auth and self.firebase_auth.is_available():
+                    token_result = self.firebase_auth.verify_agent_token(firebase_token, check_revoked=True)
+                    if not token_result.valid:
+                        return json.dumps({
+                            "allowed": False,
+                            "reason": f"Invalid token: {token_result.error}"
+                        })
+                    agent_id = token_result.uid
+                else:
+                    # Fallback: use token as agent_id for testing
+                    agent_id = firebase_token
+
+                # Build access request
+                request = AccessRequest(
+                    agent_id=agent_id,
+                    resource_type=resource_type,
+                    resource_id=resource_id,
+                    permission=Permission[permission.upper()],
+                    confidentiality_level=ConfidentialityLevel[confidentiality_level.upper()]
+                )
+
+                # Check access
+                decision = self.access_control_system.check_access(request)
+
+                return json.dumps({
+                    "allowed": decision.allowed,
+                    "reason": decision.reason,
+                    "grant_matched": decision.grant_matched,
+                    "conditions_checked": decision.conditions_checked,
+                    "audit_id": decision.audit_id
+                }, indent=2)
+
+            except Exception as e:
+                logger.error(f"Error checking access: {e}")
+                return json.dumps({"error": str(e)})
+
+        # ============ Pre-Auth Key Management Tools ============
+
+        @self.mcp.tool()
+        async def create_preauth_key(
+            created_by: str,
+            tags: Optional[str] = None,
+            capabilities: Optional[str] = None,
+            max_uses: int = 1,
+            expires_hours: int = 24,
+            ephemeral: bool = False,
+            reusable: bool = False,
+            pre_approved: bool = False
+        ) -> str:
+            """
+            Create a pre-authorization key for automated agent registration.
+
+            Pre-auth keys allow agents to register without manual approval,
+            similar to Tailscale's pre-auth key system.
+
+            Args:
+                created_by: Admin agent ID creating this key
+                tags: Comma-separated tags to grant (e.g., "tag:elasticsearch,tag:dev")
+                capabilities: Comma-separated capabilities to grant
+                max_uses: Maximum number of times this key can be used (0 = unlimited)
+                expires_hours: Hours until expiration (default 24)
+                ephemeral: If true, registered agents are marked as ephemeral
+                reusable: If true, key can be reused until max_uses or expiration
+                pre_approved: If true, agents are auto-approved on registration
+
+            Returns:
+                JSON with the pre-auth key (SAVE IT!) and metadata
+            """
+            if not self.agent_identity_system:
+                return json.dumps({"error": "Agent identity system not initialized"})
+
+            try:
+                tag_list = [t.strip() for t in tags.split(",")] if tags else []
+                cap_list = [c.strip() for c in capabilities.split(",")] if capabilities else []
+
+                key, preauth = self.agent_identity_system.create_pre_auth_key(
+                    created_by=created_by,
+                    tags=tag_list,
+                    capabilities=cap_list,
+                    max_uses=max_uses if max_uses > 0 else None,
+                    expires_hours=expires_hours,
+                    ephemeral=ephemeral,
+                    reusable=reusable,
+                    pre_approved=pre_approved
+                )
+
+                if key is None:
+                    return json.dumps({"error": "Failed to create pre-auth key"})
+
+                return json.dumps({
+                    "success": True,
+                    "pre_auth_key": key,
+                    "key_id": preauth.key_id,
+                    "expires_at": preauth.expires_at,
+                    "max_uses": preauth.max_uses,
+                    "tags": preauth.tags,
+                    "capabilities": preauth.capabilities,
+                    "ephemeral": preauth.ephemeral,
+                    "reusable": preauth.reusable,
+                    "pre_approved": preauth.pre_approved,
+                    "warning": "Save this key securely! It cannot be retrieved later."
+                }, indent=2)
+
+            except Exception as e:
+                logger.error(f"Error creating pre-auth key: {e}")
+                return json.dumps({"error": str(e)})
+
+        @self.mcp.tool()
+        async def list_preauth_keys(
+            include_expired: bool = False,
+            include_used: bool = False
+        ) -> str:
+            """
+            List all pre-authorization keys.
+
+            Args:
+                include_expired: Include expired keys in results
+                include_used: Include fully-used keys in results
+
+            Returns:
+                JSON list of pre-auth keys (without the actual key values)
+            """
+            if not self.agent_identity_system:
+                return json.dumps({"error": "Agent identity system not initialized"})
+
+            try:
+                keys = self.agent_identity_system.list_pre_auth_keys(
+                    include_expired=include_expired,
+                    include_used=include_used
+                )
+
+                return json.dumps({
+                    "count": len(keys),
+                    "keys": [k.to_dict() for k in keys]
+                }, indent=2)
+
+            except Exception as e:
+                logger.error(f"Error listing pre-auth keys: {e}")
+                return json.dumps({"error": str(e)})
+
+        @self.mcp.tool()
+        async def revoke_preauth_key(
+            key_id: str,
+            revoked_by: str,
+            reason: str = "Manual revocation"
+        ) -> str:
+            """
+            Revoke a pre-authorization key.
+
+            Args:
+                key_id: ID of the pre-auth key to revoke
+                revoked_by: Admin agent ID performing the revocation
+                reason: Reason for revocation
+
+            Returns:
+                JSON with revocation status
+            """
+            if not self.agent_identity_system:
+                return json.dumps({"error": "Agent identity system not initialized"})
+
+            try:
+                success = self.agent_identity_system.revoke_pre_auth_key(
+                    key_id=key_id,
+                    revoked_by=revoked_by,
+                    reason=reason
+                )
+
+                return json.dumps({
+                    "success": success,
+                    "key_id": key_id,
+                    "revoked_by": revoked_by,
+                    "reason": reason
+                })
+
+            except Exception as e:
+                logger.error(f"Error revoking pre-auth key: {e}")
+                return json.dumps({"error": str(e)})
+
+        # ============ Agent Approval Management Tools ============
+
+        @self.mcp.tool()
+        async def list_pending_agents() -> str:
+            """
+            List all agents pending approval.
+
+            Returns:
+                JSON list of pending agent registrations
+            """
+            if not self.agent_identity_system:
+                return json.dumps({"error": "Agent identity system not initialized"})
+
+            try:
+                pending = self.agent_identity_system.list_pending_agents()
+
+                return json.dumps({
+                    "count": len(pending),
+                    "pending_agents": [
+                        {
+                            "agent_id": agent.agent_id,
+                            "machine_id": agent.machine_id,
+                            "agent_type": agent.agent_type,
+                            "requested_tags": agent.tags,
+                            "requested_capabilities": agent.capabilities,
+                            "created_at": agent.created_at,
+                            "key_fingerprint": agent.key_fingerprint
+                        }
+                        for agent in pending
+                    ]
+                }, indent=2)
+
+            except Exception as e:
+                logger.error(f"Error listing pending agents: {e}")
+                return json.dumps({"error": str(e)})
+
+        @self.mcp.tool()
+        async def approve_agent(
+            agent_id: str,
+            approved_by: str,
+            tags: Optional[str] = None,
+            capabilities: Optional[str] = None,
+            confidentiality_max: str = "normal"
+        ) -> str:
+            """
+            Approve a pending agent registration.
+
+            Args:
+                agent_id: ID of the agent to approve
+                approved_by: Admin agent ID performing the approval
+                tags: Comma-separated tags to grant (overrides requested)
+                capabilities: Comma-separated capabilities to grant (overrides requested)
+                confidentiality_max: Maximum confidentiality level (normal, internal, confidential)
+
+            Returns:
+                JSON with approval status
+            """
+            if not self.agent_identity_system:
+                return json.dumps({"error": "Agent identity system not initialized"})
+
+            try:
+                tag_list = [t.strip() for t in tags.split(",")] if tags else None
+                cap_list = [c.strip() for c in capabilities.split(",")] if capabilities else None
+
+                success = self.agent_identity_system.approve_agent(
+                    agent_id=agent_id,
+                    approved_by=approved_by,
+                    tags_granted=tag_list,
+                    capabilities_granted=cap_list,
+                    notes=f"Confidentiality max: {confidentiality_max}"
+                )
+
+                return json.dumps({
+                    "success": success,
+                    "agent_id": agent_id,
+                    "approved_by": approved_by,
+                    "status": "approved" if success else "failed"
+                })
+
+            except Exception as e:
+                logger.error(f"Error approving agent: {e}")
+                return json.dumps({"error": str(e)})
+
+        @self.mcp.tool()
+        async def reject_agent(
+            agent_id: str,
+            rejected_by: str,
+            reason: str
+        ) -> str:
+            """
+            Reject a pending agent registration.
+
+            Args:
+                agent_id: ID of the agent to reject
+                rejected_by: Admin agent ID performing the rejection
+                reason: Reason for rejection
+
+            Returns:
+                JSON with rejection status
+            """
+            if not self.agent_identity_system:
+                return json.dumps({"error": "Agent identity system not initialized"})
+
+            try:
+                success = self.agent_identity_system.reject_agent(
+                    agent_id=agent_id,
+                    rejected_by=rejected_by,
+                    reason=reason
+                )
+
+                return json.dumps({
+                    "success": success,
+                    "agent_id": agent_id,
+                    "rejected_by": rejected_by,
+                    "reason": reason
+                })
+
+            except Exception as e:
+                logger.error(f"Error rejecting agent: {e}")
+                return json.dumps({"error": str(e)})
+
+        @self.mcp.tool()
+        async def revoke_agent(
+            agent_id: str,
+            revoked_by: str,
+            reason: str
+        ) -> str:
+            """
+            Revoke an active agent's access (emergency action).
+
+            Immediately revokes Firebase tokens and marks the agent as revoked.
+            This is a break-glass emergency action.
+
+            Args:
+                agent_id: ID of the agent to revoke
+                revoked_by: Admin agent ID performing the revocation
+                reason: Reason for revocation
+
+            Returns:
+                JSON with revocation status
+            """
+            if not self.agent_identity_system:
+                return json.dumps({"error": "Agent identity system not initialized"})
+
+            try:
+                success = self.agent_identity_system.revoke_agent(
+                    agent_id=agent_id,
+                    revoked_by=revoked_by,
+                    reason=reason
+                )
+
+                return json.dumps({
+                    "success": success,
+                    "agent_id": agent_id,
+                    "revoked_by": revoked_by,
+                    "reason": reason,
+                    "action": "All tokens revoked, agent disabled"
+                })
+
+            except Exception as e:
+                logger.error(f"Error revoking agent: {e}")
+                return json.dumps({"error": str(e)})
+
+        # ============ Access Grants Management Tools ============
+
+        @self.mcp.tool()
+        async def create_access_grant(
+            grant_name: str,
+            created_by: str,
+            permissions: str,
+            source_tags: Optional[str] = None,
+            source_agents: Optional[str] = None,
+            destination_resources: Optional[str] = None,
+            destination_types: Optional[str] = None,
+            confidentiality_max: str = "normal",
+            mfa_required: bool = False,
+            valid_hours: Optional[int] = None
+        ) -> str:
+            """
+            Create an access control grant (ACL rule).
+
+            Grants define who (sources) can access what (destinations) with which permissions.
+
+            Args:
+                grant_name: Unique name for this grant
+                created_by: Admin agent ID creating this grant
+                permissions: Comma-separated permissions (READ,WRITE,ADMIN,DELETE)
+                source_tags: Comma-separated source tags (e.g., "tag:elasticsearch,tag:production")
+                source_agents: Comma-separated source agent IDs
+                destination_resources: Comma-separated resource patterns (e.g., "vault:elastic-*")
+                destination_types: Comma-separated resource types (vault,memory,infrastructure)
+                confidentiality_max: Maximum confidentiality level this grant allows
+                mfa_required: Whether MFA is required for this grant
+                valid_hours: Hours until grant expires (None = permanent)
+
+            Returns:
+                JSON with the created grant details
+            """
+            if not self.access_control_system:
+                return json.dumps({"error": "Access control system not initialized"})
+
+            try:
+                perm_list = [p.strip().upper() for p in permissions.split(",")]
+                src_tag_list = [t.strip() for t in source_tags.split(",")] if source_tags else None
+                src_agent_list = [a.strip() for a in source_agents.split(",")] if source_agents else None
+                dst_resource_list = [r.strip() for r in destination_resources.split(",")] if destination_resources else None
+
+                # Build conditions dict
+                conditions = {
+                    "mfa_required": mfa_required,
+                    "confidentiality_max": confidentiality_max
+                }
+
+                grant = self.access_control_system.create_grant(
+                    grant_name=grant_name,
+                    created_by=created_by,
+                    permissions=perm_list,
+                    src_tags=src_tag_list,
+                    src_agents=src_agent_list,
+                    dst_resources=dst_resource_list,
+                    conditions=conditions,
+                    expires_hours=valid_hours
+                )
+
+                if grant is None:
+                    return json.dumps({"error": "Failed to create grant"})
+
+                return json.dumps({
+                    "success": True,
+                    "grant_id": grant.grant_id,
+                    "grant_name": grant.grant_name,
+                    "permissions": grant.permissions,
+                    "source_tags": grant.src_tags,
+                    "source_agents": grant.src_agents,
+                    "destination_resources": grant.dst_resources,
+                    "expires_at": grant.expires_at
+                }, indent=2)
+
+            except Exception as e:
+                logger.error(f"Error creating access grant: {e}")
+                return json.dumps({"error": str(e)})
+
+        @self.mcp.tool()
+        async def list_access_grants(
+            include_expired: bool = False,
+            include_disabled: bool = False
+        ) -> str:
+            """
+            List all access control grants.
+
+            Args:
+                include_expired: Include expired grants
+                include_disabled: Include disabled grants
+
+            Returns:
+                JSON list of access grants
+            """
+            if not self.access_control_system:
+                return json.dumps({"error": "Access control system not initialized"})
+
+            try:
+                grants = self.access_control_system.list_grants(
+                    include_expired=include_expired,
+                    include_disabled=include_disabled
+                )
+
+                return json.dumps({
+                    "count": len(grants),
+                    "grants": [g.to_dict() for g in grants]
+                }, indent=2)
+
+            except Exception as e:
+                logger.error(f"Error listing access grants: {e}")
+                return json.dumps({"error": str(e)})
+
+        @self.mcp.tool()
+        async def disable_access_grant(
+            grant_id: str,
+            disabled_by: str,
+            reason: str
+        ) -> str:
+            """
+            Disable an access control grant.
+
+            Args:
+                grant_id: ID of the grant to disable
+                disabled_by: Admin agent ID performing the action
+                reason: Reason for disabling
+
+            Returns:
+                JSON with disable status
+            """
+            if not self.access_control_system:
+                return json.dumps({"error": "Access control system not initialized"})
+
+            try:
+                success = self.access_control_system.disable_grant(
+                    grant_id=grant_id,
+                    disabled_by=disabled_by,
+                    reason=reason
+                )
+
+                return json.dumps({
+                    "success": success,
+                    "grant_id": grant_id,
+                    "disabled_by": disabled_by,
+                    "reason": reason
+                })
+
+            except Exception as e:
+                logger.error(f"Error disabling access grant: {e}")
+                return json.dumps({"error": str(e)})
+
+        # ============ Audit Log Tools ============
+
+        @self.mcp.tool()
+        async def view_agent_audit_log(
+            agent_id: Optional[str] = None,
+            resource_id: Optional[str] = None,
+            hours: int = 24,
+            limit: int = 100
+        ) -> str:
+            """
+            View the agent access audit log.
+
+            Args:
+                agent_id: Filter by agent ID (optional)
+                resource_id: Filter by resource ID (optional)
+                hours: Hours of history to retrieve (default 24)
+                limit: Maximum number of entries (default 100)
+
+            Returns:
+                JSON list of audit log entries
+            """
+            if not self.access_control_system:
+                return json.dumps({"error": "Access control system not initialized"})
+
+            try:
+                entries = self.access_control_system.get_audit_log(
+                    agent_id=agent_id,
+                    resource_id=resource_id,
+                    hours=hours,
+                    limit=limit
+                )
+
+                return json.dumps({
+                    "count": len(entries),
+                    "filters": {
+                        "agent_id": agent_id,
+                        "resource_id": resource_id,
+                        "hours": hours
+                    },
+                    "entries": entries
+                }, indent=2)
+
+            except Exception as e:
+                logger.error(f"Error viewing audit log: {e}")
+                return json.dumps({"error": str(e)})
+
+        @self.mcp.tool()
+        async def get_agent_info(agent_id: str) -> str:
+            """
+            Get detailed information about a specific agent.
+
+            Args:
+                agent_id: The agent ID to look up
+
+            Returns:
+                JSON with agent details including identity, tags, capabilities, and status
+            """
+            if not self.agent_identity_system:
+                return json.dumps({"error": "Agent identity system not initialized"})
+
+            try:
+                identity = self.agent_identity_system.get_agent(agent_id)
+
+                if identity is None:
+                    return json.dumps({"error": f"Agent not found: {agent_id}"})
+
+                return json.dumps({
+                    "agent_id": identity.agent_id,
+                    "identity_id": identity.identity_id,
+                    "firebase_uid": identity.firebase_uid,
+                    "machine_id": identity.machine_id,
+                    "agent_type": identity.agent_type,
+                    "status": identity.status,
+                    "tags": identity.tags,
+                    "capabilities": identity.capabilities,
+                    "confidentiality_max": identity.confidentiality_max,
+                    "key_fingerprint": identity.key_fingerprint,
+                    "created_at": identity.created_at,
+                    "approved_by": identity.approved_by,
+                    "approved_at": identity.approved_at,
+                    "public_keys": {
+                        "ed25519": identity.public_key_ed25519,
+                        "x25519": identity.public_key_x25519
+                    }
+                }, indent=2)
+
+            except Exception as e:
+                logger.error(f"Error getting agent info: {e}")
+                return json.dumps({"error": str(e)})
+
+        @self.mcp.tool()
+        async def list_all_agents(
+            status_filter: Optional[str] = None,
+            machine_filter: Optional[str] = None
+        ) -> str:
+            """
+            List all registered agents.
+
+            Args:
+                status_filter: Filter by status (pending, approved, active, revoked)
+                machine_filter: Filter by machine ID pattern
+
+            Returns:
+                JSON list of agents
+            """
+            if not self.agent_identity_system:
+                return json.dumps({"error": "Agent identity system not initialized"})
+
+            try:
+                agents = self.agent_identity_system.list_agents(
+                    status_filter=status_filter,
+                    machine_filter=machine_filter
+                )
+
+                return json.dumps({
+                    "count": len(agents),
+                    "filters": {
+                        "status": status_filter,
+                        "machine": machine_filter
+                    },
+                    "agents": [
+                        {
+                            "agent_id": a.agent_id,
+                            "machine_id": a.machine_id,
+                            "agent_type": a.agent_type,
+                            "status": a.status,
+                            "tags": a.tags,
+                            "capabilities": a.capabilities,
+                            "created_at": a.created_at
+                        }
+                        for a in agents
+                    ]
+                }, indent=2)
+
+            except Exception as e:
+                logger.error(f"Error listing agents: {e}")
+                return json.dumps({"error": str(e)})
+
+        logger.info("🔐 Agent authentication tools registered (18 tools)")
 
     def _add_admin_routes(self):
         """Add admin web interface routes"""

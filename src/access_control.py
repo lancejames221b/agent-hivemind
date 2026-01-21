@@ -92,18 +92,43 @@ class AccessGrant:
     updated_at: Optional[str]
     expires_at: Optional[str]
 
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for JSON serialization"""
+        return {
+            "grant_id": self.grant_id,
+            "grant_name": self.grant_name,
+            "description": self.description,
+            "priority": self.priority,
+            "enabled": self.enabled,
+            "source_agents": self.src_agents,
+            "source_tags": self.src_tags,
+            "source_roles": self.src_roles,
+            "source_teams": self.src_teams,
+            "destination_vaults": self.dst_vaults,
+            "destination_memories": self.dst_memories,
+            "destination_agents": self.dst_agents,
+            "destination_resources": self.dst_resources,
+            "permissions": self.permissions,
+            "conditions": self.conditions,
+            "created_by": self.created_by,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+            "expires_at": self.expires_at
+        }
+
 
 @dataclass
 class AccessRequest:
     """Request to check access"""
     agent_id: str
-    agent_tags: List[str]
-    agent_capabilities: List[str]
+    agent_tags: List[str] = field(default_factory=list)
+    agent_capabilities: List[str] = field(default_factory=list)
     agent_roles: List[str] = field(default_factory=list)
     agent_teams: List[str] = field(default_factory=list)
     resource_type: str = ""         # vault, memory, agent, resource
     resource_id: str = ""
-    permission: str = ""
+    permission: Permission = Permission.READ
+    confidentiality_level: ConfidentialityLevel = ConfidentialityLevel.NORMAL
     context: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -113,8 +138,10 @@ class AccessDecision:
     allowed: bool
     grant_matched: Optional[str] = None
     denial_reason: Optional[str] = None
+    reason: Optional[str] = None  # Alias for denial_reason
     conditions_checked: List[str] = field(default_factory=list)
     confidentiality_max: ConfidentialityLevel = ConfidentialityLevel.NORMAL
+    audit_id: Optional[str] = None  # Audit log entry ID
 
 
 class AccessControlSystem:
@@ -259,7 +286,12 @@ class AccessControlSystem:
             logger.error(f"Failed to get grant {grant_id}: {e}")
             return None
 
-    def list_grants(self, enabled_only: bool = True) -> List[AccessGrant]:
+    def list_grants(
+        self,
+        enabled_only: bool = True,
+        include_expired: bool = False,
+        include_disabled: bool = False
+    ) -> List[AccessGrant]:
         """List all grants ordered by priority"""
         try:
             conn = sqlite3.connect(self.db_path)
@@ -272,9 +304,12 @@ class AccessControlSystem:
                        permissions, conditions, created_by, created_at,
                        updated_at, expires_at
                 FROM access_grants
+                WHERE 1=1
             """
-            if enabled_only:
-                query += " WHERE enabled = TRUE"
+            if enabled_only and not include_disabled:
+                query += " AND enabled = TRUE"
+            if not include_expired:
+                query += " AND (expires_at IS NULL OR expires_at > datetime('now'))"
             query += " ORDER BY priority ASC"
 
             cursor.execute(query)
@@ -285,6 +320,107 @@ class AccessControlSystem:
 
         except Exception as e:
             logger.error(f"Failed to list grants: {e}")
+            return []
+
+    def disable_grant(
+        self,
+        grant_id: str,
+        disabled_by: str,
+        reason: str
+    ) -> bool:
+        """Disable an access grant"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                UPDATE access_grants
+                SET enabled = FALSE, updated_at = ?
+                WHERE grant_id = ?
+            """, (datetime.utcnow().isoformat(), grant_id))
+
+            # Log the disable action
+            cursor.execute("""
+                INSERT INTO agent_audit_log (
+                    timestamp, agent_id, action, resource_type, resource_id,
+                    result, denial_reason
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                datetime.utcnow().isoformat(),
+                disabled_by,
+                "DISABLE_GRANT",
+                "grant",
+                grant_id,
+                "success",
+                reason
+            ))
+
+            conn.commit()
+            conn.close()
+
+            logger.info(f"Disabled grant {grant_id} by {disabled_by}: {reason}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to disable grant {grant_id}: {e}")
+            return False
+
+    def get_audit_log(
+        self,
+        agent_id: Optional[str] = None,
+        resource_id: Optional[str] = None,
+        hours: int = 24,
+        limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        """Get access audit log entries"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+
+            cutoff = (datetime.utcnow() - timedelta(hours=hours)).isoformat()
+
+            query = """
+                SELECT audit_id, timestamp, agent_id, action, resource_type,
+                       resource_id, permission_used, grant_matched, result,
+                       denial_reason, machine_id
+                FROM agent_audit_log
+                WHERE timestamp > ?
+            """
+            params = [cutoff]
+
+            if agent_id:
+                query += " AND agent_id = ?"
+                params.append(agent_id)
+
+            if resource_id:
+                query += " AND resource_id = ?"
+                params.append(resource_id)
+
+            query += f" ORDER BY timestamp DESC LIMIT {limit}"
+
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            conn.close()
+
+            return [
+                {
+                    "audit_id": row[0],
+                    "timestamp": row[1],
+                    "agent_id": row[2],
+                    "action": row[3],
+                    "resource_type": row[4],
+                    "resource_id": row[5],
+                    "permission_used": row[6],
+                    "grant_matched": row[7],
+                    "result": row[8],
+                    "denial_reason": row[9],
+                    "machine_id": row[10]
+                }
+                for row in rows
+            ]
+
+        except Exception as e:
+            logger.error(f"Failed to get audit log: {e}")
             return []
 
     def update_grant(
