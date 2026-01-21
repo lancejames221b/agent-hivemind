@@ -421,8 +421,37 @@
     },
     "tls": {
       "enabled": false,
-      "cert_file": "/etc/ssl/haivemind/haivemind.crt",
-      "key_file": "/etc/ssl/haivemind/haivemind.key"
+      "cert_file": "/etc/ssl/haivemind/selfsigned.crt",
+      "key_file": "/etc/ssl/haivemind/selfsigned.key",
+      "use_nginx_proxy": true,
+      "tailscale_serve": {
+        "enabled": true,
+        "endpoint": "https://lance-dev.fin-snares.ts.net:8443",
+        "sse_path": "/sse"
+      },
+      "letsencrypt": {
+        "enabled": false,
+        "domain": "136-116-98-2.nip.io",
+        "cert_path": "/etc/letsencrypt/live/136-116-98-2.nip.io/fullchain.pem",
+        "key_path": "/etc/letsencrypt/live/136-116-98-2.nip.io/privkey.pem"
+      }
+    },
+    "agent_auth": {
+      "enabled": true,
+      "firebase": {
+        "enabled": true,
+        "project_id": "${FIREBASE_PROJECT_ID}",
+        "service_account_path": "${FIREBASE_SERVICE_ACCOUNT_PATH}"
+      },
+      "preauth_keys": {
+        "default_expiry_days": 90,
+        "ephemeral_default": false
+      },
+      "access_control": {
+        "default_deny": true,
+        "audit_all_access": true,
+        "confidentiality_levels": ["public", "normal", "confidential", "secret"]
+      }
     }
   },
   "comet": {

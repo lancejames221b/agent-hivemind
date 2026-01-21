@@ -1222,6 +1222,341 @@ class AgentIdentitySystem:
             logger.error(f"Failed to get audit log: {e}")
             return []
 
+    # ==================== Zero-Knowledge Vault Sharing ====================
+
+    def create_vault_share(
+        self,
+        vault_id: str,
+        recipient_agent_id: str,
+        encrypted_vault_key: str,
+        access_level: str,
+        granted_by: str,
+        expires_at: Optional[str] = None,
+        recipient_firebase_uid: Optional[str] = None
+    ) -> Optional[str]:
+        """
+        Create a vault access share with zero-knowledge encrypted key.
+
+        The encrypted_vault_key is encrypted with the recipient's X25519 public key,
+        so the server never sees the plaintext vault key.
+
+        Args:
+            vault_id: ID of the vault being shared
+            recipient_agent_id: Agent receiving access
+            encrypted_vault_key: Base64-encoded encrypted vault key blob
+            access_level: Access level ('read', 'write', 'admin')
+            granted_by: Agent granting access
+            expires_at: Optional expiration timestamp
+            recipient_firebase_uid: Optional Firebase UID
+
+        Returns:
+            Share ID if successful, None otherwise
+        """
+        try:
+            share_id = f"share_{secrets.token_hex(12)}"
+
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                INSERT INTO vault_access_shares (
+                    share_id, vault_id, recipient_agent_id, recipient_firebase_uid,
+                    encrypted_vault_key, access_level, granted_by, expires_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                share_id, vault_id, recipient_agent_id, recipient_firebase_uid,
+                encrypted_vault_key, access_level, granted_by, expires_at
+            ))
+
+            conn.commit()
+            conn.close()
+
+            # Log audit event
+            self.log_audit_event(
+                agent_id=granted_by,
+                action="create_vault_share",
+                resource_type="vault",
+                resource_id=vault_id,
+                result="success",
+                request_metadata={
+                    "recipient": recipient_agent_id,
+                    "access_level": access_level,
+                    "share_id": share_id
+                }
+            )
+
+            logger.info(f"Created vault share {share_id} for {recipient_agent_id} on vault {vault_id}")
+            return share_id
+
+        except sqlite3.IntegrityError as e:
+            # Likely duplicate share
+            logger.warning(f"Vault share already exists or constraint violated: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Failed to create vault share: {e}")
+            return None
+
+    def get_vault_share(self, share_id: str) -> Optional[Dict[str, Any]]:
+        """Get a specific vault share by ID"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT * FROM vault_access_shares
+                WHERE share_id = ? AND revoked = FALSE
+            """, (share_id,))
+
+            row = cursor.fetchone()
+            conn.close()
+
+            if row:
+                columns = ["share_id", "vault_id", "recipient_agent_id", "recipient_firebase_uid",
+                          "encrypted_vault_key", "access_level", "granted_by", "granted_at",
+                          "expires_at", "revoked"]
+                return dict(zip(columns, row))
+            return None
+
+        except Exception as e:
+            logger.error(f"Failed to get vault share {share_id}: {e}")
+            return None
+
+    def get_vault_shares(
+        self,
+        vault_id: str,
+        include_revoked: bool = False
+    ) -> List[Dict[str, Any]]:
+        """
+        Get all shares for a specific vault.
+
+        Args:
+            vault_id: The vault to query
+            include_revoked: Include revoked shares
+
+        Returns:
+            List of share records
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+
+            query = "SELECT * FROM vault_access_shares WHERE vault_id = ?"
+            params = [vault_id]
+
+            if not include_revoked:
+                query += " AND revoked = FALSE"
+
+            # Check expiration
+            now = datetime.utcnow().isoformat()
+            query += " AND (expires_at IS NULL OR expires_at > ?)"
+            params.append(now)
+
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            columns = [d[0] for d in cursor.description]
+            conn.close()
+
+            return [dict(zip(columns, row)) for row in rows]
+
+        except Exception as e:
+            logger.error(f"Failed to get vault shares for {vault_id}: {e}")
+            return []
+
+    def get_agent_vault_shares(
+        self,
+        agent_id: str,
+        include_revoked: bool = False
+    ) -> List[Dict[str, Any]]:
+        """
+        Get all vault shares for a specific agent (vaults shared with them).
+
+        Args:
+            agent_id: The agent to query
+            include_revoked: Include revoked shares
+
+        Returns:
+            List of share records
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+
+            query = "SELECT * FROM vault_access_shares WHERE recipient_agent_id = ?"
+            params = [agent_id]
+
+            if not include_revoked:
+                query += " AND revoked = FALSE"
+
+            # Check expiration
+            now = datetime.utcnow().isoformat()
+            query += " AND (expires_at IS NULL OR expires_at > ?)"
+            params.append(now)
+
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            columns = [d[0] for d in cursor.description]
+            conn.close()
+
+            return [dict(zip(columns, row)) for row in rows]
+
+        except Exception as e:
+            logger.error(f"Failed to get vault shares for agent {agent_id}: {e}")
+            return []
+
+    def revoke_vault_share(
+        self,
+        share_id: str,
+        revoked_by: str,
+        reason: Optional[str] = None
+    ) -> bool:
+        """
+        Revoke a vault share.
+
+        Args:
+            share_id: The share to revoke
+            revoked_by: Agent revoking the share
+            reason: Optional reason for revocation
+
+        Returns:
+            True if successful
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+
+            # Get share info for audit
+            cursor.execute(
+                "SELECT vault_id, recipient_agent_id FROM vault_access_shares WHERE share_id = ?",
+                (share_id,)
+            )
+            share_info = cursor.fetchone()
+
+            cursor.execute("""
+                UPDATE vault_access_shares
+                SET revoked = TRUE
+                WHERE share_id = ?
+            """, (share_id,))
+
+            conn.commit()
+            conn.close()
+
+            # Log audit event
+            if share_info:
+                self.log_audit_event(
+                    agent_id=revoked_by,
+                    action="revoke_vault_share",
+                    resource_type="vault",
+                    resource_id=share_info[0],
+                    result="success",
+                    request_metadata={
+                        "share_id": share_id,
+                        "recipient": share_info[1],
+                        "reason": reason
+                    }
+                )
+
+            logger.info(f"Revoked vault share {share_id}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to revoke vault share {share_id}: {e}")
+            return False
+
+    def check_vault_access(
+        self,
+        vault_id: str,
+        agent_id: str,
+        required_level: str = "read"
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Check if an agent has access to a vault.
+
+        Args:
+            vault_id: The vault to check
+            agent_id: The agent requesting access
+            required_level: Minimum required access level
+
+        Returns:
+            Tuple of (has_access, encrypted_vault_key or None)
+        """
+        level_hierarchy = {"read": 1, "write": 2, "admin": 3}
+        required = level_hierarchy.get(required_level, 1)
+
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+
+            now = datetime.utcnow().isoformat()
+
+            cursor.execute("""
+                SELECT encrypted_vault_key, access_level
+                FROM vault_access_shares
+                WHERE vault_id = ? AND recipient_agent_id = ?
+                  AND revoked = FALSE
+                  AND (expires_at IS NULL OR expires_at > ?)
+            """, (vault_id, agent_id, now))
+
+            row = cursor.fetchone()
+            conn.close()
+
+            if row:
+                encrypted_key, access_level = row
+                granted = level_hierarchy.get(access_level, 0)
+                if granted >= required:
+                    return True, encrypted_key
+
+            return False, None
+
+        except Exception as e:
+            logger.error(f"Failed to check vault access: {e}")
+            return False, None
+
+    def update_vault_share_key(
+        self,
+        share_id: str,
+        new_encrypted_key: str,
+        updated_by: str
+    ) -> bool:
+        """
+        Update the encrypted vault key for a share (used during key rotation).
+
+        Args:
+            share_id: The share to update
+            new_encrypted_key: New base64-encoded encrypted vault key
+            updated_by: Agent performing the update
+
+        Returns:
+            True if successful
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                UPDATE vault_access_shares
+                SET encrypted_vault_key = ?
+                WHERE share_id = ? AND revoked = FALSE
+            """, (new_encrypted_key, share_id))
+
+            conn.commit()
+            conn.close()
+
+            # Log audit event
+            self.log_audit_event(
+                agent_id=updated_by,
+                action="update_vault_share_key",
+                resource_type="vault_share",
+                resource_id=share_id,
+                result="success"
+            )
+
+            logger.info(f"Updated encrypted key for share {share_id}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to update vault share key: {e}")
+            return False
+
 
 # Singleton instance
 _agent_identity_system: Optional[AgentIdentitySystem] = None

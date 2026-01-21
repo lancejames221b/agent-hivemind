@@ -2292,7 +2292,291 @@ Use `switch_project_context {target_name}` to activate."""
                 logger.error(f"Error listing agents: {e}")
                 return json.dumps({"error": str(e)})
 
-        logger.info("🔐 Agent authentication tools registered (18 tools)")
+        # ============ Zero-Knowledge Vault Sharing Tools ============
+
+        @self.mcp.tool()
+        async def share_vault_with_agent(
+            vault_id: str,
+            recipient_agent_id: str,
+            access_level: str,
+            granted_by: str,
+            expires_hours: Optional[int] = None
+        ) -> str:
+            """
+            Share a vault with another agent using zero-knowledge encryption.
+
+            The vault key is encrypted with the recipient's X25519 public key,
+            so the server never sees the plaintext vault key. The recipient
+            can decrypt using their private key.
+
+            Args:
+                vault_id: ID of the vault to share
+                recipient_agent_id: Agent receiving access
+                access_level: Access level ('read', 'write', 'admin')
+                granted_by: Agent granting access (must have admin access)
+                expires_hours: Optional expiration in hours
+
+            Returns:
+                JSON with share details (share_id, encrypted key needs client-side encryption)
+            """
+            if not self.agent_identity_system:
+                return json.dumps({"error": "Agent identity system not initialized"})
+
+            try:
+                # Get recipient's X25519 public key for encryption
+                recipient = self.agent_identity_system.get_agent(recipient_agent_id)
+                if not recipient:
+                    return json.dumps({"error": f"Recipient agent not found: {recipient_agent_id}"})
+
+                # Calculate expiration
+                from datetime import datetime, timedelta
+                expires_at = None
+                if expires_hours:
+                    expires_at = (datetime.utcnow() + timedelta(hours=expires_hours)).isoformat()
+
+                # Note: In a full implementation, the encrypted_vault_key would be
+                # encrypted client-side using VaultKeySharing.encrypt_vault_key()
+                # with the recipient's X25519 public key. For now, we return a
+                # placeholder indicating the client needs to perform encryption.
+                result = {
+                    "success": True,
+                    "vault_id": vault_id,
+                    "recipient_agent_id": recipient_agent_id,
+                    "recipient_x25519_pubkey": recipient.public_key_x25519,
+                    "access_level": access_level,
+                    "expires_at": expires_at,
+                    "note": "Use VaultKeySharing.encrypt_vault_key() client-side to encrypt the vault key with recipient's X25519 public key, then call complete_vault_share with the encrypted key"
+                }
+
+                return json.dumps(result, indent=2)
+
+            except Exception as e:
+                logger.error(f"Error sharing vault: {e}")
+                return json.dumps({"error": str(e)})
+
+        @self.mcp.tool()
+        async def complete_vault_share(
+            vault_id: str,
+            recipient_agent_id: str,
+            encrypted_vault_key: str,
+            access_level: str,
+            granted_by: str,
+            expires_hours: Optional[int] = None
+        ) -> str:
+            """
+            Complete a vault share with the encrypted vault key.
+
+            This should be called after encrypting the vault key client-side
+            using VaultKeySharing.encrypt_vault_key().
+
+            Args:
+                vault_id: ID of the vault being shared
+                recipient_agent_id: Agent receiving access
+                encrypted_vault_key: Base64-encoded encrypted vault key (from VaultKeySharing)
+                access_level: Access level ('read', 'write', 'admin')
+                granted_by: Agent granting access
+                expires_hours: Optional expiration in hours
+
+            Returns:
+                JSON with share ID and confirmation
+            """
+            if not self.agent_identity_system:
+                return json.dumps({"error": "Agent identity system not initialized"})
+
+            try:
+                from datetime import datetime, timedelta
+                expires_at = None
+                if expires_hours:
+                    expires_at = (datetime.utcnow() + timedelta(hours=expires_hours)).isoformat()
+
+                # Get recipient's Firebase UID
+                recipient = self.agent_identity_system.get_agent(recipient_agent_id)
+                firebase_uid = recipient.firebase_uid if recipient else None
+
+                share_id = self.agent_identity_system.create_vault_share(
+                    vault_id=vault_id,
+                    recipient_agent_id=recipient_agent_id,
+                    encrypted_vault_key=encrypted_vault_key,
+                    access_level=access_level,
+                    granted_by=granted_by,
+                    expires_at=expires_at,
+                    recipient_firebase_uid=firebase_uid
+                )
+
+                if share_id:
+                    return json.dumps({
+                        "success": True,
+                        "share_id": share_id,
+                        "vault_id": vault_id,
+                        "recipient_agent_id": recipient_agent_id,
+                        "access_level": access_level,
+                        "expires_at": expires_at
+                    }, indent=2)
+                else:
+                    return json.dumps({"error": "Failed to create vault share"})
+
+            except Exception as e:
+                logger.error(f"Error completing vault share: {e}")
+                return json.dumps({"error": str(e)})
+
+        @self.mcp.tool()
+        async def list_vault_shares(
+            vault_id: str,
+            include_revoked: bool = False
+        ) -> str:
+            """
+            List all agents who have access to a vault.
+
+            Args:
+                vault_id: The vault to query
+                include_revoked: Include revoked shares
+
+            Returns:
+                JSON list of vault shares
+            """
+            if not self.agent_identity_system:
+                return json.dumps({"error": "Agent identity system not initialized"})
+
+            try:
+                shares = self.agent_identity_system.get_vault_shares(
+                    vault_id=vault_id,
+                    include_revoked=include_revoked
+                )
+
+                # Redact encrypted keys for security
+                sanitized = []
+                for s in shares:
+                    entry = dict(s)
+                    entry["encrypted_vault_key"] = "[REDACTED]"
+                    sanitized.append(entry)
+
+                return json.dumps({
+                    "vault_id": vault_id,
+                    "count": len(sanitized),
+                    "shares": sanitized
+                }, indent=2)
+
+            except Exception as e:
+                logger.error(f"Error listing vault shares: {e}")
+                return json.dumps({"error": str(e)})
+
+        @self.mcp.tool()
+        async def get_my_vault_shares(
+            agent_id: str,
+            include_revoked: bool = False
+        ) -> str:
+            """
+            Get all vaults shared with a specific agent.
+
+            Args:
+                agent_id: The agent to query
+                include_revoked: Include revoked shares
+
+            Returns:
+                JSON list of vault shares with encrypted keys
+            """
+            if not self.agent_identity_system:
+                return json.dumps({"error": "Agent identity system not initialized"})
+
+            try:
+                shares = self.agent_identity_system.get_agent_vault_shares(
+                    agent_id=agent_id,
+                    include_revoked=include_revoked
+                )
+
+                return json.dumps({
+                    "agent_id": agent_id,
+                    "count": len(shares),
+                    "shares": shares
+                }, indent=2)
+
+            except Exception as e:
+                logger.error(f"Error getting agent vault shares: {e}")
+                return json.dumps({"error": str(e)})
+
+        @self.mcp.tool()
+        async def revoke_vault_share(
+            share_id: str,
+            revoked_by: str,
+            reason: Optional[str] = None
+        ) -> str:
+            """
+            Revoke an agent's access to a vault.
+
+            Args:
+                share_id: The share ID to revoke
+                revoked_by: Agent performing the revocation
+                reason: Optional reason for revocation
+
+            Returns:
+                JSON with revocation status
+            """
+            if not self.agent_identity_system:
+                return json.dumps({"error": "Agent identity system not initialized"})
+
+            try:
+                success = self.agent_identity_system.revoke_vault_share(
+                    share_id=share_id,
+                    revoked_by=revoked_by,
+                    reason=reason
+                )
+
+                return json.dumps({
+                    "success": success,
+                    "share_id": share_id,
+                    "revoked_by": revoked_by,
+                    "reason": reason
+                })
+
+            except Exception as e:
+                logger.error(f"Error revoking vault share: {e}")
+                return json.dumps({"error": str(e)})
+
+        @self.mcp.tool()
+        async def check_vault_access(
+            vault_id: str,
+            agent_id: str,
+            required_level: str = "read"
+        ) -> str:
+            """
+            Check if an agent has access to a vault and get their encrypted key.
+
+            Args:
+                vault_id: The vault to check
+                agent_id: The agent requesting access
+                required_level: Minimum required access level ('read', 'write', 'admin')
+
+            Returns:
+                JSON with access status and encrypted vault key if authorized
+            """
+            if not self.agent_identity_system:
+                return json.dumps({"error": "Agent identity system not initialized"})
+
+            try:
+                has_access, encrypted_key = self.agent_identity_system.check_vault_access(
+                    vault_id=vault_id,
+                    agent_id=agent_id,
+                    required_level=required_level
+                )
+
+                result = {
+                    "vault_id": vault_id,
+                    "agent_id": agent_id,
+                    "has_access": has_access,
+                    "required_level": required_level
+                }
+
+                if has_access and encrypted_key:
+                    result["encrypted_vault_key"] = encrypted_key
+                    result["note"] = "Decrypt with VaultKeySharing.decrypt_vault_key() using your X25519 private key"
+
+                return json.dumps(result, indent=2)
+
+            except Exception as e:
+                logger.error(f"Error checking vault access: {e}")
+                return json.dumps({"error": str(e)})
+
+        logger.info("🔐 Agent authentication tools registered (24 tools including 6 vault sharing)")
 
     def _add_admin_routes(self):
         """Add admin web interface routes"""
