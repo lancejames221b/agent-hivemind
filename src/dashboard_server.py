@@ -100,8 +100,12 @@ class DashboardServer:
             allow_headers=["*"],
         )
         
-        # JWT configuration
-        self.jwt_secret = os.environ.get('HAIVEMIND_JWT_SECRET', 'change-this-secret-key')
+        # JWT configuration - require explicit configuration
+        self.jwt_secret = os.environ.get('HAIVEMIND_JWT_SECRET')
+        if not self.jwt_secret or len(self.jwt_secret) < 32:
+            logger.warning("HAIVEMIND_JWT_SECRET not set or too short (min 32 chars) - generating random secret")
+            import secrets
+            self.jwt_secret = secrets.token_hex(32)
         
         # Setup Jinja2 templates
         self.templates = jinja2.Environment(

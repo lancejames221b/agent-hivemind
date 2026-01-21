@@ -1071,8 +1071,27 @@ class MemoryStorage:
         """Import conversation from a file"""
         try:
             # Expand user path and make absolute
-            file_path = str(Path(file_path).expanduser().resolve())
-            
+            resolved_path = Path(file_path).expanduser().resolve()
+
+            # Security: Validate path is within allowed directories
+            allowed_bases = [
+                Path.home(),
+                Path('/tmp'),
+                Path('/data'),
+            ]
+            path_allowed = any(
+                str(resolved_path).startswith(str(base.resolve()))
+                for base in allowed_bases if base.exists()
+            )
+            if not path_allowed:
+                raise PermissionError(f"Access denied: {file_path} is outside allowed directories")
+
+            # Security: Block path traversal attempts
+            if '..' in str(file_path):
+                raise PermissionError(f"Path traversal detected: {file_path}")
+
+            file_path = str(resolved_path)
+
             # Check if file exists
             if not Path(file_path).exists():
                 raise FileNotFoundError(f"File not found: {file_path}")

@@ -580,9 +580,16 @@ class DisasterRecoverySystem:
             return True
         
         try:
-            # Use rsync or similar for file synchronization
-            command = f"rsync -av {source_path} {dest_path}"
-            result = subprocess.run(command, shell=True, capture_output=True, text=True)
+            # Use rsync for file synchronization (secure: no shell=True)
+            import shlex
+            # Validate paths don't contain shell metacharacters
+            if not all(c.isalnum() or c in '/_.-' for c in str(source_path) + str(dest_path)):
+                logger.error(f"❌ Invalid characters in path: {source_path} or {dest_path}")
+                return False
+            result = subprocess.run(
+                ["/usr/bin/rsync", "-av", str(source_path), str(dest_path)],
+                capture_output=True, text=True, timeout=300
+            )
             return result.returncode == 0
             
         except Exception as e:
@@ -621,7 +628,15 @@ class DisasterRecoverySystem:
         
         try:
             if host == 'localhost':
-                result = subprocess.run(script_path, shell=True, capture_output=True, text=True)
+                # Security: Validate script path and use list syntax
+                script_path = str(script_path)
+                if not script_path.startswith('/') or '..' in script_path:
+                    logger.error(f"❌ Invalid script path: {script_path}")
+                    return False
+                result = subprocess.run(
+                    ["/bin/bash", script_path],
+                    capture_output=True, text=True, timeout=300
+                )
                 return result.returncode == 0
             else:
                 # Execute on remote host via SSH

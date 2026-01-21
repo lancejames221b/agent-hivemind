@@ -41,6 +41,23 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Security: Whitelist of allowed service names for systemctl operations
+ALLOWED_SERVICES = {
+    'nginx', 'redis', 'redis-server', 'postgresql', 'mysql', 'mariadb',
+    'elasticsearch', 'kibana', 'grafana-server', 'prometheus',
+    'haivemind-remote-mcp', 'haivemind-sync', 'docker',
+}
+
+def validate_service_name(service: str) -> bool:
+    """Validate service name against whitelist and pattern"""
+    import re
+    if service in ALLOWED_SERVICES:
+        return True
+    # Allow only alphanumeric, hyphen, underscore
+    if not re.match(r'^[a-zA-Z0-9_-]+$', service):
+        return False
+    return False  # Strict: only whitelist for now
+
 class RemoteMemoryMCPServer:
     """Remote MCP Server using FastMCP for HTTP/SSE transport"""
     
@@ -6095,13 +6112,17 @@ server {
                 shutil.copy2(str(source_file), str(target_file))
                 deployment_log.append(f"✅ Configuration deployed to: {target_path}")
                 
-                # Restart services if specified
+                # Restart services if specified (with validation)
                 service_results = []
                 if restart_services:
                     for service in restart_services:
+                        # Security: Validate service name before execution
+                        if not validate_service_name(service):
+                            service_results.append(f"❌ {service} not in allowed services whitelist")
+                            continue
                         try:
                             result = subprocess.run(
-                                ["systemctl", "restart", service],
+                                ["/usr/bin/systemctl", "restart", service],
                                 capture_output=True, text=True, timeout=30
                             )
                             if result.returncode == 0:
