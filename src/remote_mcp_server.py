@@ -163,6 +163,9 @@ class RemoteMemoryMCPServer:
         # Register vault sync MCP tools for SSE clients
         self._register_vault_sync_tools()
 
+        # Register skills.sh integration tools
+        self._register_skills_sh_tools()
+
         # Initialize agent authentication system
         self._init_agent_auth_system()
 
@@ -4713,6 +4716,167 @@ function load(id) {
         self.mcp.add_tool(self.sync_vault_from_server)
         self.mcp.add_tool(self.detect_mcp_service)
         logger.info("📦 Vault sync MCP tools registered (including detect_mcp_service)")
+
+    def _register_skills_sh_tools(self):
+        """Register skills.sh integration tools with FastMCP"""
+        self.mcp.add_tool(self.search_skills_sh)
+        self.mcp.add_tool(self.install_skill_from_skills_sh)
+        self.mcp.add_tool(self.list_installed_skills)
+        self.mcp.add_tool(self.sync_skill_to_vault)
+        self.mcp.add_tool(self.recommend_skills)
+        logger.info("🎯 Skills.sh MCP tools registered (5 tools)")
+
+    async def search_skills_sh(self, query: str, limit: int = 10) -> str:
+        """Search skills.sh directory for available AI agent skills.
+
+        skills.sh is an open ecosystem of reusable capabilities for AI agents.
+        Search for skills by topic, technology, or use case.
+
+        Args:
+            query: Search term (e.g., "react", "security", "testing", "kubernetes")
+            limit: Maximum results to return (default 10)
+
+        Returns:
+            JSON list of matching skills with install commands
+        """
+        try:
+            from skills_sh_integration import get_skills_sh_integration
+            integration = get_skills_sh_integration()
+            results = integration.search_skills(query, limit)
+            return json.dumps({
+                "success": True,
+                "query": query,
+                "skills": results,
+                "install_hint": "Use install_skill_from_skills_sh to install a skill"
+            }, indent=2)
+        except Exception as e:
+            logger.error(f"Skills.sh search failed: {e}")
+            return json.dumps({
+                "success": False,
+                "error": str(e),
+                "fallback": f"Visit https://skills.sh and search for '{query}'"
+            })
+
+    async def install_skill_from_skills_sh(
+        self,
+        skill_id: str,
+        target_tool: str = "claude",
+        sync_to_vault: bool = True
+    ) -> str:
+        """Install a skill from skills.sh directory.
+
+        Uses `npx skills add <owner/repo>` to install skills.
+        Optionally syncs to hAIveMind vault for team distribution.
+
+        Args:
+            skill_id: Skill identifier in owner/repo format (e.g., "vercel/next-learn")
+            target_tool: Target tool (claude, cursor, kilo, cline, codex)
+            sync_to_vault: Whether to sync installed skill to hAIveMind vault
+
+        Returns:
+            JSON with installation result and skill location
+        """
+        try:
+            from skills_sh_integration import get_skills_sh_integration
+            integration = get_skills_sh_integration()
+            result = integration.install_skill(skill_id, target_tool)
+
+            # Sync to vault if requested and successful
+            if sync_to_vault and result.get("success") and result.get("skill_path"):
+                sync_result = integration.sync_skill_to_haivemind(result["skill_path"])
+                result["vault_sync"] = sync_result
+
+            return json.dumps(result, indent=2)
+        except Exception as e:
+            logger.error(f"Skill installation failed: {e}")
+            return json.dumps({
+                "success": False,
+                "skill_id": skill_id,
+                "error": str(e),
+                "manual_install": f"npx skills add {skill_id}"
+            })
+
+    async def list_installed_skills(self, tool: str = None) -> str:
+        """List skills installed locally and in hAIveMind vault.
+
+        Args:
+            tool: Specific tool to check (claude, cursor, etc.) or None for all
+
+        Returns:
+            JSON with installed skills by tool and vault skills
+        """
+        try:
+            from skills_sh_integration import get_skills_sh_integration
+            integration = get_skills_sh_integration()
+
+            # Get local skills
+            local_skills = integration.get_installed_skills(tool)
+
+            # Get vault skills
+            vault_skills = integration.get_vault_skills()
+
+            return json.dumps({
+                "success": True,
+                "local_skills": local_skills,
+                "vault_skills": vault_skills,
+                "tip": "Use sync_skill_to_vault to share a local skill with your team"
+            }, indent=2)
+        except Exception as e:
+            logger.error(f"Failed to list skills: {e}")
+            return json.dumps({
+                "success": False,
+                "error": str(e)
+            })
+
+    async def sync_skill_to_vault(self, skill_path: str) -> str:
+        """Sync an installed skill to hAIveMind vault for team distribution.
+
+        Args:
+            skill_path: Path to the skill file to sync
+
+        Returns:
+            JSON with sync result
+        """
+        try:
+            from skills_sh_integration import get_skills_sh_integration
+            integration = get_skills_sh_integration()
+            result = integration.sync_skill_to_haivemind(skill_path)
+            return json.dumps(result, indent=2)
+        except Exception as e:
+            logger.error(f"Failed to sync skill: {e}")
+            return json.dumps({
+                "success": False,
+                "error": str(e)
+            })
+
+    async def recommend_skills(self, context: str) -> str:
+        """Get skill recommendations based on current task/context.
+
+        Analyzes context to suggest relevant skills from skills.sh.
+
+        Args:
+            context: Description of current task or what you're working on
+
+        Returns:
+            JSON list of recommended skills with relevance info
+        """
+        try:
+            from skills_sh_integration import get_skills_sh_integration
+            integration = get_skills_sh_integration()
+            recommendations = integration.recommend_skills(context)
+            return json.dumps({
+                "success": True,
+                "context": context,
+                "recommendations": recommendations,
+                "tip": "Check https://skills.sh for more options"
+            }, indent=2)
+        except Exception as e:
+            logger.error(f"Skill recommendation failed: {e}")
+            return json.dumps({
+                "success": False,
+                "error": str(e),
+                "fallback": f"Visit https://skills.sh to browse skills"
+            })
 
     def _init_vault_api(self):
         """Initialize Vault Dashboard API endpoints"""

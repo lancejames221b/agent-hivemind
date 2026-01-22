@@ -7,18 +7,22 @@ A distributed multi-agent DevOps memory system implementing the Model Context Pr
 - **Persistent Memory Storage**: ChromaDB-backed vector storage with Redis caching
 - **Multi-Agent Coordination**: Register agents, delegate tasks, and share discoveries across the collective
 - **Teams & Vaults**: Secure collaborative workspaces with encrypted secret management
+- **Zero-Knowledge Vault Sharing**: X25519 key exchange for secure vault key distribution
+- **Skills.sh Integration**: Discover and install reusable AI agent capabilities from skills.sh
 - **Confidentiality Controls**: PII/confidential data protection with sync/broadcast filtering
 - **Token-Optimized Format**: 60-80% token reduction with v2 format system
-- **Remote Access**: HTTP/SSE server for MCP clients over secure networks
-- **126+ MCP Tools**: Comprehensive DevOps tooling for infrastructure, deployment, and monitoring
+- **Remote Access**: HTTP/SSE server for MCP clients with HTTPS/Tailscale Serve support
+- **Agent Authentication**: Firebase-backed identity with pre-auth keys and capabilities
+- **130+ MCP Tools**: Comprehensive DevOps tooling for infrastructure, deployment, and monitoring
 - **Configuration Management**: Drift detection, snapshots, and intelligent alerting
 - **Disaster Recovery**: Automated backups, failover, and chaos engineering support
 
 ## Version
 
-**Current Release: v2.1.5**
+**Current Release: v2.2.0**
 
 ### Recent Changes
+- v2.2.0: Skills.sh integration, zero-knowledge vault sharing, HTTPS/Tailscale Serve support, agent authentication system
 - v2.1.5: Fixed PII protection MCP tool exposure, comprehensive README update
 - v2.1.4: PII/Confidential memory protection system
 - v2.1.3: Agents directory support in vault system
@@ -173,6 +177,15 @@ Copy `config/config.example.json` to `config/config.json`:
 | `add_ticket_comment` | Add comments |
 | `get_ticket_metrics` | Analytics |
 
+### Skills.sh Integration
+| Tool | Description |
+|------|-------------|
+| `search_skills_sh` | Search skills.sh directory for AI capabilities |
+| `install_skill_from_skills_sh` | Install skill with vault sync |
+| `list_installed_skills` | List local and vault skills |
+| `sync_skill_to_vault` | Share skill with team via vault |
+| `recommend_skills` | Context-aware skill recommendations |
+
 ### External Integrations
 | Tool | Description |
 |------|-------------|
@@ -231,6 +244,25 @@ broadcast_discovery(
     category="infrastructure",
     severity="warning"
 )
+```
+
+### Skills.sh Integration
+```python
+# Search for skills
+search_skills_sh(query="kubernetes deployment")
+
+# Install a skill and sync to vault
+install_skill_from_skills_sh(
+    skill_id="vercel/next-learn",
+    target_tool="claude",
+    sync_to_vault=True
+)
+
+# List all installed skills
+list_installed_skills()
+
+# Get context-aware recommendations
+recommend_skills(context="Building a React app with authentication")
 ```
 
 ### Configuration Drift Detection
