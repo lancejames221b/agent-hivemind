@@ -19,9 +19,10 @@ A distributed multi-agent DevOps memory system implementing the Model Context Pr
 
 ## Version
 
-**Current Release: v2.2.0**
+**Current Release: v2.3.0**
 
 ### Recent Changes
+- v2.3.0: Secure admin bootstrap system with vault-based credentials, hardcoded password removal, complete API v1 endpoints for vault operations
 - v2.2.0: Skills.sh integration, zero-knowledge vault sharing, HTTPS/Tailscale Serve support, agent authentication system
 - v2.1.5: Fixed PII protection MCP tool exposure, comprehensive README update
 - v2.1.4: PII/Confidential memory protection system

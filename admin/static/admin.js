@@ -224,7 +224,7 @@ async function handleLogin(event) {
 }
 
 // Legacy function names for backward compatibility
-const authenticatedFetch = fetchWithAuth;
+// (authenticatedFetch already declared above)
 
 // Show toast notifications
 function showToast(message, type = 'info') {

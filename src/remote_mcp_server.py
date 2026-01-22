@@ -7,6 +7,7 @@ Provides remote access to the agent hivemind via MCP protocol
 import asyncio
 import json
 import logging
+import os
 import sys
 import time
 import uuid
@@ -41,8 +42,14 @@ try:
     from firebase_auth import get_firebase_auth, FirebaseAgentAuth
     AGENT_AUTH_AVAILABLE = True
 except ImportError as e:
-    logger.warning(f"Agent auth system not available: {e}")
     AGENT_AUTH_AVAILABLE = False
+
+# Admin Bootstrap System import
+try:
+    from admin_bootstrap import AdminBootstrap, get_admin_bootstrap
+    ADMIN_BOOTSTRAP_AVAILABLE = True
+except ImportError:
+    ADMIN_BOOTSTRAP_AVAILABLE = False
 
 # Setup logging
 logging.basicConfig(
@@ -174,7 +181,10 @@ class RemoteMemoryMCPServer:
 
         # Initialize dashboard functionality
         self._init_dashboard_functionality()
-        
+
+        # Initialize admin bootstrap system for secure credential management
+        self._init_admin_bootstrap()
+
         # Track server start time for uptime calculation
         # _start_time already set as datetime above
         
@@ -4179,8 +4189,17 @@ function load(id) {
                 data = await request.json()
                 username = data.get('username')
                 password = data.get('password')
-                
-                if self.auth.validate_admin_login(username, password):
+
+                # Try bootstrap authentication first (new secure system)
+                auth_success = False
+                if self.admin_bootstrap and self.admin_system_initialized:
+                    auth_success = self.admin_bootstrap.verify_admin_password(password)
+
+                # Fall back to legacy auth if bootstrap not available
+                if not auth_success and not (self.admin_bootstrap and self.admin_system_initialized):
+                    auth_success = self.auth.validate_admin_login(username, password)
+
+                if auth_success:
                     token = self.auth.generate_jwt_token({
                         'username': username,
                         'role': 'admin'
@@ -4198,8 +4217,17 @@ function load(id) {
                 data = await request.json()
                 username = data.get('username')
                 password = data.get('password')
-                
-                if self.auth.validate_admin_login(username, password):
+
+                # Try bootstrap authentication first (new secure system)
+                auth_success = False
+                if self.admin_bootstrap and self.admin_system_initialized:
+                    auth_success = self.admin_bootstrap.verify_admin_password(password)
+
+                # Fall back to legacy auth if bootstrap not available
+                if not auth_success and not (self.admin_bootstrap and self.admin_system_initialized):
+                    auth_success = self.auth.validate_admin_login(username, password)
+
+                if auth_success:
                     token = self.auth.generate_jwt_token({
                         'username': username,
                         'role': 'admin'
@@ -4210,16 +4238,240 @@ function load(id) {
             except Exception as e:
                 return JSONResponse({"error": str(e)}, status_code=500)
         
+        # ===== ADMIN SETUP ENDPOINTS (for first-run initialization) =====
+
+        @self.mcp.custom_route("/admin/api/setup/status", methods=["GET"])
+        async def setup_status(request):
+            """Check if admin system needs initialization"""
+            try:
+                if not ADMIN_BOOTSTRAP_AVAILABLE:
+                    return JSONResponse({
+                        "initialized": True,
+                        "mode": "legacy",
+                        "message": "Using legacy authentication"
+                    })
+
+                if self.admin_bootstrap and self.admin_bootstrap.is_initialized():
+                    return JSONResponse({
+                        "initialized": True,
+                        "mode": "bootstrap",
+                        "message": "Admin system ready"
+                    })
+                else:
+                    return JSONResponse({
+                        "initialized": False,
+                        "mode": "bootstrap",
+                        "message": "First-run setup required"
+                    })
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+
+        @self.mcp.custom_route("/admin/api/setup/initialize", methods=["POST"])
+        async def setup_initialize(request):
+            """Initialize the admin system (first-run only)"""
+            try:
+                if not ADMIN_BOOTSTRAP_AVAILABLE:
+                    return JSONResponse({
+                        "error": "Admin bootstrap system not available"
+                    }, status_code=500)
+
+                if self.admin_bootstrap and self.admin_bootstrap.is_initialized():
+                    return JSONResponse({
+                        "error": "System already initialized"
+                    }, status_code=400)
+
+                data = await request.json()
+                admin_username = data.get('admin_username', 'admin')
+
+                # Initialize the system
+                result = self.admin_bootstrap.initialize_system(admin_username)
+
+                # Reload credentials
+                self.admin_bootstrap.load_credentials()
+                self.admin_system_initialized = True
+
+                return JSONResponse({
+                    "status": "initialized",
+                    "message": "SAVE THESE CREDENTIALS - SHOWN ONLY ONCE!",
+                    "credentials": result.get('credentials', {}),
+                    "bootstrap_key": result.get('bootstrap_key'),
+                    "instructions": result.get('instructions', [])
+                })
+
+            except Exception as e:
+                logger.error(f"Setup initialization failed: {e}")
+                return JSONResponse({"error": str(e)}, status_code=500)
+
+        @self.mcp.custom_route("/admin/setup", methods=["GET"])
+        async def setup_page(request):
+            """Serve the first-run setup page"""
+            return HTMLResponse("""
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>hAIveMind Setup</title>
+                <link rel="stylesheet" href="/admin/static/admin.css">
+                <style>
+                    .setup-container { max-width: 600px; margin: 50px auto; padding: 30px; }
+                    .credentials-box { background: #1a1a2e; padding: 20px; border-radius: 8px; margin: 20px 0; }
+                    .credential-item { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #333; }
+                    .credential-value { font-family: monospace; color: #00ff00; word-break: break-all; }
+                    .warning { background: #ff6b35; color: white; padding: 15px; border-radius: 5px; margin: 20px 0; }
+                    .btn-primary { background: #4a90d9; color: white; padding: 12px 24px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; }
+                    .btn-primary:hover { background: #357abd; }
+                    .btn-primary:disabled { background: #666; cursor: not-allowed; }
+                    .hidden { display: none; }
+                    .status-message { padding: 10px; border-radius: 5px; margin: 10px 0; }
+                    .status-success { background: #2d5a3d; color: #9fffb0; }
+                    .status-error { background: #5a2d2d; color: #ff9f9f; }
+                </style>
+            </head>
+            <body class="dashboard">
+                <div class="setup-container">
+                    <h1>hAIveMind Initial Setup</h1>
+
+                    <div id="status-checking">
+                        <p>Checking system status...</p>
+                    </div>
+
+                    <div id="already-initialized" class="hidden">
+                        <p>System is already initialized.</p>
+                        <a href="/admin/login.html" class="btn-primary">Go to Login</a>
+                    </div>
+
+                    <div id="setup-form" class="hidden">
+                        <p>This is the first-run setup. Click below to generate secure admin credentials.</p>
+
+                        <div class="warning">
+                            <strong>Warning:</strong> The credentials shown after setup will only be displayed ONCE.
+                            Make sure to save them in a secure location!
+                        </div>
+
+                        <form id="initForm">
+                            <div style="margin: 20px 0;">
+                                <label for="adminUsername">Admin Username:</label>
+                                <input type="text" id="adminUsername" value="admin" style="width: 100%; padding: 10px; margin-top: 5px;">
+                            </div>
+                            <button type="submit" class="btn-primary" id="initBtn">Initialize Admin System</button>
+                        </form>
+                    </div>
+
+                    <div id="credentials-display" class="hidden">
+                        <h2>Setup Complete!</h2>
+
+                        <div class="warning">
+                            <strong>SAVE THESE CREDENTIALS NOW!</strong><br>
+                            They will NOT be shown again. Store them in a secure password manager.
+                        </div>
+
+                        <div class="credentials-box">
+                            <div class="credential-item">
+                                <span>Admin Username:</span>
+                                <span class="credential-value" id="cred-username"></span>
+                            </div>
+                            <div class="credential-item">
+                                <span>Admin Password:</span>
+                                <span class="credential-value" id="cred-password"></span>
+                            </div>
+                            <div class="credential-item">
+                                <span>Admin API Token:</span>
+                                <span class="credential-value" id="cred-admin-token"></span>
+                            </div>
+                            <div class="credential-item">
+                                <span>Bootstrap Key:</span>
+                                <span class="credential-value" id="cred-bootstrap"></span>
+                            </div>
+                        </div>
+
+                        <p>After saving your credentials, proceed to login:</p>
+                        <a href="/admin/login.html" class="btn-primary">Go to Login</a>
+                    </div>
+
+                    <div id="status-message" class="status-message hidden"></div>
+                </div>
+
+                <script>
+                    async function checkStatus() {
+                        try {
+                            const response = await fetch('/admin/api/setup/status');
+                            const data = await response.json();
+
+                            document.getElementById('status-checking').classList.add('hidden');
+
+                            if (data.initialized) {
+                                document.getElementById('already-initialized').classList.remove('hidden');
+                            } else {
+                                document.getElementById('setup-form').classList.remove('hidden');
+                            }
+                        } catch (error) {
+                            showError('Failed to check system status: ' + error.message);
+                        }
+                    }
+
+                    document.getElementById('initForm').addEventListener('submit', async function(e) {
+                        e.preventDefault();
+                        const btn = document.getElementById('initBtn');
+                        btn.disabled = true;
+                        btn.textContent = 'Initializing...';
+
+                        try {
+                            const response = await fetch('/admin/api/setup/initialize', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    admin_username: document.getElementById('adminUsername').value
+                                })
+                            });
+
+                            const data = await response.json();
+
+                            if (response.ok && data.credentials) {
+                                // Display credentials
+                                document.getElementById('cred-username').textContent = data.credentials.admin_username;
+                                document.getElementById('cred-password').textContent = data.credentials.admin_password;
+                                document.getElementById('cred-admin-token').textContent = data.credentials.admin_token;
+                                document.getElementById('cred-bootstrap').textContent = data.bootstrap_key;
+
+                                document.getElementById('setup-form').classList.add('hidden');
+                                document.getElementById('credentials-display').classList.remove('hidden');
+                            } else {
+                                showError(data.error || 'Setup failed');
+                                btn.disabled = false;
+                                btn.textContent = 'Initialize Admin System';
+                            }
+                        } catch (error) {
+                            showError('Setup failed: ' + error.message);
+                            btn.disabled = false;
+                            btn.textContent = 'Initialize Admin System';
+                        }
+                    });
+
+                    function showError(message) {
+                        const el = document.getElementById('status-message');
+                        el.textContent = message;
+                        el.classList.remove('hidden', 'status-success');
+                        el.classList.add('status-error');
+                    }
+
+                    // Check status on load
+                    checkStatus();
+                </script>
+            </body>
+            </html>
+            """)
+
         # Token verification
         @self.mcp.custom_route("/admin/api/verify", methods=["GET"])
         async def verify_token(request):
             auth_header = request.headers.get('Authorization')
             if not auth_header or not auth_header.startswith('Bearer '):
                 return JSONResponse({"error": "No token provided"}, status_code=401)
-            
+
             token = auth_header.split(' ')[1]
             valid, payload = self.auth.validate_jwt_token(token)
-            
+
             if valid:
                 return JSONResponse({"status": "valid", "user": payload})
             else:
@@ -4920,12 +5172,12 @@ function load(id) {
                     master_password = data.get('master_password')
                     remember_session = data.get('remember_session', False)
                     
-                    # Simple vault unlock - in production this would verify against encrypted master key
-                    if master_password == "admin123":  # Demo password - should be encrypted in production
+                    # Verify vault master password using bootstrap system
+                    if self._verify_vault_master_password(master_password):
                         self.vault_unlocked = True
                         session_duration = 3600 if remember_session else 1800  # 1 hour or 30 min
                         self.vault_session_expires = datetime.now() + timedelta(seconds=session_duration)
-                        
+
                         return JSONResponse({
                             "success": True,
                             "message": "Vault unlocked successfully",
@@ -4937,7 +5189,150 @@ function load(id) {
                 except Exception as e:
                     logger.error(f"Error unlocking vault: {e}")
                     return JSONResponse({"error": str(e)}, status_code=500)
-            
+
+            # API v1 vault unlock endpoint (alias for vault.html compatibility)
+            @self.mcp.custom_route("/api/v1/vault/unlock", methods=["POST"])
+            async def api_v1_vault_unlock(request):
+                from starlette.responses import JSONResponse
+                if not await self._check_admin_auth(request):
+                    return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+                try:
+                    data = await request.json()
+                    master_password = data.get('master_password') or data.get('password')
+                    remember_session = data.get('remember_session', False)
+
+                    # Verify vault master password using bootstrap system
+                    if self._verify_vault_master_password(master_password):
+                        self.vault_unlocked = True
+                        session_duration = 3600 if remember_session else 1800
+                        self.vault_session_expires = datetime.now() + timedelta(seconds=session_duration)
+
+                        return JSONResponse({
+                            "success": True,
+                            "message": "Vault unlocked successfully",
+                            "session_expires": self.vault_session_expires.isoformat()
+                        })
+                    else:
+                        return JSONResponse({"error": "Invalid master password"}, status_code=401)
+
+                except Exception as e:
+                    logger.error(f"Error unlocking vault (v1 API): {e}")
+                    return JSONResponse({"error": str(e)}, status_code=500)
+
+            # API v1 vault credentials endpoints (for vault.js compatibility)
+            @self.mcp.custom_route("/api/v1/vault/credentials", methods=["GET"])
+            async def api_v1_list_credentials(request):
+                from starlette.responses import JSONResponse
+                if not await self._check_admin_auth(request):
+                    return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+                try:
+                    if not self._check_vault_unlocked():
+                        return JSONResponse({"error": "Vault is locked"}, status_code=403)
+
+                    credentials = self._list_credentials()
+                    return JSONResponse({
+                        "credentials": credentials,
+                        "total": len(credentials)
+                    })
+                except Exception as e:
+                    logger.error(f"Error listing credentials (v1 API): {e}")
+                    return JSONResponse({"error": str(e)}, status_code=500)
+
+            @self.mcp.custom_route("/api/v1/vault/credentials", methods=["POST"])
+            async def api_v1_create_credential(request):
+                from starlette.responses import JSONResponse
+                if not await self._check_admin_auth(request):
+                    return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+                try:
+                    if not self._check_vault_unlocked():
+                        return JSONResponse({"error": "Vault is locked"}, status_code=403)
+
+                    data = await request.json()
+                    credential_id = self._create_credential(data)
+
+                    await self.storage.store_memory(
+                        content=f"Vault credential created: {data.get('name')} ({data.get('type')})",
+                        category="security",
+                        context="Vault credential management",
+                        tags=["vault", "credential", "security"]
+                    )
+
+                    return JSONResponse({
+                        "success": True,
+                        "credential_id": credential_id,
+                        "message": "Credential created successfully"
+                    })
+                except Exception as e:
+                    logger.error(f"Error creating credential (v1 API): {e}")
+                    return JSONResponse({"error": str(e)}, status_code=500)
+
+            @self.mcp.custom_route("/api/v1/vault/credentials/{credential_id}", methods=["GET"])
+            async def api_v1_get_credential(request):
+                from starlette.responses import JSONResponse
+                if not await self._check_admin_auth(request):
+                    return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+                try:
+                    if not self._check_vault_unlocked():
+                        return JSONResponse({"error": "Vault is locked"}, status_code=403)
+
+                    credential_id = request.path_params.get('credential_id')
+                    credential = self._get_credential(credential_id)
+
+                    if not credential:
+                        return JSONResponse({"error": "Credential not found"}, status_code=404)
+
+                    return JSONResponse({"credential": credential})
+                except Exception as e:
+                    logger.error(f"Error getting credential (v1 API): {e}")
+                    return JSONResponse({"error": str(e)}, status_code=500)
+
+            @self.mcp.custom_route("/api/v1/vault/credentials/{credential_id}", methods=["PUT"])
+            async def api_v1_update_credential(request):
+                from starlette.responses import JSONResponse
+                if not await self._check_admin_auth(request):
+                    return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+                try:
+                    if not self._check_vault_unlocked():
+                        return JSONResponse({"error": "Vault is locked"}, status_code=403)
+
+                    credential_id = request.path_params.get('credential_id')
+                    data = await request.json()
+                    self._update_credential(credential_id, data)
+
+                    return JSONResponse({
+                        "success": True,
+                        "message": "Credential updated successfully"
+                    })
+                except Exception as e:
+                    logger.error(f"Error updating credential (v1 API): {e}")
+                    return JSONResponse({"error": str(e)}, status_code=500)
+
+            @self.mcp.custom_route("/api/v1/vault/credentials/{credential_id}", methods=["DELETE"])
+            async def api_v1_delete_credential(request):
+                from starlette.responses import JSONResponse
+                if not await self._check_admin_auth(request):
+                    return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+                try:
+                    if not self._check_vault_unlocked():
+                        return JSONResponse({"error": "Vault is locked"}, status_code=403)
+
+                    credential_id = request.path_params.get('credential_id')
+                    self._delete_credential(credential_id)
+
+                    return JSONResponse({
+                        "success": True,
+                        "message": "Credential deleted successfully"
+                    })
+                except Exception as e:
+                    logger.error(f"Error deleting credential (v1 API): {e}")
+                    return JSONResponse({"error": str(e)}, status_code=500)
+
             @self.mcp.custom_route("/admin/api/vault/credentials", methods=["GET"])
             async def list_credentials(request):
                 from starlette.responses import JSONResponse
@@ -7202,10 +7597,76 @@ function load(id) {
             self._add_dashboard_routes()
             
             logger.info("📊 Enhanced dashboard functionality initialized")
-            
+
         except Exception as e:
             logger.warning(f"Dashboard functionality not available: {e}")
-    
+
+    def _init_admin_bootstrap(self):
+        """Initialize the admin bootstrap system for secure credential management"""
+        self.admin_bootstrap = None
+        self.admin_system_initialized = False
+
+        if not ADMIN_BOOTSTRAP_AVAILABLE:
+            logger.warning("Admin bootstrap system not available - using legacy auth")
+            return
+
+        try:
+            base_path = str(Path(__file__).parent.parent)
+            self.admin_bootstrap = get_admin_bootstrap(base_path)
+
+            if self.admin_bootstrap.is_initialized():
+                # Load credentials from secure storage
+                try:
+                    self.admin_bootstrap.load_credentials()
+                    self.admin_system_initialized = True
+                    logger.info("🔐 Admin bootstrap system initialized - credentials loaded from vault")
+                except Exception as e:
+                    logger.error(f"Failed to load admin credentials: {e}")
+                    logger.warning("Admin system requires initialization - visit /admin/setup")
+            else:
+                logger.info("🔧 Admin system not initialized - first-run setup required at /admin/setup")
+
+        except Exception as e:
+            logger.error(f"Failed to initialize admin bootstrap: {e}")
+
+    def _verify_vault_master_password(self, password: str) -> bool:
+        """
+        Verify the vault master password.
+
+        Uses the admin bootstrap system if available, otherwise falls back
+        to legacy verification.
+
+        Args:
+            password: Password to verify
+
+        Returns:
+            True if password is valid, False otherwise
+        """
+        # Try admin bootstrap system first
+        if self.admin_bootstrap and self.admin_system_initialized:
+            try:
+                return self.admin_bootstrap.verify_admin_password(password)
+            except Exception as e:
+                logger.error(f"Bootstrap verification failed: {e}")
+
+        # Fallback: Check environment variable
+        env_password = os.environ.get('HAIVEMIND_VAULT_PASSWORD')
+        if env_password and password == env_password:
+            return True
+
+        # Fallback: Check config (legacy - will be removed)
+        config_hash = self.config.get('security', {}).get('vault_password_hash')
+        if config_hash:
+            try:
+                import bcrypt
+                return bcrypt.checkpw(password.encode(), config_hash.encode())
+            except:
+                pass
+
+        # No valid verification method available
+        logger.warning("No valid vault password verification method available")
+        return False
+
     def _add_dashboard_routes(self):
         """Add enhanced dashboard routes"""
         from starlette.responses import JSONResponse
