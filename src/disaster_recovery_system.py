@@ -580,9 +580,16 @@ class DisasterRecoverySystem:
             return True
         
         try:
-            # Use rsync or similar for file synchronization
-            command = f"rsync -av {source_path} {dest_path}"
-            result = subprocess.run(command, shell=True, capture_output=True, text=True)
+            # Use rsync for file synchronization (secure: no shell=True)
+            import shlex
+            # Validate paths don't contain shell metacharacters
+            if not all(c.isalnum() or c in '/_.-' for c in str(source_path) + str(dest_path)):
+                logger.error(f"❌ Invalid characters in path: {source_path} or {dest_path}")
+                return False
+            result = subprocess.run(
+                ["/usr/bin/rsync", "-av", str(source_path), str(dest_path)],
+                capture_output=True, text=True, timeout=300
+            )
             return result.returncode == 0
             
         except Exception as e:
@@ -621,7 +628,40 @@ class DisasterRecoverySystem:
         
         try:
             if host == 'localhost':
-                result = subprocess.run(script_path, shell=True, capture_output=True, text=True)
+                # Secure script execution: validate path and avoid shell=True
+                import shlex
+                script_path_obj = Path(script_path)
+
+                # Only allow absolute paths to known script directories
+                allowed_script_dirs = [
+                    Path('/usr/local/bin'),
+                    Path('/opt/haivemind/scripts'),
+                    Path.home() / '.haivemind' / 'scripts',
+                ]
+
+                # Resolve to absolute path
+                if not script_path_obj.is_absolute():
+                    script_path_obj = Path.cwd() / script_path_obj
+                script_path_obj = script_path_obj.resolve()
+
+                # Verify script is in allowed directory
+                if not any(script_path_obj.is_relative_to(d) for d in allowed_script_dirs if d.exists()):
+                    logger.error(f"❌ Script not in allowed directory: {script_path}")
+                    return False
+
+                # Verify script exists and is executable
+                if not script_path_obj.exists():
+                    logger.error(f"❌ Script does not exist: {script_path}")
+                    return False
+                if not os.access(script_path_obj, os.X_OK):
+                    logger.error(f"❌ Script is not executable: {script_path}")
+                    return False
+
+                # Execute without shell=True
+                result = subprocess.run(
+                    [str(script_path_obj)],
+                    capture_output=True, text=True, timeout=300
+                )
                 return result.returncode == 0
             else:
                 # Execute on remote host via SSH

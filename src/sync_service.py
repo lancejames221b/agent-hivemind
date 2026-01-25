@@ -7,6 +7,7 @@ Enables sharing Claude memory across multiple machines via Tailscale network
 import asyncio
 import json
 import logging
+import os
 import socket
 import subprocess
 import time
@@ -458,13 +459,14 @@ class MemorySyncService:
 # FastAPI app
 app = FastAPI(title="Memory Sync Service", version="1.0.0")
 
-# CORS middleware
+# CORS middleware - restrict to configured origins
+ALLOWED_ORIGINS = os.environ.get('HAIVEMIND_CORS_ORIGINS', 'http://localhost:3000,http://localhost:8900').split(',')
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, restrict this
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=False,  # Disable credentials for security
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 # Global variables (in production, use dependency injection)
@@ -475,9 +477,19 @@ connection_manager = ConnectionManager()
 security = HTTPBearer()
 
 def verify_token(credentials: HTTPAuthorizationCredentials = Security(security)):
-    """Simple token verification (expand for production)"""
-    # In production, implement proper JWT verification
-    return credentials.credentials == "your-api-token"
+    """JWT token verification for API authentication"""
+    import jwt
+    jwt_secret = os.environ.get('HAIVEMIND_JWT_SECRET')
+    if not jwt_secret:
+        raise HTTPException(status_code=500, detail="JWT secret not configured")
+
+    try:
+        payload = jwt.decode(credentials.credentials, jwt_secret, algorithms=["HS256"])
+        return payload
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
 
 @app.on_event("startup")
 async def startup_event():

@@ -1071,8 +1071,26 @@ class MemoryStorage:
         """Import conversation from a file"""
         try:
             # Expand user path and make absolute
-            file_path = str(Path(file_path).expanduser().resolve())
-            
+            file_path_obj = Path(file_path).expanduser().resolve()
+            file_path = str(file_path_obj)
+
+            # Path traversal protection: only allow access to safe directories
+            allowed_dirs = [
+                Path.home(),  # User's home directory
+                Path('/tmp'),  # Temp directory
+                Path('/data'),  # Data directory
+            ]
+
+            # Verify file is within allowed directories
+            if not any(file_path_obj.is_relative_to(d) for d in allowed_dirs if d.exists()):
+                raise PermissionError(f"Access denied: file not in allowed directory: {file_path}")
+
+            # Block access to sensitive paths even within allowed dirs
+            sensitive_patterns = ['.ssh', '.gnupg', '.aws', 'credentials', 'secrets', '.env']
+            path_parts = file_path_obj.parts
+            if any(pattern in part.lower() for part in path_parts for pattern in sensitive_patterns):
+                raise PermissionError(f"Access denied: cannot access sensitive path: {file_path}")
+
             # Check if file exists
             if not Path(file_path).exists():
                 raise FileNotFoundError(f"File not found: {file_path}")
